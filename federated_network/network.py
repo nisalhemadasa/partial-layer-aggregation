@@ -12,6 +12,7 @@ from typing import List
 import constants
 from data.dataset_loader import load_datasets
 from data.utils import convert_dataset_to_loader, split_iid_dataset, split_noniid_dataset, get_unique_labels_per_subset
+from drift_concepts.drift import drift_fn
 from federated_network.client import client_fn, Client, client_initial_training
 from federated_network.server import server_fn, model_aggregation, model_distribution
 from federated_network.utils import update_progress, link_server_hierarchy, train_client_models, link_clients_to_servers
@@ -69,6 +70,9 @@ class FederatedNetwork:
         _labels_noniid = get_unique_labels_per_subset(self.trainset, partitioned_noniid_trainsets)
         _labels_iid_test = get_unique_labels_per_subset(self.testset, partitioned_iid_testsets)
         _labels_noniid_test = get_unique_labels_per_subset(self.testset, partitioned_noniid_testsets)
+
+        # Concept drift properties
+        self.drift = drift_fn(num_client_instances, num_training_rounds, drift_specs)
 
         # Simulation parameters
         self.simulation_parameters = simulation_parameters
