@@ -1,0 +1,64 @@
+"""
+This is the main entry point for the simulation. You can run this script
+
+Author: Nisal Hemadasa
+Date: 02-04-2025
+Version: 2.0
+"""
+import constants
+from federated_network.network import FederatedNetwork
+
+
+def main():
+    async_drift_specs = dict(
+        num_drift_groups=2,  # Number of groups of clients that are affected by the drift asynchronously
+        drift_groups=None,  # Groups of clients that are affected by the drift asynchronously
+        drift_split_round=0.8,  # Times at which the drift is split into multiple asynchronous drifts,
+    )
+
+    # Define the drift specifications
+    drift_specifications = dict(
+        clients_fraction=0.3,  # Fraction of clients that are drift affected(literature also uses a list of fractions)
+        drift_localization_factor=1,  # Factor to localize the drift to a certain concentrated group of clients
+        is_synchronous=False,  # If the drift is synchronous or asynchronous
+        async_drift_specs=async_drift_specs,  # Specifications for the asynchronous case
+        drift_pattern=constants.DriftPatterns.GRADUAL,  # Drift pattern, i.e., abrupt, gradual, etc.
+        drift_method=constants.DriftCreationMethods.ROTATION,  # Drift creation method, i.e., label-swapping, rotations
+        drift_start_round=0.5,  # Round at which the drift starts as a fraction of the total number of rounds
+        drift_end_round=0.75,  # Round at which the drift ends as a fraction of the total number of rounds
+        max_rotation=45,  # Maximum rotation angle for the drift created by rotations
+        class_pairs_to_swap=[(1, 2), (5, 7)],  # Classes to be swapped in the label-swapping drift method
+        # class_pairs_to_swap=[('T-shirt/top', 'Pullover'), ('Sandal', 'Sneaker')],  # Classes to be swapped in F_MNIST
+    )
+
+    # Define simulation parameters
+    simulation_parameters = dict(
+        is_server_adaptability=False  # Evaluate the adaptability of servers/clients to the data/drift distribution
+    )
+
+    #######################
+    # Simulation scenario 1
+    #######################
+    # Create a federated network
+    fed_net = FederatedNetwork(
+        num_iid_client_instances=10,  # Number of IID clients in the federated network
+        # num_iid_client_instances=100,  # Suggested at FLTA
+        num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
+        server_tree_layout=[1],
+        # Number of servers at each level of the server tree of depth n = [n, n-1,..., 1]
+        # num_training_rounds=100,  # In literature, over 50 rounds are trained. FLUID trains 100 rounds
+        num_training_rounds=2,  # Number of training rounds (in literature, over 50 rounds are trained.
+        dataset_name=constants.DatasetNames.MNIST,  # Name of the dataset
+        drift_specs=drift_specifications,  # Drift specifications
+        simulation_parameters=simulation_parameters,  # Parameters specifying the simulation scenarios
+        client_select_fraction=1,  # Fraction of clients to be selected for each round
+    )
+
+    # Running the simulation
+    fed_net.run_simulation(
+        file_save_path='./plots/saved_plots/',
+        log_save_path='./logs/saved_logs/')
+
+
+if __name__ == "__main__":
+    main()
