@@ -24,11 +24,12 @@ def main():
         async_drift_specs=async_drift_specs,  # Specifications for the asynchronous case
         drift_pattern=constants.DriftPatterns.GRADUAL,  # Drift pattern, i.e., abrupt, gradual, etc.
         drift_method=constants.DriftCreationMethods.ROTATION,  # Drift creation method, i.e., label-swapping, rotations
-        drift_start_round=0.5,  # Round at which the drift starts as a fraction of the total number of rounds
-        drift_end_round=0.75,  # Round at which the drift ends as a fraction of the total number of rounds
+        drift_step_rounds=[0.2, 0.4, 0.6, 0.8],  # Rounds at which the drift steps occur in the step drift pattern
         max_rotation=45,  # Maximum rotation angle for the drift created by rotations
         class_pairs_to_swap=[(1, 2), (5, 7)],  # Classes to be swapped in the label-swapping drift method
         # class_pairs_to_swap=[('T-shirt/top', 'Pullover'), ('Sandal', 'Sneaker')],  # Classes to be swapped in F_MNIST
+        label_swap_percentage_steps=[0.2, 0.4, 0.6, 0.8],  # Percentages to swap per step (label-swapping)
+        current_drift_step=0  # Current drift step (used internally during simulation)
     )
 
     # Define simulation parameters

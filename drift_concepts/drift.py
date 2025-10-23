@@ -21,8 +21,8 @@ from federated_network.client import Client
 
 class Drift:
     def __init__(self, num_drifted_clients, drift_localization_factor, is_synchronous, async_drift_specs, drift_pattern,
-                 drift_method, drift_start_round, drift_end_round, drifted_client_indices, max_rotation,
-                 class_pairs_to_swap):
+                 drift_method, drift_step_rounds, drifted_client_indices, max_rotation,
+                 class_pairs_to_swap, label_swap_percentage_steps, current_drift_step):
         # Number of clients to be applied with drifted data
         self.num_drifted_clients = num_drifted_clients
 
@@ -42,9 +42,8 @@ class Drift:
         # Label-swapping, rotations
         self.drift_method = drift_method
 
-        # Defines the period in training rounds which drift starts appearing in clients
-        self.drift_start_round = drift_start_round
-        self.drift_end_round = drift_end_round
+        # Defines the training rounds which drift starts appearing in clients as steps
+        self.drift_step_rounds = drift_step_rounds
 
         # List of clients that have drifted data
         self.drifted_client_indices = drifted_client_indices
@@ -64,6 +63,12 @@ class Drift:
 
         # Flag to indicate if the drift is applied on the client data at least once before
         self.is_already_applied = False
+
+        # Percentage of data samples that needs to be label-swapped in a selected class
+        self.label_swap_percentage_steps = label_swap_percentage_steps
+
+        # Current drift step (used internally during simulation)
+        self.current_drift_step = current_drift_step
 
     def rotate_images(self, clients: List[Client]) -> List[Client]:
         """
@@ -121,17 +126,19 @@ class Drift:
 
         return clients
 
-    def swap_labels(self, clients: List[Client]) -> List[Client]:
+    def swap_labels(self, clients: List[Client], percentage_to_swap: float) -> List[Client]:
         """
         Swap the labels of the specified classes in the training and testing sets for drifted clients.
         :param clients: List of Client objects
+        :param percentage_to_swap: Percentage of data samples that needs to be swapped in a selected class
         :return: Updated list of Client objects with swapped labels in their datasets
         """
 
-        def swap_labels_in_dataset(dataset):
+        def swap_labels_in_dataset(dataset, _percentage_to_swap: float):
             """
             Swap labels in a dataset based on the class pairs to swap.
             :param dataset: Dataset to process
+            :param _percentage_to_swap: percentage of samples to execute label swapping
             :return: Updated images and labels tensors
             """
             images = dataset.data  # Access dataset images
@@ -142,8 +149,30 @@ class Drift:
                 indices_b = (labels == class_b).nonzero(as_tuple=True)[0]
 
                 # Swap the labels
-                labels[indices_a] = class_b
-                labels[indices_b] = class_a
+                if _percentage_to_swap >= 1.0:
+                    # old behavior (swap all)
+                    labels[indices_a] = class_b
+                    labels[indices_b] = class_a
+                elif _percentage_to_swap <= 0.0:
+                    # do nothing
+                    continue
+                else:
+                    # gets the total count of the elements belonging to the classes that needs to be swapped
+                    total_samples_count_a = indices_a.numel()
+                    total_samples_count_b = indices_b.numel()
+
+                    # calculates the count of the samples whose labels need to be swapped
+                    swapped_sample_count_a = int(round(_percentage_to_swap * total_samples_count_a))
+                    swapped_sample_count_b = int(round(_percentage_to_swap * total_samples_count_b))
+
+                    # randomly select 'swapped_sample_count_a' samples from class_a and relabel them to class_b
+                    if swapped_sample_count_a > 0 and total_samples_count_a > 0:
+                        indices_to_swap_a = indices_a[torch.randperm(total_samples_count_a)[:swapped_sample_count_a]]
+                        labels[indices_to_swap_a] = class_b
+                    # randomly select 'swapped_sample_count_a' samples from class_a and relabel them to class_b
+                    if swapped_sample_count_b > 0 and total_samples_count_b > 0:
+                        indices_to_swap_b = indices_b[torch.randperm(total_samples_count_b)[:swapped_sample_count_b]]
+                        labels[indices_to_swap_b] = class_a
 
             return images, labels
 
@@ -153,12 +182,13 @@ class Drift:
             first_drifted_client = copy.deepcopy(clients[self.drifted_client_indices[0]])
 
             # Process training dataset
-            train_images, train_labels = swap_labels_in_dataset(first_drifted_client.local_trainset.dataset)
+            train_images, train_labels = swap_labels_in_dataset(first_drifted_client.local_trainset.dataset,
+                                                                percentage_to_swap)
             first_drifted_client.local_trainset.dataset.data = train_images
             first_drifted_client.local_trainset.dataset.targets = train_labels
 
             # Process testing dataset
-            test_images, test_labels = swap_labels_in_dataset(first_drifted_client.testset.dataset)
+            test_images, test_labels = swap_labels_in_dataset(first_drifted_client.testset.dataset, percentage_to_swap)
             first_drifted_client.testset.dataset.data = test_images
             first_drifted_client.testset.dataset.targets = test_labels
 
@@ -432,14 +462,15 @@ def drift_fn(num_client_instances: int, num_training_rounds: int, drift_specs: D
                  async_drift_specs=drift_specs['async_drift_specs'],
                  drift_pattern=drift_specs['drift_pattern'],
                  drift_method=drift_specs['drift_method'],
-                 drift_start_round=math.ceil(drift_specs['drift_start_round'] * num_training_rounds),
-                 drift_end_round=math.ceil(drift_specs['drift_end_round'] * num_training_rounds),
+                 drift_step_rounds=[math.ceil(i * num_training_rounds) for i in drift_specs['drift_step_round']],
                  drifted_client_indices=get_clients_with_drift(num_client_instances, drift_specs['clients_fraction'],
                                                                drift_specs['drift_localization_factor'],
                                                                drift_specs['is_synchronous'],
                                                                drift_specs['async_drift_specs']),
                  max_rotation=drift_specs['max_rotation'],
-                 class_pairs_to_swap=drift_specs['class_pairs_to_swap'])
+                 class_pairs_to_swap=drift_specs['class_pairs_to_swap'],
+                 label_swap_percentage_steps=drift_specs['label_swap_percentage_steps'],
+                 current_drift_step=drift_specs['current_drift_step'])
 
 
 def apply_drift(clients: List[Client], drift: Drift) -> List[Client]:
@@ -453,7 +484,7 @@ def apply_drift(clients: List[Client], drift: Drift) -> List[Client]:
         # For label swapping, application of drift once in the simulation is sufficient & speeds up the simulation
         if not drift.is_already_applied:
             drift.is_already_applied = True
-            return drift.swap_labels(clients)
+            return drift.swap_labels(clients, drift.label_swap_percentage_steps[drift.current_drift_step])
         else:
             return clients
     elif drift.drift_method == constants.DriftCreationMethods.ROTATION:

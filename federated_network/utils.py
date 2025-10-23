@@ -7,6 +7,7 @@ Version: 1.0
 """
 from typing import List, OrderedDict, Dict
 
+from drift_concepts.drift import Drift, apply_drift
 from federated_network.client import set_parameters, Client
 from federated_network.server import Server
 
@@ -92,12 +93,14 @@ def link_clients_to_servers(leaf_servers: List[Server], clients: List[List[Clien
             linked_client_count += client_distribution[i]
 
 
-def train_client_models(all_clients, sampled_client_ids, servers: List[Server], simulation_parameters: Dict) -> List:
+def train_client_models(all_clients, sampled_client_ids, servers: List[Server], drift: Drift,
+                        simulation_parameters: Dict) -> List:
     """
     Train the client models in the network while applying drift if necessary.
     :param all_clients: List of all client instances
     :param sampled_client_ids: List of sampled client IDs
     :param servers: List of Server instance at a given depth level
+    :param drift: Drift instance
     :param simulation_parameters: Parameters specifying the simulation scenarios
     :return: List of loss and accuracy of each client after training
     """
@@ -105,9 +108,14 @@ def train_client_models(all_clients, sampled_client_ids, servers: List[Server], 
     is_server_adaptability = simulation_parameters['is_server_adaptability']
 
     print("Training client models...")
-    for client in all_clients:
-        # Sample data from the original datasets
-        client.sample_data()
+    # Apply drift to the clients
+    if drift.is_drift:
+        # Sample data from the drift applied datasets
+        apply_drift(all_clients, drift)
+    else:
+        for client in all_clients:
+            # Sample data from the original datasets
+            client.sample_data()
 
     for client in all_clients:
         # Get the server to which the client is connected
