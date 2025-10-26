@@ -21,7 +21,7 @@ from federated_network.client import Client
 
 class Drift:
     def __init__(self, num_drifted_clients, drift_localization_factor, is_synchronous, async_drift_specs, drift_pattern,
-                 drift_method, drift_step_rounds, drifted_client_indices, max_rotation,
+                 drift_method, drift_step_rounds, drift_start_round, drift_end_round, drifted_client_indices, max_rotation,
                  class_pairs_to_swap, label_swap_percentage_steps, current_drift_step):
         # Number of clients to be applied with drifted data
         self.num_drifted_clients = num_drifted_clients
@@ -44,6 +44,10 @@ class Drift:
 
         # Defines the training rounds which drift starts appearing in clients as steps
         self.drift_step_rounds = drift_step_rounds
+
+        # Defines the rounds where drift starts and ends affecting the clients
+        self.drift_start_round = drift_start_round
+        self.drift_end_round = drift_end_round
 
         # List of clients that have drifted data
         self.drifted_client_indices = drifted_client_indices
@@ -443,8 +447,8 @@ def drift_fn(num_client_instances: int, num_training_rounds: int, drift_specs: D
     :return: Drift object
     """
     # Drift start and end rounds
-    drift_start_round = math.ceil(drift_specs['drift_start_round'] * num_training_rounds)
-    drift_end_round = math.ceil(drift_specs['drift_end_round'] * num_training_rounds)
+    drift_start_round = math.ceil(drift_specs['drift_step_rounds'][0] * num_training_rounds)
+    drift_end_round = math.ceil(drift_specs['drift_step_rounds'][-1] * num_training_rounds)
     print("Drift start round: ", drift_start_round)
     print("Drift end round: ", drift_end_round)
 
@@ -462,7 +466,9 @@ def drift_fn(num_client_instances: int, num_training_rounds: int, drift_specs: D
                  async_drift_specs=drift_specs['async_drift_specs'],
                  drift_pattern=drift_specs['drift_pattern'],
                  drift_method=drift_specs['drift_method'],
-                 drift_step_rounds=[math.ceil(i * num_training_rounds) for i in drift_specs['drift_step_round']],
+                 drift_start_round=drift_start_round,
+                 drift_end_round=drift_end_round,
+                 drift_step_rounds=[math.ceil(i * num_training_rounds) for i in drift_specs['drift_step_rounds']],
                  drifted_client_indices=get_clients_with_drift(num_client_instances, drift_specs['clients_fraction'],
                                                                drift_specs['drift_localization_factor'],
                                                                drift_specs['is_synchronous'],

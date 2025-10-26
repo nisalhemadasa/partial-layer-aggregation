@@ -46,17 +46,23 @@ class Server:
 
 
 def model_aggregation(server_hierarchy: List[List[Server]], sampled_clients_model_parameters: List[OrderedDict],
-                      server_test_set: DataLoader) -> List:
+                      server_test_set: DataLoader, is_evaluate_server_model=False) -> List:
     """
     Aggregate the models of the clients to the server model.
     :param server_hierarchy: List of servers in the hierarchy
     :param sampled_clients_model_parameters: List of client model parameters
     :param server_test_set: List of test data for server model evaluation, once the aggregation is done
+    :param is_evaluate_server_model: Boolean flag to indicate whether to evaluate the server model during aggregation
     :return: List of loss and accuracy at each level of the server hierarchy; outer list: server hierarchy levels,
     inner list: loss and accuracy Tuple at each level (loss, accuracy)
     """
     # Store the loss and accuracy at each level of the server model hierarchy
     server_loss_and_accuracy = []
+
+    # Evaluate server model on the upward traversal aggregation  only if the hierarchy has more than one level. Else,
+    # this evaluation will be redundant as it is already done during the server model distribution phase.
+    if len(server_hierarchy) > 1:
+        is_evaluate_server_model = True
 
     print('aggregate client models')
 
@@ -82,12 +88,15 @@ def model_aggregation(server_hierarchy: List[List[Server]], sampled_clients_mode
                 server.train(child_server_model_parameters)
 
             # Evaluate the server model
-            loss, accuracy = server.evaluate(server_test_set)
-            loss_and_accuracy_at_level.append((loss, accuracy))
+            if is_evaluate_server_model:
+                loss, accuracy = server.evaluate(server_test_set)
+                loss_and_accuracy_at_level.append((loss, accuracy))
 
-        server_loss_and_accuracy.append(loss_and_accuracy_at_level)
+        if is_evaluate_server_model:
+            server_loss_and_accuracy.append(loss_and_accuracy_at_level)
 
-    server_loss_and_accuracy.reverse()  # Reverse the list to get the root first, to be consistent throughout the code
+    if is_evaluate_server_model:
+        server_loss_and_accuracy.reverse()  # Reverse the list to get the root first, to be consistent throughout the code
     return server_loss_and_accuracy
 
 
