@@ -12,6 +12,7 @@ from typing import List
 import constants
 from data.dataset_loader import load_datasets
 from data.utils import convert_dataset_to_loader, split_iid_dataset, split_noniid_dataset, get_unique_labels_per_subset
+from drift_concepts.drift import drift_fn
 from federated_network.client import client_fn, Client, client_initial_training
 from federated_network.server import server_fn, model_aggregation, model_distribution
 from federated_network.utils import update_progress, link_server_hierarchy, train_client_models, link_clients_to_servers
@@ -69,6 +70,9 @@ class FederatedNetwork:
         _labels_noniid = get_unique_labels_per_subset(self.trainset, partitioned_noniid_trainsets)
         _labels_iid_test = get_unique_labels_per_subset(self.testset, partitioned_iid_testsets)
         _labels_noniid_test = get_unique_labels_per_subset(self.testset, partitioned_noniid_testsets)
+
+        # Concept drift properties
+        self.drift = drift_fn(self.num_client_instances, num_training_rounds, drift_specs)
 
         # Simulation parameters
         self.simulation_parameters = simulation_parameters
@@ -147,6 +151,14 @@ class FederatedNetwork:
         server_test_set = convert_dataset_to_loader(_dataset=self.testset, _batch_size=self.minibatch_size)
 
         for _round in range(self.num_training_rounds):
+            # Add drift to the clients
+            if _round < self.drift.drift_step_rounds[0] or _round > self.drift.drift_step_rounds[-1]:
+                # No drift before the first drift step and after the last drift step
+                self.drift.is_drift = False
+            elif _round >= self.drift.drift_step_rounds[self.drift.current_drift_step]:
+                self.drift.is_drift = True  # Drift occurs in the current step
+                self.drift.current_drift_step += 1  # Move to the next drift step.
+
             # Clients sampled for a single round. In this simulation, all clients are sampled, in order (not randomly)
             sampled_clients = self.clients
 
@@ -175,6 +187,7 @@ class FederatedNetwork:
             round_client_loss_and_accuracy = train_client_models(self.clients,
                                                                  sampled_client_ids,
                                                                  self.server_hierarchy[server_depth],
+                                                                 self.drift,
                                                                  self.simulation_parameters)
             clients_loss_and_accuracy.append(round_client_loss_and_accuracy)
 

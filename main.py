@@ -22,13 +22,14 @@ def main():
         drift_localization_factor=1,  # Factor to localize the drift to a certain concentrated group of clients
         is_synchronous=False,  # If the drift is synchronous or asynchronous
         async_drift_specs=async_drift_specs,  # Specifications for the asynchronous case
-        drift_pattern=constants.DriftPatterns.GRADUAL,  # Drift pattern, i.e., abrupt, gradual, etc.
-        drift_method=constants.DriftCreationMethods.ROTATION,  # Drift creation method, i.e., label-swapping, rotations
-        drift_start_round=0.5,  # Round at which the drift starts as a fraction of the total number of rounds
-        drift_end_round=0.75,  # Round at which the drift ends as a fraction of the total number of rounds
+        drift_pattern=constants.DriftPatterns.ABRUPT,  # Drift pattern, i.e., abrupt, gradual, etc.
+        drift_method=constants.DriftCreationMethods.LABEL_SWAPPING,  # Drift creation method, i.e., label-swapping, rotations
+        drift_step_rounds=[0.2, 0.4, 0.6, 0.8],  # Rounds at which the drift steps occur in the step drift pattern
         max_rotation=45,  # Maximum rotation angle for the drift created by rotations
         class_pairs_to_swap=[(1, 2), (5, 7)],  # Classes to be swapped in the label-swapping drift method
         # class_pairs_to_swap=[('T-shirt/top', 'Pullover'), ('Sandal', 'Sneaker')],  # Classes to be swapped in F_MNIST
+        label_swap_percentage_steps=[0.2, 0.4, 0.6, 0.8],  # Percentages to swap per step (label-swapping)
+        current_drift_step=0  # Current drift step (used internally during simulation)
     )
 
     # Define simulation parameters
@@ -47,7 +48,7 @@ def main():
         server_tree_layout=[1],
         # Number of servers at each level of the server tree of depth n = [n, n-1,..., 1]
         # num_training_rounds=100,  # In literature, over 50 rounds are trained. FLUID trains 100 rounds
-        num_training_rounds=2,  # Number of training rounds (in literature, over 50 rounds are trained.
+        num_training_rounds=10,  # Number of training rounds (in literature, over 50 rounds are trained.
         dataset_name=constants.DatasetNames.MNIST,  # Name of the dataset
         drift_specs=drift_specifications,  # Drift specifications
         simulation_parameters=simulation_parameters,  # Parameters specifying the simulation scenarios
