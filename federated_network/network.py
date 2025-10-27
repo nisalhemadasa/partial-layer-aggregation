@@ -21,7 +21,8 @@ from logs.analysis_functions import compute_client_average_metrics, compute_serv
 from logs.logging import write_logs
 from plots.plotting import plot_client_performance_vs_rounds, plot_server_performance_vs_rounds, \
     plot_client_avg_performance_vs_rounds, plot_server_lvl_avg_performance_vs_rounds, \
-    plot_server_overall_avg_performance_vs_rounds, plot_client_layer_distance_vs_rounds, plot_client_distance_vs_rounds
+    plot_server_overall_avg_performance_vs_rounds, plot_client_layer_distance_vs_rounds, plot_client_distance_vs_rounds, \
+    plot_dataset_distribution
 
 
 class FederatedNetwork:
@@ -134,6 +135,11 @@ class FederatedNetwork:
         :param log_save_path: Path to save the logs
         :return: None
         """
+        #TODO: remove after testing
+        # plot dataset distribution of a given list of clients
+        selected_clients_list = self.clients[0:2] # Plot only first two clients
+        plot_dataset_distribution(selected_clients_list, file_save_path='./plots/saved_plots/')
+        
         clients_loss_and_accuracy = []  # Store the loss and accuracy of the all the clients at each round
         sampled_clients_in_each_round = []  # To keep track of the client IDs sampled in each round
         server_loss_and_accuracy = []  # Store the loss and accuracy at each level of the server hierarchy
@@ -198,6 +204,10 @@ class FederatedNetwork:
         end_time = time.time()
 
         print(f"Runtime: {end_time - start_time} seconds")
+
+        # plot dataset distribution of a given list of clients
+        selected_clients_list = self.clients[0:2]  # Plot only first two clients
+        plot_dataset_distribution(selected_clients_list, file_save_path=file_save_path)
 
         # Plot layer-distance (between the layers of the client model and the corresponding edge server model)
         plot_client_layer_distance_vs_rounds(client_layer_distance, file_save_path=file_save_path)

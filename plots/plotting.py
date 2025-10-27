@@ -15,6 +15,7 @@ import matplotlib
 from torch import Tensor
 
 import constants
+from federated_network.client import Client
 
 matplotlib.use('TkAgg')  # Or 'TkAgg', 'Qt5Agg', etc.
 
@@ -338,3 +339,14 @@ def configure_and_save_plot(_plt, _x_label, _y_label, _title, _file_path, legend
     # Display the plot
     # _plt.show()
     _plt.close()
+
+
+def plot_dataset_distribution(clients_list: List[Client], file_save_path: str = None):
+    """
+    Create and save bar chart for the label counts of the trian datasets of a given list of clients.
+    :param clients_list: List of Client instances whose dataset distribution needs to be plotted.
+    :param file_save_path: Path to save the plot
+    :return: None
+    """
+    for client in clients_list:
+        client_dataset = client.local_trainset
