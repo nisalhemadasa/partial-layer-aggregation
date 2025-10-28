@@ -119,7 +119,11 @@ class Plots:
     # for client-edge-layer server distance plot
     CLIENT_SERVER_LAYER_DISTANCE_VS_ROUNDS_TITLE = 'Client-Server-Layer Distance Across Rounds'
     CLIENT_SERVER_LAYER_DISTANCE_VS_ROUNDS_PNG = 'client_server_layer_distance_vs_rounds'
-
+    # label distribution plots for iid and non-iid client data distribution
+    LABELS = 'Labels'
+    SAMPLES_COUNT = 'Samples Count'
+    LABEL_DISTRIBUTION_TITLE = 'Label Distribution per Client'
+    LABEL_DISTRIBUTION_PNG = 'label_distribution_per_client'
 
 # Drift patterns
 class DriftPatterns:
