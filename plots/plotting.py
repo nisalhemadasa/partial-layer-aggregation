@@ -5,16 +5,18 @@ Author: Nisal Hemadasa
 Date: 29-04-2025
 Version: 1.0
 """
-from collections import defaultdict
+from collections import defaultdict, Counter
 from typing import List, Tuple, Dict
 
 import matplotlib.pyplot as plt
 import matplotlib
+from numpy import sort
 
 # Choose a backend based on what works best for your environment
 from torch import Tensor
 
 import constants
+from data.dataset_loader import get_dataset_classnames_from_indices
 from federated_network.client import Client
 
 matplotlib.use('TkAgg')  # Or 'TkAgg', 'Qt5Agg', etc.
@@ -312,7 +314,8 @@ def plot_client_layer_distance_vs_rounds(client_layer_distance: List[Dict[int, D
                             file_save_path + constants.Plots.CLIENT_SERVER_LAYER_DISTANCE_VS_ROUNDS_PNG)
 
 
-def configure_and_save_plot(_plt, _x_label, _y_label, _title, _file_path, legend_handles=None):
+def configure_and_save_plot(_plt, _x_label, _y_label, _title, _file_path, _legend_handles=None,
+                            _label_rotate=None) -> None:
     """
     Add labels, title, legend and save the plot and displays it.
     :param _plt: The matplotlib pyplot object.
@@ -320,13 +323,20 @@ def configure_and_save_plot(_plt, _x_label, _y_label, _title, _file_path, legend
     :param _y_label: The label for the y - axis.
     :param _title: The title of the plot.
     :param _file_path: The path and file name to save the plot.
-    :param legend_handles: The legend handles to be displayed.
+    :param _legend_handles: The legend handles to be displayed.
+    :param _label_rotate: Rotation angle for x-axis labels.
     :return: None
     """
     _plt.xlabel(_x_label)
     _plt.ylabel(_y_label)
-    _plt.legend(handles=legend_handles, loc='best', fontsize=4)
     # _plt.title(_title)
+
+    if _legend_handles is not None:
+        _plt.legend(handles=_legend_handles, loc='best', fontsize=4)
+
+    if _label_rotate is not None:
+        _plt.xticks(rotation=_label_rotate, ha='right') # test is horizintally aligned to right
+        _plt.tight_layout()  # Automatically adjusts subplot margins so labels fit inside the figure.
 
     # Save the plot as a high-quality PNG
     png_path = f"{_file_path}.png"
@@ -341,12 +351,30 @@ def configure_and_save_plot(_plt, _x_label, _y_label, _title, _file_path, legend
     _plt.close()
 
 
-def plot_dataset_distribution(clients_list: List[Client], file_save_path: str = None):
+def plot_dataset_distribution(clients_list: List[Client], _dataset_name: str,
+                              file_save_path: str = None):
     """
-    Create and save bar chart for the label counts of the trian datasets of a given list of clients.
+    Create and save bar chart for the label counts of the train datasets of a given list of clients.
     :param clients_list: List of Client instances whose dataset distribution needs to be plotted.
+    :param _dataset_name: Name of the dataset.
     :param file_save_path: Path to save the plot
     :return: None
     """
     for client in clients_list:
-        client_dataset = client.local_trainset
+        sample_labels = [sample[1] for sample in client.local_trainset]  # Extract labels from the dataset
+        distribution = Counter(sample_labels)  # Get the number of samples per label
+
+        label_indices, sample_count = list(distribution.keys()), list(distribution.values())
+        label_indices.sort()
+
+        # Get the dataset class names
+        labels = get_dataset_classnames_from_indices(_dataset_name, label_indices)
+
+        # plot bar chart using label (x-axis labels) and count the (y-axis values)
+        plt.figure()  # Create a new figure
+        plt.bar(labels, sample_count, color='blue', edgecolor='black')
+
+        configure_and_save_plot(plt, constants.Plots.LABELS, constants.Plots.SAMPLES_COUNT,
+                                constants.Plots.LABEL_DISTRIBUTION_TITLE,
+                                file_save_path + constants.Plots.LABEL_DISTRIBUTION_PNG + '_' + str(client.client_id),
+                                _label_rotate=45)
