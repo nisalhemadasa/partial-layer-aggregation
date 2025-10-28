@@ -135,11 +135,6 @@ class FederatedNetwork:
         :param log_save_path: Path to save the logs
         :return: None
         """
-        #TODO: remove after testing
-        # plot dataset distribution of a given list of clients
-        selected_clients_list = self.clients[0:2] # Plot only first two clients
-        plot_dataset_distribution(selected_clients_list, file_save_path='./plots/saved_plots/')
-        
         clients_loss_and_accuracy = []  # Store the loss and accuracy of the all the clients at each round
         sampled_clients_in_each_round = []  # To keep track of the client IDs sampled in each round
         server_loss_and_accuracy = []  # Store the loss and accuracy at each level of the server hierarchy
@@ -205,9 +200,12 @@ class FederatedNetwork:
 
         print(f"Runtime: {end_time - start_time} seconds")
 
-        # plot dataset distribution of a given list of clients
-        selected_clients_list = self.clients[0:2]  # Plot only first two clients
-        plot_dataset_distribution(selected_clients_list, file_save_path=file_save_path)
+        # =========PLOTTING FUNCTION CALLS==============
+        # plot data distribution of a given list of clients
+        if self.simulation_parameters['is_plot_client_data_distributions']:
+            client_ids = self.simulation_parameters['client_ids_to_plot_data_distributions']
+            clients_to_plot = [self.clients[i] for i in client_ids]
+            plot_dataset_distribution(clients_to_plot,  self.dataset_name, file_save_path=file_save_path)
 
         # Plot layer-distance (between the layers of the client model and the corresponding edge server model)
         plot_client_layer_distance_vs_rounds(client_layer_distance, file_save_path=file_save_path)
@@ -224,6 +222,7 @@ class FederatedNetwork:
         # Get average performance of the clients
         client_averages = compute_client_average_metrics(clients_loss_and_accuracy)
 
+        # ==========LOGGING FUNCTION CALLS==============
         if log_save_path is None:
             log_save_path = constants.Paths.LOG_SAVE_PATH
 
@@ -242,6 +241,7 @@ class FederatedNetwork:
         write_logs(server_level_averages, file_name=log_save_path + constants.Logs.SERVER_LVL_AVG_LOG)
         write_logs(server_overall_averages, file_name=log_save_path + constants.Logs.SERVER_OVERALL_AVG_LOG)
 
+        # =========PLOTTING FUNCTION CALLS==============
         # Plot average performances
         # plot_client_avg_performance_vs_rounds([client_averages], self.drift.is_synchronous,
         #                                       file_save_path=file_save_path)
