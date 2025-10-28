@@ -7,6 +7,7 @@ Version: 1.0
 """
 import os
 import sys
+from typing import List
 
 from torch.utils.data import Dataset
 from torchvision import datasets, transforms
@@ -79,3 +80,28 @@ def load_datasets(_dataset_name: str) -> list[Dataset]:
         sys.exit()
 
     return [trainset, testset]
+
+
+def get_dataset_classnames_from_indices(_dataset_name: str, _class_indices: List[int]) -> List[str]:
+    """
+    Returns the number of classes in the dataset.
+    :param _dataset_name: Name of the dataset.
+    :param _class_indices: List of class indices whose class name needs to be returned.
+    :return: Class names corresponding to the _class_indices.
+    """
+    from torchvision import datasets
+
+    # Dynamically get the dataset class from torchvision.datasets
+    DatasetClass = getattr(datasets, _dataset_name)
+
+    # Now you can access its class names if defined
+    if hasattr(DatasetClass, "classes"):
+        all_class_names = DatasetClass.classes
+    else:
+        print('WARNING: Class names of the dateset is not available. Returning class indices instead.')
+        return [str(x) for x in _class_indices]
+
+    # Filter the corresponding class names for the given class indices
+    filtered_classes = [all_class_names[i] for i in _class_indices]
+
+    return filtered_classes
