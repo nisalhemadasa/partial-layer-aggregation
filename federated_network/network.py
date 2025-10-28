@@ -27,8 +27,8 @@ from plots.plotting import plot_client_performance_vs_rounds, plot_server_perfor
 
 class FederatedNetwork:
     def __init__(self, num_iid_client_instances, num_noniid_client_instances, server_tree_layout, num_training_rounds,
-                 dataset_name, drift_specs, simulation_parameters, client_select_fraction=0.5, minibatch_size=32,
-                 num_local_epochs=4):
+                 dataset_name, drift_specs, simulation_parameters, drift_recovery_parameters, client_select_fraction=0.5,
+                 minibatch_size=32, num_local_epochs=4):
         # Dataset name
         self.dataset_name = dataset_name
 
@@ -77,6 +77,9 @@ class FederatedNetwork:
 
         # Simulation parameters
         self.simulation_parameters = simulation_parameters
+
+        # Drift recovery parameters
+        self.drift_recovery_parameters = drift_recovery_parameters
 
         # Create client instances
         self.noniid_clients = [
@@ -189,7 +192,8 @@ class FederatedNetwork:
                                                                  sampled_client_ids,
                                                                  self.server_hierarchy[server_depth],
                                                                  self.drift,
-                                                                 self.simulation_parameters)
+                                                                 self.simulation_parameters,
+                                                                 self.drift_recovery_parameters)
             clients_loss_and_accuracy.append(round_client_loss_and_accuracy)
 
             # Update the progress of the simulation
@@ -205,7 +209,7 @@ class FederatedNetwork:
         if self.simulation_parameters['is_plot_client_data_distributions']:
             client_ids = self.simulation_parameters['client_ids_to_plot_data_distributions']
             clients_to_plot = [self.clients[i] for i in client_ids]
-            plot_dataset_distribution(clients_to_plot,  self.dataset_name, file_save_path=file_save_path)
+            plot_dataset_distribution(clients_to_plot, self.dataset_name, file_save_path=file_save_path)
 
         # Plot layer-distance (between the layers of the client model and the corresponding edge server model)
         plot_client_layer_distance_vs_rounds(client_layer_distance, file_save_path=file_save_path)

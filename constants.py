@@ -152,3 +152,10 @@ class Logs:
     SERVER_LVL_AVG_LOG = 'server_level_avg_log'
     SERVER_OVERALL_AVG_LOG = 'server_overall_avg_log'
 
+# Drift recovery algorithms
+class RecoveryAlgorithm:
+    ADAM_BASED = 'adam_based'
+    RRT = 'rrt'
+    FEDAU = 'fedau'
+    FLUID = 'fluid'
+

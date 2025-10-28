@@ -55,16 +55,29 @@ class Client:
         self.testloader = convert_dataset_to_loader(_dataset=self.testset, _batch_size=self.mini_batch_size,
                                                     _is_shuffle=False)
 
-    def fit(self, server_model_parameters):
+    def fit(self, server_model_parameters, drift_recovery_method, drift):
         """ Train the client model using new data and server parameters and return the updated model weights and
         biases"""
-        # Do not set the server weights and biases if the server aggregation is not done (e.g. initial round)
-        if server_model_parameters is not None:
-            set_parameters(self.model, server_model_parameters)  # Set the aggregated weights server to the client model
-
-        # Train the client model using new data and server parameters
-        # train(self.model, self.trainloader, _epochs=self.epochs)
-        rapid_train(self.model, self.trainloader, _epochs=self.epochs, _batch_size=self.mini_batch_size)
+        if not drift.is_drift:
+            # Do not set the server weights and biases if the server aggregation is not done (e.g. initial round)
+            if server_model_parameters is not None:
+                set_parameters(self.model,
+                               server_model_parameters)  # Set the aggregated weights server to the client model
+            # Train the client model using new data and server parameters
+            train(self.model, self.trainloader, self.epochs)
+        else:
+            # Train the client model using new data and server parameters
+            if drift_recovery_method == constants.RecoveryAlgorithm.ADAM_BASED:
+                # Adam-based recovery (1st order) + reinitialization of client parameters from the global model from scratch
+                train(self.model, self.trainloader, _epochs=self.epochs)
+            elif drift_recovery_method == constants.RecoveryAlgorithm.RRT:
+                # Rapid retraining (2nd order) + reinitialization of client parameters from the global model from scratch
+                rapid_train(self.model, self.trainloader, _epochs=self.epochs, _batch_size=self.mini_batch_size)
+            elif drift_recovery_method == constants.RecoveryAlgorithm.FEDAU:
+                # Learning module: Adam-based recovery (1st order)
+                train(self.model, self.trainloader, _epochs=self.epochs)
+                # Auxiliary module
+                fedau(self.model, self.trainloader)
 
         return get_parameters(self.model), len(self.trainloader)
 

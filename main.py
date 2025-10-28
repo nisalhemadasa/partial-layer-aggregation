@@ -40,6 +40,11 @@ def main():
         client_ids_to_plot_data_distributions = [0, 1]  # Client IDs whose internal data distributions to be plotted.
     )
 
+    # Define drift recovery algorithm related parameters
+    drift_recovery_parameters = dict(
+        recovery_method=constants.RecoveryAlgorithm.ADAM_BASED
+    )
+
     #######################
     # Simulation scenario 1
     #######################
@@ -56,6 +61,7 @@ def main():
         drift_specs=drift_specifications,  # Drift specifications
         simulation_parameters=simulation_parameters,  # Parameters specifying the simulation scenarios
         client_select_fraction=1,  # Fraction of clients to be selected for each round
+        drift_recovery_parameters=drift_recovery_parameters, # Drift recovery algorithm related parameters
     )
 
     # Running the simulation

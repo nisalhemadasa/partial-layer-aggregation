@@ -94,7 +94,7 @@ def link_clients_to_servers(leaf_servers: List[Server], clients: List[List[Clien
 
 
 def train_client_models(all_clients, sampled_client_ids, servers: List[Server], drift: Drift,
-                        simulation_parameters: Dict) -> List:
+                        simulation_parameters: Dict, drift_recovery_parameters: Dict) -> List:
     """
     Train the client models in the network while applying drift if necessary.
     :param all_clients: List of all client instances
@@ -102,10 +102,12 @@ def train_client_models(all_clients, sampled_client_ids, servers: List[Server], 
     :param servers: List of Server instance at a given depth level
     :param drift: Drift instance
     :param simulation_parameters: Parameters specifying the simulation scenarios
+    :param drift_recovery_parameters: Parameters specifying the drift recovery strategies
     :return: List of loss and accuracy of each client after training
     """
     round_client_loss_and_accuracy = []
     is_server_adaptability = simulation_parameters['is_server_adaptability']
+    drift_recovery_method = drift_recovery_parameters['recovery_method']
 
     print("Training client models...")
     # Apply drift to the clients
@@ -131,10 +133,10 @@ def train_client_models(all_clients, sampled_client_ids, servers: List[Server], 
                 round_client_loss_and_accuracy.append(client.evaluate())
 
             # If the client is sampled in this global training round, then train using the server aggregated parameters
-            client.fit(server.model.state_dict())
+            client.fit(server.model.state_dict(), drift_recovery_method, drift)
         else:
             # If the client is not sampled, perform local training without server parameters
-            client.fit(None)
+            client.fit(None, drift_recovery_method, drift)
 
             if is_server_adaptability:
                 round_client_loss_and_accuracy.append(client.evaluate())

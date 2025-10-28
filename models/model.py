@@ -82,6 +82,15 @@ class CNNModel(nn.Module):
         return x
 
 
+def fedau():
+    """
+    Implementation of FedAU algorithm following the paper: [2]H. Gu, G. Zhu, J. Zhang, X. Zhao, Y. Han, L. Fan and
+    Q. Yang, “Unlearning during Learning: An Efficient Federated Machine Unlearning Method,” in
+    Proceedings of the 33rd International Joint Conference on Artificial Intelligence (IJCAI-24)
+    """
+    # Train auxiliary model on the data to be forgotten
+
+
 def rapid_train(_model: nn.Module, _dataset: DataLoader, _epochs: int, _batch_size, _verbose: bool = False) -> None:
     """
     Train a model using a manual rapid-retraining style update (RRT-like).
