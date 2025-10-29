@@ -14,7 +14,7 @@ from data.dataset_loader import load_datasets
 from data.utils import convert_dataset_to_loader, split_iid_dataset, split_noniid_dataset, get_unique_labels_per_subset
 from drift_concepts.drift import drift_fn
 from federated_network.client import client_fn, Client, client_initial_training
-from federated_network.server import server_fn, model_aggregation, model_distribution
+from federated_network.server import server_fn, model_aggregation, model_distribution, change_aggregation_strategy
 from federated_network.utils import update_progress, link_server_hierarchy, train_client_models, \
     link_clients_to_servers, get_client_model_parameters
 from logs.analysis_functions import compute_client_average_metrics, compute_server_average_metrics, \
@@ -164,6 +164,9 @@ class FederatedNetwork:
             elif _round >= self.drift.drift_step_rounds[self.drift.current_drift_step]:
                 self.drift.is_drift = True  # Drift occurs in the current step
                 self.drift.current_drift_step += 1  # Move to the next drift step.
+                # the server aggregation stretegy needs to change for the FedAU's case.
+                if self.drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.FEDAU:
+                    change_aggregation_strategy(self.server_hierarchy) # aggregation strategy
 
             # Clients sampled for a single round. In this simulation, all clients are sampled, in order (not randomly)
             sampled_clients = self.clients

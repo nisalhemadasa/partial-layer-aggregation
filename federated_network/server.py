@@ -159,7 +159,7 @@ def server_fn(server_id: int, dataset_name: str, server_abs_id: int) -> Server:
     return Server(_server_id=server_id, _abs_id=server_abs_id, _strategy=aggregator_strategy, _model=model)
 
 
-def change_aggregation_strategy():
+def change_aggregation_strategy(server_hierarchy):
     """
     Change the aggregation strategy of the server.
     :return: None
