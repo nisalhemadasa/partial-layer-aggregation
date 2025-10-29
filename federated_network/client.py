@@ -16,7 +16,8 @@ from torch.utils.data import Dataset, Subset
 
 import constants
 from data.utils import convert_dataset_to_loader
-from models.model import train, test, CNNModel, rapid_train
+from drift_concepts.drift import Drift
+from models.model import train, test, CNNModel, rapid_train, fedau
 
 DEVICE = torch.device("cpu")  # Try "cuda" to train on GPU
 print(
@@ -55,14 +56,13 @@ class Client:
         self.testloader = convert_dataset_to_loader(_dataset=self.testset, _batch_size=self.mini_batch_size,
                                                     _is_shuffle=False)
 
-    def fit(self, server_model_parameters, drift_recovery_method, drift):
+    def fit(self, server_model_parameters: OrderedDict, drift_recovery_method: str, drift: Drift, _client_id: int):
         """ Train the client model using new data and server parameters and return the updated model weights and
         biases"""
         if not drift.is_drift:
-            # Do not set the server weights and biases if the server aggregation is not done (e.g. initial round)
+            # Do not set the server weights and biases if the server aggregation is not None (e.g. initial round)
             if server_model_parameters is not None:
-                set_parameters(self.model,
-                               server_model_parameters)  # Set the aggregated weights server to the client model
+                set_parameters(self.model, server_model_parameters)  # apply server weights
             # Train the client model using new data and server parameters
             train(self.model, self.trainloader, self.epochs)
         else:
@@ -74,10 +74,16 @@ class Client:
                 # Rapid retraining (2nd order) + reinitialization of client parameters from the global model from scratch
                 rapid_train(self.model, self.trainloader, _epochs=self.epochs, _batch_size=self.mini_batch_size)
             elif drift_recovery_method == constants.RecoveryAlgorithm.FEDAU:
-                # Learning module: Adam-based recovery (1st order)
-                train(self.model, self.trainloader, _epochs=self.epochs)
-                # Auxiliary module
-                fedau(self.model, self.trainloader)
+                # FedAU: Learning module training
+                if server_model_parameters is not None:
+                    set_parameters(self.model, server_model_parameters)  # apply server weights
+
+                train(self.model, self.trainloader, self.epochs)  # regular training step for learning module
+
+                # FedAU: Auxiliary module training, only for drifted clients #TODO: implement: drift detection/trusted clients
+                if _client_id in drift.drifted_client_indices:
+                    fedau(self.model, self.trainloader, server_model_parameters, _epochs=self.epochs,
+                          _batch_size=self.mini_batch_size)
 
         return get_parameters(self.model), len(self.trainloader)
 

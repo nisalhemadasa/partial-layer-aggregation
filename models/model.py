@@ -5,7 +5,7 @@ Author: Nisal Hemadasa
 Date: 04-04-2025
 Version: 2.0
 """
-from typing import Tuple
+from typing import Tuple, OrderedDict
 
 import torch
 import torch.nn as nn
@@ -82,16 +82,35 @@ class CNNModel(nn.Module):
         return x
 
 
-def fedau():
+def fedau(_model: nn.Module, _dataset: DataLoader, _server_model_parameters: OrderedDict, _epochs: int,
+          _batch_size: int, _verbose: bool = False) -> None:
     """
     Implementation of FedAU algorithm following the paper: [2]H. Gu, G. Zhu, J. Zhang, X. Zhao, Y. Han, L. Fan and
     Q. Yang, “Unlearning during Learning: An Efficient Federated Machine Unlearning Method,” in
     Proceedings of the 33rd International Joint Conference on Artificial Intelligence (IJCAI-24)
+    :param _model: Core learning model
+    :param _dataset: The dataloader containing training dataset
+    :param _server_model_parameters: The server model parameters (weights and biases from the server)
+    :param _epochs: The number of epochs to train
+    :param _batch_size: The batch size to use during training
+    :param _verbose: Whether to print training progress
+    :return: None
     """
-    # Train auxiliary model on the data to be forgotten
+    # Split the trained learning module into extractor and classifier
+    # TODO
+
+    # Initialize the auxiliary model
+    aux_model = CNNModel().to(DEVICE) # initialize using a fresh base model, similar to learning module architecture
+    aux_model.load_state_dict(_server_model_parameters, strict=True) # load server parameters to auxiliary model
+
+    # Replace fc3 layer with a new nn.Linear of the same shape
+    aux_model.fc3 = nn.Linear(aux_model.fc3.in_features, aux_model.fc3.out_features)
+
+    # Train the auxiliary model using data with new patterns
 
 
-def rapid_train(_model: nn.Module, _dataset: DataLoader, _epochs: int, _batch_size, _verbose: bool = False) -> None:
+def rapid_train(_model: nn.Module, _dataset: DataLoader, _epochs: int, _batch_size: int,
+                _verbose: bool = False) -> None:
     """
     Train a model using a manual rapid-retraining style update (RRT-like).
     [1] Y. Liu, L. Xu, X. Yuan, C. Wang, and B. Li, “The Right to be Forgotten in Federated Learning: An Efficient
