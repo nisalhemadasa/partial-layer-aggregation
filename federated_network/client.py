@@ -17,7 +17,7 @@ from torch.utils.data import Dataset, Subset
 import constants
 from data.utils import convert_dataset_to_loader
 from drift_concepts.drift import Drift
-from models.model import train, test, CNNModel, rapid_train, fedau
+from models.model import train, test, CNNModel, rapid_train, auxiliary_model_train
 
 DEVICE = torch.device("cpu")  # Try "cuda" to train on GPU
 print(

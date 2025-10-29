@@ -53,7 +53,7 @@ def main():
         num_iid_client_instances=1,  # Number of IID clients in the federated network
         # num_iid_client_instances=100,  # Suggested at FLTA
         num_noniid_client_instances=1,  # Number of non-IID clients in the federated network
-        server_tree_layout=[1],
+        server_tree_layout=[1, 2],
         # Number of servers at each level of the server tree of depth n = [n, n-1,..., 1]
         # num_training_rounds=100,  # In literature, over 50 rounds are trained. FLUID trains 100 rounds
         num_training_rounds=1,  # Number of training rounds (in literature, over 50 rounds are trained.

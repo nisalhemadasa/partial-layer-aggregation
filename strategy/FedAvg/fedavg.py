@@ -35,6 +35,21 @@ class FedAvg:
         return model
 
 
+class FedAU:
+    def __init__(self):
+        pass
+
+    def aggregate_models(self, model: CNNModel, client_model_params_list: List[OrderedDict],
+                         auxiliary_classifier_params: List[OrderedDict]) -> CNNModel:
+        """ Aggregate the client models to the global model using adaptive weights and returns the new aggregated model
+        :param model: The server (edge or global) model
+        :param client_model_params_list: List of state dicts of the client models
+        :param auxiliary_classifier_params: List of state dicts of the auxiliary classifiers from drifted clients
+        :return: model: The updated server (edge or global)  model after aggregation
+        """
+        learning_model_params = model.state_dict()
+
+
 def aggregator_fn():
     """ Returns an instance of the FedAvg aggregation strategy """
     _strategy = FedAvg()

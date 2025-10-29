@@ -158,15 +158,19 @@ class FederatedNetwork:
 
         for _round in range(self.num_training_rounds):
             # Add drift to the clients
-            if _round < self.drift.drift_step_rounds[0] or _round > self.drift.drift_step_rounds[-1]:
+            if _round not in range(self.drift.drift_step_rounds[0],
+                                   self.drift.drift_step_rounds[-1] + 1):
                 # No drift before the first drift step and after the last drift step
                 self.drift.is_drift = False
-            elif _round >= self.drift.drift_step_rounds[self.drift.current_drift_step]:
-                self.drift.is_drift = True  # Drift occurs in the current step
+            elif round >= self.drift.drift_step_rounds[self.drift.current_drift_step]:
+                if not self.drift.is_drift:  # the aggregation strategy is changed on at the start of the drift step
+                    # the server aggregation strategy needs to change for the FedAU's case.
+                    change_aggregation_strategy(self.server_hierarchy,
+                                                self.drift_recovery_parameters['recovery_method'],
+                                                self.drift,
+                                                self.clients)
                 self.drift.current_drift_step += 1  # Move to the next drift step.
-                # the server aggregation stretegy needs to change for the FedAU's case.
-                if self.drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.FEDAU:
-                    change_aggregation_strategy(self.server_hierarchy) # aggregation strategy
+                self.drift.is_drift = True  # Drift occurs in the current step
 
             # Clients sampled for a single round. In this simulation, all clients are sampled, in order (not randomly)
             sampled_clients = self.clients
@@ -176,8 +180,9 @@ class FederatedNetwork:
             sampled_clients_in_each_round.append(sampled_client_ids)
 
             # Get the model parameters of the clients sampled in the current round
-            sampled_clients_model_parameters, auxiliary_parameters = get_client_model_parameters(sampled_clients, self.drift,
-                                                                           self.drift_recovery_parameters)
+            sampled_clients_model_parameters, auxiliary_parameters = get_client_model_parameters(sampled_clients,
+                                                                                                 self.drift,
+                                                                                                 self.drift_recovery_parameters)
 
             # Aggregation (upwards): Aggregate client model parameters to the edge model and edge model parameters to
             # the global model (returns the round_server_loss_and_accuracy, global_avg_loss_and_accuracy after

@@ -5,7 +5,7 @@ Author: Nisal Hemadasa
 Date: 19-10-2024
 Version: 1.0
 """
-from typing import List, OrderedDict, Tuple, Dict
+from typing import List, OrderedDict, Tuple, Dict, Any
 
 from torch import Tensor
 from torch.utils.data import DataLoader
@@ -13,7 +13,8 @@ from torch.utils.data import DataLoader
 import constants
 import strategy
 from distance_metrics.distance_metrics import compute_euclidean_distance_weights
-from federated_network.client import DEVICE
+from drift_concepts.drift import Drift
+from federated_network.client import DEVICE, Client
 from models.model import SimpleModel, CNNModel, test
 
 
@@ -159,9 +160,22 @@ def server_fn(server_id: int, dataset_name: str, server_abs_id: int) -> Server:
     return Server(_server_id=server_id, _abs_id=server_abs_id, _strategy=aggregator_strategy, _model=model)
 
 
-def change_aggregation_strategy(server_hierarchy):
+def change_aggregation_strategy(server_hierarchy: List[Any], drift_recovery_method: str, drift: Drift,
+                                clients: List[Client]) -> None:
     """
-    Change the aggregation strategy of the server.
+    Change the aggregation strategy of the leaf servers (only) of the hierarchy.
+    :param server_hierarchy: List of servers in the hierarchy
+    :param drift_recovery_method: Drift recovery method
+    :param drift: Drift instance
+    :param clients: List of all client instances
     :return: None
     """
-    pass  # To be implemented in future versions"""
+    if drift_recovery_method == constants.RecoveryAlgorithm.FEDAU:
+        for server in server_hierarchy[-1]:
+            # change the strategy only in the servers where drifted clients are connected
+            if server.client_ids in drift.drifted_client_indices:
+                server.strategy = strategy.FedAU.aggregator_fn()
+    else:
+        # if the drift is ended, change the strategy back to FedAvg
+        for server in server_hierarchy[-1]:
+            server.strategy = strategy.FedAvg.aggregator_fn()
