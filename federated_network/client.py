@@ -37,7 +37,7 @@ class Client:
         self.trainloader = None  # initialized only when sample_data() is called
         self.testloader = None  # initialized only when sample_data() is called
         self.parent_server_id = None  # server ID in the server hierarchy to which the client is connected
-        self.layer_distance = None  # distance of the client from the server in the server hierarchy
+        self.auxiliary_classifier_parameters = None  # distance of the client from the server in the server hierarchy
 
     def get_model_weights(self):
         """ Get the model weights and biases """
@@ -82,8 +82,8 @@ class Client:
 
                 # FedAU: Auxiliary module training, only for drifted clients #TODO: implement: drift detection/trusted clients
                 if _client_id in drift.drifted_client_indices:
-                    fedau(self.model, self.trainloader, server_model_parameters, _epochs=self.epochs,
-                          _batch_size=self.mini_batch_size)
+                    auxiliary_model_train(self.model, self.trainloader, server_model_parameters, self.trainloader,
+                          self.auxiliary_classifier_parameters, _epochs=self.epochs, _batch_size=self.mini_batch_size)
 
         return get_parameters(self.model), len(self.trainloader)
 

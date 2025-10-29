@@ -15,7 +15,8 @@ from data.utils import convert_dataset_to_loader, split_iid_dataset, split_nonii
 from drift_concepts.drift import drift_fn
 from federated_network.client import client_fn, Client, client_initial_training
 from federated_network.server import server_fn, model_aggregation, model_distribution
-from federated_network.utils import update_progress, link_server_hierarchy, train_client_models, link_clients_to_servers
+from federated_network.utils import update_progress, link_server_hierarchy, train_client_models, \
+    link_clients_to_servers, get_client_model_parameters
 from logs.analysis_functions import compute_client_average_metrics, compute_server_average_metrics, \
     split_clients_loss_and_accuracy
 from logs.logging import write_logs
@@ -27,7 +28,8 @@ from plots.plotting import plot_client_performance_vs_rounds, plot_server_perfor
 
 class FederatedNetwork:
     def __init__(self, num_iid_client_instances, num_noniid_client_instances, server_tree_layout, num_training_rounds,
-                 dataset_name, drift_specs, simulation_parameters, drift_recovery_parameters, client_select_fraction=0.5,
+                 dataset_name, drift_specs, simulation_parameters, drift_recovery_parameters,
+                 client_select_fraction=0.5,
                  minibatch_size=32, num_local_epochs=4):
         # Dataset name
         self.dataset_name = dataset_name
@@ -170,8 +172,9 @@ class FederatedNetwork:
             sampled_client_ids = [client.client_id for client in sampled_clients]
             sampled_clients_in_each_round.append(sampled_client_ids)
 
-            # As an example, only one server is considered
-            sampled_clients_model_parameters = [sampled_client.model.state_dict() for sampled_client in self.clients]
+            # Get the model parameters of the clients sampled in the current round
+            sampled_clients_model_parameters, auxiliary_parameters = get_client_model_parameters(sampled_clients, self.drift,
+                                                                           self.drift_recovery_parameters)
 
             # Aggregation (upwards): Aggregate client model parameters to the edge model and edge model parameters to
             # the global model (returns the round_server_loss_and_accuracy, global_avg_loss_and_accuracy after

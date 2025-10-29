@@ -7,6 +7,7 @@ Version: 1.0
 """
 from typing import List, OrderedDict, Dict
 
+import constants
 from drift_concepts.drift import Drift, apply_drift
 from federated_network.client import set_parameters, Client
 from federated_network.server import Server
@@ -157,3 +158,25 @@ def update_progress(_round, num_training_rounds) -> None:
     """
     progress = (_round / num_training_rounds) * 100
     print(f"\rSimulation Percentage completed: {progress:.2f}%", end="")
+
+
+def get_client_model_parameters(all_sampled_clients: List[Client], drift: Drift, drift_recovery_parameters: Dict) -> \
+        tuple[List[OrderedDict], List[OrderedDict]]:
+    """
+    Returns the client model parameters. If drift has occurred and the recovery method is FedAU, also returns the
+    auxiliary classifier parameters.
+    :param all_sampled_clients: List of sampled client instances whose parameters are to be returned
+    :param drift: Drift instance
+    :param drift_recovery_parameters: Parameters specifying the drift recovery strategies
+    :return: List of OrderedDict representing the model parameters of each client
+    """
+    drift_recovery_method = drift_recovery_parameters['recovery_method']
+    auxiliary_parameters = None
+
+    if drift.is_drift and drift_recovery_method == constants.RecoveryAlgorithm.FEDAU:
+        auxiliary_parameters = [
+            client.auxiliary_classifier_parameters if client.client_id in drift.drifted_client_indices else None
+            for client in all_sampled_clients
+        ]
+
+    return [client.model.state_dict() for client in all_sampled_clients], auxiliary_parameters

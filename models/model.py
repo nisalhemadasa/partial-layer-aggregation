@@ -40,7 +40,7 @@ class SimpleModel(nn.Module):
 
 class CNNModel(nn.Module):
     def __init__(self):
-        """Defined for both MNIST and CIFAR-10 datasets"""
+        """Defined for both MNIST and F_MNIST datasets"""
         super(CNNModel, self).__init__()
 
         self.pool = nn.MaxPool2d(2, 2, 1, 2)
@@ -77,13 +77,32 @@ class CNNModel(nn.Module):
         # print("After fc1:", x.shape)
         x = F.relu(self.bn6(self.fc2(x)))
         # print("After fc2:", x.shape)
-        x = self.fc3(x)
+        x = self.fc3(x)  # classifier in the case of FedAU
         # print("Output shape:", x.shape)
         return x
 
 
-def fedau(_model: nn.Module, _dataset: DataLoader, _server_model_parameters: OrderedDict, _epochs: int,
-          _batch_size: int, _verbose: bool = False) -> None:
+def split_to_extractor_and_classifier(_model: nn.Module) -> tuple[OrderedDict, OrderedDict]:
+    """
+    Split the model into feature extractor and classifier parts. The feature extractor includes all layers except the
+    final fully connected layer (fc3), while the classifier includes only the final fully connected layer.
+    :param _model: The model to split
+    :return: A tuple containing two OrderedDicts: (parameters of the feature extractor, parameters of the classifier)
+    """
+    model_parameters = _model.state_dict()
+
+    # get the extractor parameters (all except fc3 layer)
+    extractor_parameters = OrderedDict((k, v) for k, v in model_parameters.items() if not k.startswith("fc3."))
+
+    # get the classifier parameters (fc3 layer)
+    classifier_parameters = OrderedDict((k, v) for k, v in model_parameters.items() if k.startswith("fc3."))
+
+    return extractor_parameters, classifier_parameters
+
+
+def auxiliary_model_train(_model: nn.Module, _dataset: DataLoader, _server_model_parameters: OrderedDict,
+                          _trainloader: DataLoader, _auxiliary_classifier_parameters: OrderedDict, _epochs: int,
+                          _batch_size: int, _verbose: bool = False) -> None:
     """
     Implementation of FedAU algorithm following the paper: [2]H. Gu, G. Zhu, J. Zhang, X. Zhao, Y. Han, L. Fan and
     Q. Yang, “Unlearning during Learning: An Efficient Federated Machine Unlearning Method,” in
@@ -91,22 +110,29 @@ def fedau(_model: nn.Module, _dataset: DataLoader, _server_model_parameters: Ord
     :param _model: Core learning model
     :param _dataset: The dataloader containing training dataset
     :param _server_model_parameters: The server model parameters (weights and biases from the server)
+    :param _trainloader: The dataloader containing training dataset with new patterns
+    :param _auxiliary_classifier_parameters: The auxiliary model classifier parameters (fc3 layer parameters)
     :param _epochs: The number of epochs to train
     :param _batch_size: The batch size to use during training
     :param _verbose: Whether to print training progress
     :return: None
     """
-    # Split the trained learning module into extractor and classifier
-    # TODO
-
     # Initialize the auxiliary model
-    aux_model = CNNModel().to(DEVICE) # initialize using a fresh base model, similar to learning module architecture
-    aux_model.load_state_dict(_server_model_parameters, strict=True) # load server parameters to auxiliary model
+    aux_model = CNNModel().to(DEVICE)  # initialize using a fresh base model, similar to learning module architecture
+    aux_model.load_state_dict(_server_model_parameters, strict=True)  # load server parameters to auxiliary model
 
     # Replace fc3 layer with a new nn.Linear of the same shape
     aux_model.fc3 = nn.Linear(aux_model.fc3.in_features, aux_model.fc3.out_features)
 
     # Train the auxiliary model using data with new patterns
+    # TODO: create trainloader for drifted local_trainset and non-drifted local_trainset
+    # drifted_dataset =
+    # non - drifted_dataset =
+
+    train(aux_model, _trainloader, _epochs=_epochs, verbose=_verbose)
+
+    # get the classifier of the auxiliary module
+    _, _auxiliary_classifier_parameters = split_to_extractor_and_classifier(aux_model)
 
 
 def rapid_train(_model: nn.Module, _dataset: DataLoader, _epochs: int, _batch_size: int,
