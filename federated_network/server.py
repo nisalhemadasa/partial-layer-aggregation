@@ -46,13 +46,13 @@ class Server:
         return float(loss), float(accuracy)
 
 
-def model_aggregation(server_hierarchy: List[List[Server]], sampled_clients_model_parameters: List[OrderedDict],
-                      server_test_set: DataLoader, is_evaluate_server_model=False) -> List:
+def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: DataLoader, sampled_clients: List[Client],
+                      is_evaluate_server_model=False) -> List:
     """
     Aggregate the models of the clients to the server model.
     :param server_hierarchy: List of servers in the hierarchy
-    :param sampled_clients_model_parameters: List of client model parameters
     :param server_test_set: List of test data for server model evaluation, once the aggregation is done
+    :param sampled_clients: List of sampled clients
     :param is_evaluate_server_model: Boolean flag to indicate whether to evaluate the server model during aggregation
     :return: List of loss and accuracy at each level of the server hierarchy; outer list: server hierarchy levels,
     inner list: loss and accuracy Tuple at each level (loss, accuracy)
@@ -74,8 +74,9 @@ def model_aggregation(server_hierarchy: List[List[Server]], sampled_clients_mode
         for server in server_hierarchy[depth_level]:
             if depth_level == len(server_hierarchy) - 1:
                 # Leaf nodes: Aggregate client models
-                client_model_parameters = [sampled_clients_model_parameters[client_id] for client_id in
+                client_model_parameters = [sampled_clients[client_id].model.state_dict() for client_id in
                                            server.client_ids]
+
                 print('server:' + str(server.server_id) + ' -> ' + 'clients:' + str(server.client_ids))
 
                 # Aggregate client models
@@ -160,20 +161,19 @@ def server_fn(server_id: int, dataset_name: str, server_abs_id: int) -> Server:
     return Server(_server_id=server_id, _abs_id=server_abs_id, _strategy=aggregator_strategy, _model=model)
 
 
-def change_aggregation_strategy(server_hierarchy: List[Any], drift_recovery_method: str, drift: Drift,
-                                clients: List[Client]) -> None:
+def change_aggregation_strategy(server_hierarchy: List[Any], drift_recovery_method: str, drift: Drift) -> None:
     """
     Change the aggregation strategy of the leaf servers (only) of the hierarchy.
     :param server_hierarchy: List of servers in the hierarchy
     :param drift_recovery_method: Drift recovery method
     :param drift: Drift instance
-    :param clients: List of all client instances
     :return: None
     """
     if drift_recovery_method == constants.RecoveryAlgorithm.FEDAU:
         for server in server_hierarchy[-1]:
             # change the strategy only in the servers where drifted clients are connected
-            if server.client_ids in drift.drifted_client_indices:
+            drifted = set(drift.drifted_client_indices or [])  # makes sure it's at least an empty set and not None
+            if set(server.client_ids) & drifted:  # checks if there is any intersection
                 server.strategy = strategy.FedAU.aggregator_fn()
     else:
         # if the drift is ended, change the strategy back to FedAvg
