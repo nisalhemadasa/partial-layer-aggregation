@@ -74,18 +74,10 @@ class Client:
                 # Rapid retraining (2nd order) + reinitialization of client parameters from the global model from scratch
                 rapid_train(self.model, self.trainloader, _epochs=self.epochs, _batch_size=self.mini_batch_size)
             elif drift_recovery_method == constants.RecoveryAlgorithm.FEDAU:
-                # FedAU: Learning module training
-                if server_model_parameters is not None:
-                    set_parameters(self.model, server_model_parameters)  # apply server weights
-
-                train(self.model, self.trainloader, self.epochs)  # regular training step for learning module
-
-                # FedAU: Auxiliary module training, only for drifted clients #TODO: implement: drift detection/trusted clients
-                if _client_id in drift.drifted_client_indices:
-                    auxiliary_model_train(self.model, self.trainloader, server_model_parameters, self.trainloader,
-                          self.auxiliary_classifier_parameters, _epochs=self.epochs, _batch_size=self.mini_batch_size)
-
-        return get_parameters(self.model), len(self.trainloader)
+                # FedAU client side operations
+                fedau_clientside_train(self.model, self.trainloader, server_model_parameters,
+                                       _drifted_client_indices, self.auxiliary_classifier_parameters, _client_id,
+                                       _epochs=self.epochs, _mini_batch_size=self.mini_batch_size)
 
     def evaluate(self):
         """ Evaluate the client model on the validation data and return the loss and accuracy """

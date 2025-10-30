@@ -89,29 +89,74 @@ def split_to_extractor_and_classifier(_model: nn.Module) -> tuple[OrderedDict, O
     :param _model: The model to split
     :return: A tuple containing two OrderedDicts: (parameters of the feature extractor, parameters of the classifier)
     """
-    model_parameters = _model.state_dict()
+    model_params = _model.state_dict()
 
     # get the extractor parameters (all except fc3 layer)
-    extractor_parameters = OrderedDict((k, v) for k, v in model_parameters.items() if not k.startswith("fc3."))
+    extractor_params = OrderedDict((k, v) for k, v in model_params.items() if not k.startswith("fc3."))
 
     # get the classifier parameters (fc3 layer)
-    classifier_parameters = OrderedDict((k, v) for k, v in model_parameters.items() if k.startswith("fc3."))
+    classifier_params = OrderedDict((k, v) for k, v in model_params.items() if k.startswith("fc3."))
 
-    return extractor_parameters, classifier_parameters
+    return extractor_params, classifier_params
 
 
-def auxiliary_model_train(_model: nn.Module, _dataset: DataLoader, _server_model_parameters: OrderedDict,
-                          _trainloader: DataLoader, _auxiliary_classifier_parameters: OrderedDict, _epochs: int,
-                          _batch_size: int, _verbose: bool = False) -> None:
+def fedau_clientside_train(_model: nn.Module, _dataset: DataLoader, _server_model_params: OrderedDict, _client_id,
+                           _drifted_client_indices, _auxiliary_classifier_params, _epochs: int,
+                           _mini_batch_size: int) -> None:
     """
-    Implementation of FedAU algorithm following the paper: [2]H. Gu, G. Zhu, J. Zhang, X. Zhao, Y. Han, L. Fan and
+    Performs clients dei training operations of the FedAU algorithm, following [2]. 
+    This includes training the (1) learning module and (2) auxiliary module
+    
+    [2] Implementation of FedAU algorithm following the paper: [2]H. Gu, G. Zhu, J. Zhang, X. Zhao, Y. Han, L. Fan and
     Q. Yang, “Unlearning during Learning: An Efficient Federated Machine Unlearning Method,” in
     Proceedings of the 33rd International Joint Conference on Artificial Intelligence (IJCAI-24)
     :param _model: Core learning model
     :param _dataset: The dataloader containing training dataset
-    :param _server_model_parameters: The server model parameters (weights and biases from the server)
-    :param _trainloader: The dataloader containing training dataset with new patterns
-    :param _auxiliary_classifier_parameters: The auxiliary model classifier parameters (fc3 layer parameters)
+    :param _server_model_params: The server model parameters (weights and biases from the server)
+    :param _client_id: ID of the given client
+    :param _drifted_client_indices: List of ID's of the drifted clients
+    :param _auxiliary_classifier_params: Client attribute (placeholder) to store the auxiliary classifier parameters
+    :param _epochs: The number of epochs to train
+    :param _mini_batch_size: The batch size to use during training
+    :return: None
+    """
+    # FedAU: Learning module training
+    learning_model_train(_model, _dataset, _server_model_params, _epochs=_epochs, )
+
+    # FedAU: Auxiliary module training, only for drifted clients #TODO: implement: drift detection/trusted clients
+    if _client_id in _drifted_client_indices:
+        auxiliary_model_train(_model, _dataset, _server_model_params, _auxiliary_classifier_params, _epochs=_epochs,
+                              _batch_size=_mini_batch_size)
+
+
+def learning_model_train(_model: nn.Module, _dataset: DataLoader, _server_model_params: OrderedDict,
+                         _epochs: int) -> None:
+    """
+    Trains the learning model (client side), following [2].
+    :param _model: Core learning model
+    :param _dataset: The dataloader containing training dataset
+    :param _server_model_params: The server model parameters (weights and biases from the server)
+    :param _epochs: The number of epochs to train
+    :return: None
+    """
+    # FedAU: Learning module training
+    if _server_model_params is not None:
+        set_parameters(_model, _server_model_params)  # apply server weights
+
+    train(_model, _dataset, _epochs)  # regular training step for learning module
+
+
+def auxiliary_model_train(_model: nn.Module, _dataset: DataLoader, _server_model_params: OrderedDict,
+                          _auxiliary_classifier_params: OrderedDict, _epochs: int, _batch_size: int,
+                          _verbose: bool = False) -> None:
+    """
+    Trains the auxiliary model (client side), following [2].
+    Then the classifier parameters of the auxiliary model are extracted and assigned to the
+    _auxiliary_classifier_parameters attribute of the given client.
+    :param _model: Core learning model
+    :param _dataset: The dataloader containing training dataset
+    :param _server_model_params: The server model parameters (weights and biases from the server)
+    :param _auxiliary_classifier_params: The auxiliary model classifier parameters (fc3 layer parameters)
     :param _epochs: The number of epochs to train
     :param _batch_size: The batch size to use during training
     :param _verbose: Whether to print training progress
@@ -119,7 +164,7 @@ def auxiliary_model_train(_model: nn.Module, _dataset: DataLoader, _server_model
     """
     # Initialize the auxiliary model
     aux_model = CNNModel().to(DEVICE)  # initialize using a fresh base model, similar to learning module architecture
-    aux_model.load_state_dict(_server_model_parameters, strict=True)  # load server parameters to auxiliary model
+    aux_model.load_state_dict(_server_model_params, strict=True)  # load server parameters to auxiliary model
 
     # Replace fc3 layer with a new nn.Linear of the same shape
     aux_model.fc3 = nn.Linear(aux_model.fc3.in_features, aux_model.fc3.out_features)
@@ -129,10 +174,10 @@ def auxiliary_model_train(_model: nn.Module, _dataset: DataLoader, _server_model
     # drifted_dataset =
     # non - drifted_dataset =
 
-    train(aux_model, _trainloader, _epochs=_epochs, verbose=_verbose)
+    train(aux_model, _dataset, _epochs=_epochs, verbose=_verbose)
 
     # get the classifier of the auxiliary module
-    _, _auxiliary_classifier_parameters = split_to_extractor_and_classifier(aux_model)
+    _, _auxiliary_classifier_params = split_to_extractor_and_classifier(aux_model)
 
 
 def rapid_train(_model: nn.Module, _dataset: DataLoader, _epochs: int, _batch_size: int,
