@@ -5,8 +5,9 @@ Author: Nisal Hemadasa
 Date: 04-04-2025
 Version: 2.0
 """
-from typing import Tuple, OrderedDict
+from typing import Tuple, OrderedDict, List
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -287,7 +288,7 @@ def rapid_train(_model: nn.Module, _dataset: DataLoader, _epochs: int, _batch_si
             # Moves the weights following an update rule, leveraging the calculated gradients. Here, this is manually
             # programmed below referring to Lie et. al.[1] instead of calling optimizer.step(). Update step applies a
             # rule that moves weights a little using the gradients (param.grad) to reduce the loss.
-            for param in _model.parameters():
+            for param in _model.params():
                 if param.grad is not None:
                     # saves a copy of the existing gradients
                     batch_gradients[param] = param.grad.clone().detach()
@@ -411,3 +412,13 @@ def test(_model: nn.Module, _dataset: DataLoader) -> Tuple[float, float]:
     loss /= len(_dataset)
     accuracy = correct / total
     return loss, accuracy
+
+
+def set_parameters(_model, parameters: OrderedDict):
+    """ Set the model weights and biases """
+    _model.load_state_dict(parameters, strict=True)
+
+
+def get_parameters(_model) -> List[np.ndarray]:
+    """ Set the model weights and biases """
+    return [val.cpu().numpy() for _, val in _model.state_dict().items()]
