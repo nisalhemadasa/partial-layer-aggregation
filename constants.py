@@ -154,8 +154,10 @@ class Logs:
 
 # Drift recovery algorithms
 class RecoveryAlgorithm:
-    ADAM_BASED = 'adam_based'
+    # Client-side algorithms
+    FEDAVG = 'fedavg'   # Adam-based training
     RRT = 'rrt'
     FEDAU = 'fedau'
     FLUID = 'fluid'
-
+    # Server-side algorithms
+    FEDAVG = 'fedavg'

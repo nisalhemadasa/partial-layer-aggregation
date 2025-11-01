@@ -28,13 +28,22 @@ class Server:
         self.child_server_ids = []  # List of child server IDs in the server hierarchy
         self.parent_server_id = None  # Parent server ID in the server hierarchy
 
-    def train(self, client_model_parameters: List[OrderedDict]) -> None:
+    def train(self, client_model_parameters: List[OrderedDict], aux_classifier_parameters: List[OrderedDict]) -> None:
         """
         Train the server model using the client model parameters.
         :param client_model_parameters: List of client model parameters
+        :param aux_classifier_parameters: List of auxiliary classifier parameters from drifted clients
         :return: None
         """
-        self.model = self.strategy.aggregate_models(self.model, client_model_parameters)
+        if aux_classifier_parameters:
+            # check if all the elements in the aux_classifier_parameters are None
+            if all(param is None for param in aux_classifier_parameters):
+                return
+            # FedAU: For servers with clients with auxiliary classifiers (i.e., leaf servers, having drifted nodes)
+            self.model = self.strategy.aggregate_models(self.model, client_model_parameters, aux_classifier_parameters)
+        else:
+            # FedAvg: For internal servers or when there are no drifted clients
+            self.model = self.strategy.aggregate_models(self.model, client_model_parameters)
 
     def evaluate(self, _test_set: DataLoader) -> (float, float):
         """
@@ -47,13 +56,15 @@ class Server:
 
 
 def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: DataLoader, sampled_clients: List[Client],
-                      is_evaluate_server_model=False) -> List:
+                      drift: Drift, is_evaluate_server_model=False, verbose=False) -> List:
     """
     Aggregate the models of the clients to the server model.
     :param server_hierarchy: List of servers in the hierarchy
     :param server_test_set: List of test data for server model evaluation, once the aggregation is done
     :param sampled_clients: List of sampled clients
+    :param drift: Drift instance
     :param is_evaluate_server_model: Boolean flag to indicate whether to evaluate the server model during aggregation
+    :param verbose: Whether to print detailed logs or not
     :return: List of loss and accuracy at each level of the server hierarchy; outer list: server hierarchy levels,
     inner list: loss and accuracy Tuple at each level (loss, accuracy)
     """
@@ -65,7 +76,8 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
     if len(server_hierarchy) > 1:
         is_evaluate_server_model = True
 
-    print('aggregate client models')
+    if verbose:
+        print('aggregate client models')
 
     # Aggregate the models of the clients to the server model.Start by aggregating the leaves and move up the hierarchy
     for depth_level in range(len(server_hierarchy) - 1, -1, -1):
@@ -73,21 +85,31 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
 
         for server in server_hierarchy[depth_level]:
             if depth_level == len(server_hierarchy) - 1:
-                # Leaf nodes: Aggregate client models
+                # Leaf nodes
+                # Get client (learning) model parameters
                 client_model_parameters = [sampled_clients[client_id].model.state_dict() for client_id in
                                            server.client_ids]
 
-                print('server:' + str(server.server_id) + ' -> ' + 'clients:' + str(server.client_ids))
+                # Get auxiliary classifier parameters from drifted clients only
+                drifted_client_ids = set(drift.drifted_client_indices or [])
+                client_aux_classifier_parameters = None
+                if drift.is_drift and drifted_client_ids:
+                    client_aux_classifier_parameters = [sampled_clients[client_id].auxiliary_classifier_parameters # get aux classifier params
+                                                        if client_id in drifted_client_ids else None # drifted clients only
+                                                        for client_id in server.client_ids] # connected to this server
+                if verbose:
+                    print('server:' + str(server.server_id) + ' -> ' + 'clients:' + str(server.client_ids))
 
                 # Aggregate client models
-                server.train(client_model_parameters)
+                server.train(client_model_parameters, client_aux_classifier_parameters)
             else:
                 # Internal nodes: Aggregate models from child servers
                 child_server_model_parameters = [server_hierarchy[depth_level + 1][child_server].model.state_dict() for
                                                  child_server in server.child_server_ids]
 
-                # Aggregate child server models
-                server.train(child_server_model_parameters)
+                # Aggregate child server models. Auxiliary classifier parameters are not used in internal server nodes
+                # since they are not connected to clients which train auxiliary modules
+                server.train(child_server_model_parameters, None)
 
             # Evaluate the server model
             if is_evaluate_server_model:
@@ -142,6 +164,26 @@ def model_distribution(server_hierarchy: List[List[Server]], server_test_set: Da
     return server_loss_and_accuracy
 
 
+def change_server_aggregation_strategy(server_hierarchy: List[Any], drift_recovery_method: str, drift: Drift) -> None:
+    """
+    Change the aggregation strategy of the leaf servers (only) of the hierarchy.
+    :param server_hierarchy: List of servers in the hierarchy
+    :param drift_recovery_method: Drift recovery method
+    :param drift: Drift instance
+    :return: None
+    """
+    if drift_recovery_method == constants.RecoveryAlgorithm.FEDAU:
+        for server in server_hierarchy[-1]: # applied only to leaf servers
+            # change the strategy only in the servers where drifted clients are connected
+            drifted = set(drift.drifted_client_indices or [])  # makes sure it's at least an empty set and not None
+            if set(server.client_ids) & drifted:  # checks if there is any intersection
+                server.strategy = strategy.FedAU.aggregator_fn()
+    else:
+        # if the drift is ended, change the strategy back to FedAvg
+        for server in server_hierarchy[-1]:
+            server.strategy = strategy.FedAvg.aggregator_fn()
+
+
 def server_fn(server_id: int, dataset_name: str, server_abs_id: int) -> Server:
     """
     Create a server instances on demand for the optimal use of resources.
@@ -160,22 +202,3 @@ def server_fn(server_id: int, dataset_name: str, server_abs_id: int) -> Server:
 
     return Server(_server_id=server_id, _abs_id=server_abs_id, _strategy=aggregator_strategy, _model=model)
 
-
-def change_aggregation_strategy(server_hierarchy: List[Any], drift_recovery_method: str, drift: Drift) -> None:
-    """
-    Change the aggregation strategy of the leaf servers (only) of the hierarchy.
-    :param server_hierarchy: List of servers in the hierarchy
-    :param drift_recovery_method: Drift recovery method
-    :param drift: Drift instance
-    :return: None
-    """
-    if drift_recovery_method == constants.RecoveryAlgorithm.FEDAU:
-        for server in server_hierarchy[-1]:
-            # change the strategy only in the servers where drifted clients are connected
-            drifted = set(drift.drifted_client_indices or [])  # makes sure it's at least an empty set and not None
-            if set(server.client_ids) & drifted:  # checks if there is any intersection
-                server.strategy = strategy.FedAU.aggregator_fn()
-    else:
-        # if the drift is ended, change the strategy back to FedAvg
-        for server in server_hierarchy[-1]:
-            server.strategy = strategy.FedAvg.aggregator_fn()

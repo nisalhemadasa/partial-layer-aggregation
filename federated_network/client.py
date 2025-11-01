@@ -23,14 +23,16 @@ print(
 
 
 class Client:
-    def __init__(self, client_id, if_iid, model, epochs, mini_batch_size, local_trainset, testset):
+    def __init__(self, client_id, if_iid, model, epochs, mini_batch_size, local_trainset, testset,
+                 drift_recovery_method):
         self.client_id = client_id
         self.iid = if_iid  # whether the client has IID data or not
         self.model = model
         self.epochs = epochs
+        self.mini_batch_size = mini_batch_size
         self.local_trainset = local_trainset
         self.testset = testset
-        self.mini_batch_size = mini_batch_size
+        self.drift_recovery_method = drift_recovery_method
         self.trainloader = None  # initialized only when sample_data() is called
         self.testloader = None  # initialized only when sample_data() is called
         self.parent_server_id = None  # server ID in the server hierarchy to which the client is connected
@@ -73,7 +75,7 @@ class Client:
             train(self.model, self.trainloader, self.epochs)
         else:
             # Train the client model using new data and server parameters
-            if drift_recovery_method == constants.RecoveryAlgorithm.ADAM_BASED:
+            if drift_recovery_method == constants.RecoveryAlgorithm.FEDAVG:
                 # Adam-based recovery (1st order) + reinitialization of client parameters from the global model from scratch
                 train(self.model, self.trainloader, _epochs=self.epochs)
             elif drift_recovery_method == constants.RecoveryAlgorithm.RRT:
@@ -109,8 +111,21 @@ def client_initial_training(_clients: List[Client], _is_drift: bool) -> List:
     return initial_client_loss_and_accuracy
 
 
+def change_client_drift_recovery_method(clients: List[Client], drift_recovery_method: str,
+                                        drifted_client_indices: List[int]) -> None:
+    """
+    Change the drift recovery method of the clients.
+    :param clients: List of client instances
+    :param drift_recovery_method: New drift recovery method to be set
+    :param drifted_client_indices: List of client indices that have experienced drift
+    """
+    for client in clients:
+        if client.client_id in drifted_client_indices:
+            client.drift_recovery_method = drift_recovery_method
+
+
 def client_fn(client_id: int, if_iid: bool, num_local_epochs: int, mini_batch_size: int,
-              _dataset: List[Dataset]) -> Client:
+              _dataset: List[Dataset], drift_recovery_method: str) -> Client:
     """
     Create a client instances on demand for the optimal use of resources.
     :param client_id: client id
@@ -118,6 +133,7 @@ def client_fn(client_id: int, if_iid: bool, num_local_epochs: int, mini_batch_si
     :param num_local_epochs: number of local epochs, before being aggregation ready
     :param mini_batch_size: size of the batches for the clients to train on
     :param _dataset: train and test datasets
+    :param drift_recovery_method: Drift recovery method to be used by the client
     :returns Client: A Client instance.
     """
     # Load model
@@ -128,4 +144,5 @@ def client_fn(client_id: int, if_iid: bool, num_local_epochs: int, mini_batch_si
 
     # Create a  single Flower client representing a single organization
     return Client(client_id=client_id, if_iid=if_iid, model=_model, epochs=num_local_epochs,
-                  mini_batch_size=mini_batch_size, local_trainset=local_trainset, testset=testset)
+                  mini_batch_size=mini_batch_size, local_trainset=local_trainset, testset=testset,
+                  drift_recovery_method=drift_recovery_method)

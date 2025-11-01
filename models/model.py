@@ -101,9 +101,9 @@ def split_to_extractor_and_classifier(_model: nn.Module) -> tuple[OrderedDict, O
     return extractor_params, classifier_params
 
 
-def fedau_clientside_train(_model: nn.Module, _dataset: DataLoader, _server_model_params: OrderedDict, _client_id,
-                           _drifted_client_indices, _auxiliary_classifier_params, _epochs: int,
-                           _mini_batch_size: int) -> None:
+def fedau_clientside_train(_model: nn.Module, _dataset: DataLoader, _server_model_params: OrderedDict,
+                           _drifted_client_indices: List[int], _auxiliary_classifier_params: OrderedDict, _client_id,
+                           _epochs: int, _mini_batch_size: int) -> None:
     """
     Performs clients dei training operations of the FedAU algorithm, following [2]. 
     This includes training the (1) learning module and (2) auxiliary module
@@ -128,7 +128,6 @@ def fedau_clientside_train(_model: nn.Module, _dataset: DataLoader, _server_mode
     if _client_id in _drifted_client_indices:
         auxiliary_model_train(_model, _dataset, _server_model_params, _auxiliary_classifier_params, _epochs=_epochs,
                               _batch_size=_mini_batch_size)
-
 
 def learning_model_train(_model: nn.Module, _dataset: DataLoader, _server_model_params: OrderedDict,
                          _epochs: int) -> None:

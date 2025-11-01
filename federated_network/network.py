@@ -14,16 +14,14 @@ from data.dataset_loader import load_datasets
 from data.utils import convert_dataset_to_loader, split_iid_dataset, split_noniid_dataset, get_unique_labels_per_subset
 from drift_concepts.drift import drift_fn
 from federated_network.client import client_fn, Client, client_initial_training
-from federated_network.server import server_fn, model_aggregation, model_distribution, change_aggregation_strategy
+from federated_network.server import server_fn, model_aggregation, model_distribution
 from federated_network.utils import update_progress, link_server_hierarchy, train_client_models, \
-    link_clients_to_servers, get_client_model_parameters
-from logs.analysis_functions import compute_client_average_metrics, compute_server_average_metrics, \
-    split_clients_loss_and_accuracy
+    link_clients_to_servers, handle_drift_for_round
+from logs.analysis_functions import compute_client_average_metrics, compute_server_average_metrics
 from logs.logging import write_logs
 from plots.plotting import plot_client_performance_vs_rounds, plot_server_performance_vs_rounds, \
-    plot_client_avg_performance_vs_rounds, plot_server_lvl_avg_performance_vs_rounds, \
-    plot_server_overall_avg_performance_vs_rounds, plot_client_layer_distance_vs_rounds, plot_client_distance_vs_rounds, \
-    plot_dataset_distribution
+    plot_server_lvl_avg_performance_vs_rounds, plot_server_overall_avg_performance_vs_rounds, \
+    plot_client_layer_distance_vs_rounds, plot_client_distance_vs_rounds, plot_dataset_distribution
 
 
 class FederatedNetwork:
@@ -90,7 +88,8 @@ class FederatedNetwork:
                 False,  # Non-IID clients
                 self.num_local_epochs,
                 self.minibatch_size,
-                [partitioned_noniid_trainsets[i], partitioned_noniid_testsets[i]]
+                [partitioned_noniid_trainsets[i], partitioned_noniid_testsets[i]],
+                self.drift_recovery_parameters['base_aggregation_method']
             )
             for i in range(num_noniid_client_instances)
         ]
@@ -101,7 +100,8 @@ class FederatedNetwork:
                 True,  # IID clients
                 self.num_local_epochs,
                 self.minibatch_size,
-                [partitioned_iid_trainsets[i], partitioned_iid_testsets[i]]
+                [partitioned_iid_trainsets[i], partitioned_iid_testsets[i]],
+                self.drift_recovery_parameters['base_aggregation_method']
             )
             for i in range(num_iid_client_instances)
         ]
@@ -158,24 +158,8 @@ class FederatedNetwork:
 
         for _round in range(self.num_training_rounds):
             # Add drift to the clients
-            if _round not in range(self.drift.drift_step_rounds[0],
-                                   self.drift.drift_step_rounds[-1] + 1):
-                # the aggregation strategy is changed (to no drift recovery = '') after the drift has ended
-                if _round > self.drift.drift_step_rounds[-1]:
-                    change_aggregation_strategy(self.server_hierarchy,'', self.drift)
-
-                # No drift before the first drift step and after the last drift step
-                self.drift.is_drift = False
-
-            elif round >= self.drift.drift_step_rounds[self.drift.current_drift_step]:
-                if not self.drift.is_drift:  # the aggregation strategy is changed at the start of the drift step
-                    # the server aggregation strategy needs to change for the FedAU's case.
-                    change_aggregation_strategy(self.server_hierarchy,
-                                                self.drift_recovery_parameters['recovery_method'],
-                                                self.drift)
-
-                self.drift.current_drift_step += 1  # Move to the next drift step.
-                self.drift.is_drift = True  # Drift occurs in the current step
+            handle_drift_for_round(_round, self.drift, self.server_hierarchy, self.drift_recovery_parameters,
+                                   self.clients)
 
             # Clients sampled for a single round. In this simulation, all clients are sampled, in order (not randomly)
             sampled_clients = self.clients
@@ -187,7 +171,7 @@ class FederatedNetwork:
             # Aggregation (upwards): Aggregate client model parameters to the edge model and edge model parameters to
             # the global model (returns the round_server_loss_and_accuracy, global_avg_loss_and_accuracy after
             # aggregating upwards, before the distribution stage)
-            _ = model_aggregation(self.server_hierarchy, server_test_set, sampled_clients)
+            _ = model_aggregation(self.server_hierarchy, server_test_set, sampled_clients, self.drift)
 
             # Updating (downwards): update the edge models using the global model parameters. (returns the
             # round_server_loss_and_accuracy, global_avg_loss_and_accuracy after both aggregating upwards and

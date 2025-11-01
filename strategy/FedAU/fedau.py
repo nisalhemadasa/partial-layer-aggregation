@@ -14,20 +14,24 @@ class FedAU:
     def __init__(self):
         pass
 
-    def aggregate_models(self, model: CNNModel, client_model_params_list: List[OrderedDict],
-                         auxiliary_classifier_params: List[OrderedDict]) -> CNNModel:
+    def aggregate_models(self, server_model: CNNModel, client_model_params_list: List[OrderedDict],
+                         auxiliary_classifier_params_list: List[OrderedDict]) -> CNNModel:
         """
         Aggregate the client models to the global model using adaptive weights and returns the new aggregated model.
         :param model: The server (edge or global) model
         :param client_model_params_list: List of state dicts of the client models
-        :param auxiliary_classifier_params: List of state dicts of the auxiliary classifiers from drifted clients
+        :param auxiliary_classifier_params_list: List of state dicts of the auxiliary classifiers from drifted clients
         :return: model: The updated server (edge or global)  model after aggregation
         """
-        # get learning model parameters
-        learning_model_params = model.state_dict()
+        # FedAvg learning model parameters
+        averaged_learning_model = client_model_params_list
 
-        # split learning model to extractor and classifier parameters
-        extractor, _learning_model_classifier_parameters = split_to_extractor_and_classifier(model)
+        # # split learning model to extractor and classifier parameters
+        # extractor, _learning_model_classifier_parameters = split_to_extractor_and_classifier(model)
+        #
+        # # FedAvg auxiliary classifier parameters list
+        #
+        # _auxiliary_classifiers_parameters =
 
 
 def aggregator_fn():
