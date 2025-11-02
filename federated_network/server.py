@@ -87,16 +87,18 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
             if depth_level == len(server_hierarchy) - 1:
                 # Leaf nodes
                 # Get client (learning) model parameters
-                client_model_parameters = [sampled_clients[client_id].model.state_dict() for client_id in
-                                           server.client_ids]
+                client_model_parameters = {client_id: sampled_clients[client_id].model.state_dict()
+                                           for client_id in server.client_ids}
 
                 # Get auxiliary classifier parameters from drifted clients only
                 drifted_client_ids = set(drift.drifted_client_indices or [])
                 client_aux_classifier_parameters = None
                 if drift.is_drift and drifted_client_ids:
-                    client_aux_classifier_parameters = [sampled_clients[client_id].auxiliary_classifier_parameters # get aux classifier params
-                                                        if client_id in drifted_client_ids else None # drifted clients only
-                                                        for client_id in server.client_ids] # connected to this server
+                    # Collect the parameters to a dictionary (client_id: aux_classifier_parameters)
+                    client_aux_classifier_parameters = {client_id:
+                                                        (sampled_clients[client_id].auxiliary_classifier_parameters  # get aux classifier params
+                                                        if client_id in drifted_client_ids else None)  # drifted clients only
+                                                        for client_id in server.client_ids}  # connected to this server
                 if verbose:
                     print('server:' + str(server.server_id) + ' -> ' + 'clients:' + str(server.client_ids))
 
@@ -104,8 +106,10 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
                 server.train(client_model_parameters, client_aux_classifier_parameters)
             else:
                 # Internal nodes: Aggregate models from child servers
-                child_server_model_parameters = [server_hierarchy[depth_level + 1][child_server].model.state_dict() for
-                                                 child_server in server.child_server_ids]
+                # Collect the parameters to a dictionary (server_id: server_model_parameters)
+                child_server_model_parameters = {
+                    child_server: server_hierarchy[depth_level + 1][child_server].model.state_dict()
+                    for child_server in server.child_server_ids}
 
                 # Aggregate child server models. Auxiliary classifier parameters are not used in internal server nodes
                 # since they are not connected to clients which train auxiliary modules
@@ -173,7 +177,7 @@ def change_server_aggregation_strategy(server_hierarchy: List[Any], drift_recove
     :return: None
     """
     if drift_recovery_method == constants.RecoveryAlgorithm.FEDAU:
-        for server in server_hierarchy[-1]: # applied only to leaf servers
+        for server in server_hierarchy[-1]:  # applied only to leaf servers
             # change the strategy only in the servers where drifted clients are connected
             drifted = set(drift.drifted_client_indices or [])  # makes sure it's at least an empty set and not None
             if set(server.client_ids) & drifted:  # checks if there is any intersection
@@ -201,4 +205,3 @@ def server_fn(server_id: int, dataset_name: str, server_abs_id: int) -> Server:
         model = CNNModel().to(DEVICE)
 
     return Server(_server_id=server_id, _abs_id=server_abs_id, _strategy=aggregator_strategy, _model=model)
-

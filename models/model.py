@@ -83,20 +83,22 @@ class CNNModel(nn.Module):
         return x
 
 
-def split_to_extractor_and_classifier(_model: nn.Module) -> tuple[OrderedDict, OrderedDict]:
+def split_to_extractor_and_classifier(_model: nn.Module, _model_params: OrderedDict) -> tuple[OrderedDict, OrderedDict]:
     """
-    Split the model into feature extractor and classifier parts. The feature extractor includes all layers except the
+    Split the model/model parameters into feature extractor and classifier parts. The feature extractor includes all layers except the
     final fully connected layer (fc3), while the classifier includes only the final fully connected layer.
     :param _model: The model to split
+    :param _model_params: The model parameters to split
     :return: A tuple containing two OrderedDicts: (parameters of the feature extractor, parameters of the classifier)
     """
-    model_params = _model.state_dict()
+    if _model is not None:
+        _model_params = _model.state_dict()
 
     # get the extractor parameters (all except fc3 layer)
-    extractor_params = OrderedDict((k, v) for k, v in model_params.items() if not k.startswith("fc3."))
+    extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if not k.startswith("fc3."))
 
     # get the classifier parameters (fc3 layer)
-    classifier_params = OrderedDict((k, v) for k, v in model_params.items() if k.startswith("fc3."))
+    classifier_params = OrderedDict((k, v) for k, v in _model_params.items() if k.startswith("fc3."))
 
     return extractor_params, classifier_params
 
@@ -128,6 +130,7 @@ def fedau_clientside_train(_model: nn.Module, _dataset: DataLoader, _server_mode
     if _client_id in _drifted_client_indices:
         auxiliary_model_train(_model, _dataset, _server_model_params, _auxiliary_classifier_params, _epochs=_epochs,
                               _batch_size=_mini_batch_size)
+
 
 def learning_model_train(_model: nn.Module, _dataset: DataLoader, _server_model_params: OrderedDict,
                          _epochs: int) -> None:
