@@ -28,11 +28,13 @@ class Server:
         self.child_server_ids = []  # List of child server IDs in the server hierarchy
         self.parent_server_id = None  # Parent server ID in the server hierarchy
 
-    def train(self, client_model_parameters: List[OrderedDict], aux_classifier_parameters: List[OrderedDict]) -> None:
+    def train(self, client_model_parameters: Dict[str, List[OrderedDict]],
+              aux_classifier_parameters: Dict[str, List[OrderedDict]], ema_weight: float) -> None:
         """
         Train the server model using the client model parameters.
         :param client_model_parameters: List of client model parameters
         :param aux_classifier_parameters: List of auxiliary classifier parameters from drifted clients
+        :param ema_weight: EMA weight parameter for FedAU algorithm
         :return: None
         """
         if aux_classifier_parameters:
@@ -40,7 +42,8 @@ class Server:
             if all(param is None for param in aux_classifier_parameters):
                 return
             # FedAU: For servers with clients with auxiliary classifiers (i.e., leaf servers, having drifted nodes)
-            self.model = self.strategy.aggregate_models(self.model, client_model_parameters, aux_classifier_parameters)
+            self.model = self.strategy.aggregate_models(self.model, client_model_parameters, aux_classifier_parameters,
+                                                        ema_weight)
         else:
             # FedAvg: For internal servers or when there are no drifted clients
             self.model = self.strategy.aggregate_models(self.model, client_model_parameters)
@@ -56,13 +59,14 @@ class Server:
 
 
 def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: DataLoader, sampled_clients: List[Client],
-                      drift: Drift, is_evaluate_server_model=False, verbose=False) -> List:
+                      drift: Drift, fedau_alpha: float, is_evaluate_server_model=False, verbose=False) -> List:
     """
     Aggregate the models of the clients to the server model.
     :param server_hierarchy: List of servers in the hierarchy
     :param server_test_set: List of test data for server model evaluation, once the aggregation is done
     :param sampled_clients: List of sampled clients
     :param drift: Drift instance
+    :param fedau_alpha: EMA weight (alpha) parameter for the FedAU algorithm
     :param is_evaluate_server_model: Boolean flag to indicate whether to evaluate the server model during aggregation
     :param verbose: Whether to print detailed logs or not
     :return: List of loss and accuracy at each level of the server hierarchy; outer list: server hierarchy levels,
@@ -70,6 +74,9 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
     """
     # Store the loss and accuracy at each level of the server model hierarchy
     server_loss_and_accuracy = []
+
+    # EMA weight parameter for the FedAU algorithm
+    ema_weight = None
 
     # Evaluate server model on the upward traversal aggregation  only if the hierarchy has more than one level. Else,
     # this evaluation will be redundant as it is already done during the server model distribution phase.
@@ -96,14 +103,17 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
                 if drift.is_drift and drifted_client_ids:
                     # Collect the parameters to a dictionary (client_id: aux_classifier_parameters)
                     client_aux_classifier_parameters = {client_id:
-                                                        (sampled_clients[client_id].auxiliary_classifier_parameters  # get aux classifier params
-                                                        if client_id in drifted_client_ids else None)  # drifted clients only
+                                                            (sampled_clients[
+                                                                 client_id].auxiliary_classifier_parameters  # get aux classifier params
+                                                             if client_id in drifted_client_ids else None)
+                                                        # drifted clients only
                                                         for client_id in server.client_ids}  # connected to this server
+                    ema_weight = fedau_alpha
                 if verbose:
                     print('server:' + str(server.server_id) + ' -> ' + 'clients:' + str(server.client_ids))
 
                 # Aggregate client models
-                server.train(client_model_parameters, client_aux_classifier_parameters)
+                server.train(client_model_parameters, client_aux_classifier_parameters, ema_weight)
             else:
                 # Internal nodes: Aggregate models from child servers
                 # Collect the parameters to a dictionary (server_id: server_model_parameters)
@@ -113,7 +123,7 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
 
                 # Aggregate child server models. Auxiliary classifier parameters are not used in internal server nodes
                 # since they are not connected to clients which train auxiliary modules
-                server.train(child_server_model_parameters, None)
+                server.train(child_server_model_parameters, None, ema_weight)
 
             # Evaluate the server model
             if is_evaluate_server_model:
@@ -155,9 +165,9 @@ def model_distribution(server_hierarchy: List[List[Server]], server_test_set: Da
         for server in server_hierarchy[depth_level + 1]:
             # Get global server parameters and update the edge server model
             parent_server = server_hierarchy[depth_level][server.parent_server_id]
-            server_parameters = [server.model.state_dict(), parent_server.model.state_dict()]
+            server_parameters = {server.server_id: [server.model.state_dict(), parent_server.model.state_dict()]}
             # Update edge server models
-            server.train(server_parameters)
+            server.train(server_parameters, None, None)
 
             # Evaluate the edge server model
             loss, accuracy = server.evaluate(server_test_set)

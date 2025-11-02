@@ -6,22 +6,24 @@ Date: 19-10-2024
 Version: 1.0
 """
 import copy
-from typing import List, OrderedDict
+from typing import List, OrderedDict, Dict
 
 from models.model import CNNModel, split_to_extractor_and_classifier
+from strategy.FedAvg import fedavg
 
 
 class FedAU:
     def __init__(self):
         pass
 
-    def aggregate_models(self, server_model: CNNModel, client_model_params_list: List[OrderedDict],
-                         auxiliary_classifier_params_list: List[OrderedDict]) -> CNNModel:
+    def aggregate_models(self, server_model: CNNModel, client_model_params_dict: Dict[OrderedDict],
+                         auxiliary_classifier_params_dict: Dict[OrderedDict], ema_weight: float) -> CNNModel:
         """
         Aggregate the client models to the global model using adaptive weights and returns the new aggregated model.
         :param server_model: The server (edge or global) model
-        :param client_model_params_list: List of state dicts of the client models
-        :param auxiliary_classifier_params_list: List of state dicts of the auxiliary classifiers from drifted clients
+        :param client_model_params_dict: List of state dicts of the client models
+        :param auxiliary_classifier_params_dict: List of state dicts of the auxiliary classifiers from drifted clients
+        :param ema_weight: Exponential moving average weight: alpha
         :return: model: The updated server (edge or global)  model after aggregation
         """
 
@@ -39,22 +41,49 @@ class FedAU:
                 averaged_params[key] = weight * params_1[key] + (1 - weight) * params_2[key]
             return averaged_params
 
-        weight_learning = 0.9
-        weight_auxiliary = 0.1
-
         # Get parameters of the server model
         server_model_params = server_model.state_dict()
 
-        # split learning model to extractor and classifier parameters
-        for client_model_params in client_model_params_list:
-            extractor, _learning_classifier_parameters = split_to_extractor_and_classifier(None, client_model_params)
+        # Create a new FedAvg instance
+        fed_avg = fedavg.aggregator_fn()
+
+        _learning_classifier_params_list = []
+        _auxiliary_classifier_params_list = []
+        extractors_params_list = []
+        for client_id, client_model_params in client_model_params_dict.items():
+            if client_id in auxiliary_classifier_params_dict:  # Drifted clients
+                # split learning model to extractor and classifier parameters
+                extractor_params, _learning_classifier_params = split_to_extractor_and_classifier(None,
+                                                                                               client_model_params_dict[
+                                                                                                   client_id])
+                # Get auxiliary classifier parameters of the drifted client
+                auxiliary_classifier_params = auxiliary_classifier_params_dict[client_id]
+
+                _learning_classifier_params_list.append(_learning_classifier_params)
+                _auxiliary_classifier_params_list.append(auxiliary_classifier_params)
+                extractors_params_list.append(extractor_params)
+
+            else:  # Non-drifted clients, perform simple FedAvg
+                fedavg_non_drifted_client_params = fed_avg.aggregate_models(client_model_params_dict[client_id])
+
+        # Perform FedAvg on learning classifiers of drifted clients
+        fedavg_learning_classifier_params = fed_avg.aggregate_models(None, _learning_classifier_params_list)
+
+        # Perform FedAvg on auxiliary classifiers of drifted clients
+        fedavg_auxiliary_classifier_params = fed_avg.aggregate_models(None, _auxiliary_classifier_params_list)
+
+        # Perform FedAvg on extractors of all clients
+        fedavg_extractor_params = fed_avg.aggregate_models(None, extractors_params_list)
 
         # Exponential Mean Averaging of learning and auxiliary classifiers
-        averaged_classifier = get_exponential_moving_average(_learning_classifier_parameters, )
+        averaged_classifier = get_exponential_moving_average(fedavg_learning_classifier_params,
+                                                             fedavg_auxiliary_classifier_params, ema_weight)
+
+
+
+            # Get learning classifier parameters
 
         # Append the averaged classifiers to extractor
-
-
 
 
 def aggregator_fn():
