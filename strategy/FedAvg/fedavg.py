@@ -18,14 +18,18 @@ class FedAvg:
         pass
 
     def aggregate_models(self, server_model: CNNModel,
-                         client_model_params_dict: Dict[str, List[OrderedDict]]) -> CNNModel:
+                         client_model_params_dict: Dict[str, List[OrderedDict]],
+                         client_model_params_list: List[OrderedDict]=None) -> CNNModel:
         """ Aggregate the client models to the global model and returns the new aggregated model
         :param server_model: The server (edge or global) model
         :param client_model_params_dict: Dictionary containing the server IDs (keys) and the corresponding state dicts of the client models
-        :return: The updated server (edge or global)  model after aggregation
+        :param client_model_params_list: List of state dicts of the client models (used in the FedAU implementation)
+        :return: The updated server (edge or global)  model after aggregation (or averaged layers in FedAU's case)
         """
         server_model_params = server_model.state_dict()
-        client_model_params_list = client_model_params_dict.values()
+
+        if client_model_params_dict is not None:
+            client_model_params_list = client_model_params_dict.values()
 
         # Simple averaging of weights
         updated_server_model_params = server_model_params.copy()
