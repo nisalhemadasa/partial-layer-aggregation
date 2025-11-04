@@ -28,8 +28,8 @@ class Server:
         self.child_server_ids = []  # List of child server IDs in the server hierarchy
         self.parent_server_id = None  # Parent server ID in the server hierarchy
 
-    def train(self, client_model_parameters: Dict[str, List[OrderedDict]],
-              aux_classifier_parameters: Dict[str, List[OrderedDict]], ema_weight: float) -> None:
+    def train(self, client_model_parameters: Dict[str, OrderedDict],
+              aux_classifier_parameters: Dict[str, OrderedDict], ema_weight: float) -> None:
         """
         Train the server model using the client model parameters.
         :param client_model_parameters: List of client model parameters
@@ -42,11 +42,11 @@ class Server:
             if all(param is None for param in aux_classifier_parameters):
                 return
             # FedAU: For servers with clients with auxiliary classifiers (i.e., leaf servers, having drifted nodes)
-            self.model = self.strategy.aggregate_models(self.model, client_model_parameters, aux_classifier_parameters,
+            self.strategy.aggregate_models(self.model, client_model_parameters, aux_classifier_parameters,
                                                         ema_weight)
         else:
             # FedAvg: For internal servers or when there are no drifted clients
-            self.model = self.strategy.aggregate_models(self.model, client_model_parameters)
+            self.strategy.aggregate_models(self.model, client_model_parameters)
 
     def evaluate(self, _test_set: DataLoader) -> (float, float):
         """

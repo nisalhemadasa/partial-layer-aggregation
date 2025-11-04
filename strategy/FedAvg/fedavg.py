@@ -19,12 +19,13 @@ class FedAvg:
 
     def aggregate_models(self, server_model: CNNModel,
                          client_model_params_dict: Dict[str, List[OrderedDict]],
-                         client_model_params_list: List[OrderedDict]=None) -> CNNModel:
-        """ Aggregate the client models to the global model and returns the new aggregated model
+                         client_model_params_list: List[OrderedDict]=None) -> None:
+        """
+        Aggregate the client models to the global model and returns the new aggregated model
         :param server_model: The server (edge or global) model
         :param client_model_params_dict: Dictionary containing the server IDs (keys) and the corresponding state dicts of the client models
         :param client_model_params_list: List of state dicts of the client models (used in the FedAU implementation)
-        :return: The updated server (edge or global)  model after aggregation (or averaged layers in FedAU's case)
+        :return: The parameters of the server (edge or global) model after aggregation (or averaged layers in FedAU's case)
         """
         server_model_params = server_model.state_dict()
 
@@ -38,7 +39,6 @@ class FedAvg:
                 [client_model_params[i].float() for client_model_params in client_model_params_list], 0).mean(0)
 
         server_model.load_state_dict(updated_server_model_params)
-        return server_model
 
 
 def aggregator_fn():
