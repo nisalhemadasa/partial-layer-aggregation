@@ -150,7 +150,8 @@ class FederatedNetwork:
         start_time = time.time()
 
         # Train the clients initially using their local data
-        initial_client_loss_and_accuracy = client_initial_training(self.clients, self.drift.is_drift)
+        initial_client_loss_and_accuracy = client_initial_training(self.clients, self.drift.is_drift,
+                                                                   self.drift.is_drift_end)
         # clients_loss_and_accuracy.append(initial_client_loss_and_accuracy)
 
         # Load the test set for server evaluation

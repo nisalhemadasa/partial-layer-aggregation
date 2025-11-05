@@ -137,11 +137,11 @@ def train_client_models(all_clients, sampled_client_ids, servers: List[Server], 
                 round_client_loss_and_accuracy.append(client.evaluate())
 
             # If the client is sampled in this global training round, then train using the server aggregated parameters
-            client.fit(drift.is_drift, server.model.state_dict(), client.client_id, client.drift_recovery_method,
-                       drift.drifted_client_indices)
+            client.fit(drift.is_drift, drift.is_drift_end, server.model.state_dict(), client.client_id,
+                       client.drift_recovery_method, drift.drifted_client_indices)
         else:
             # If the client is not sampled, perform local training without server parameters
-            client.fit(drift.is_drift, None, client.client_id, client.drift_recovery_method,
+            client.fit(drift.is_drift, drift.is_drift_end, None, client.client_id, client.drift_recovery_method,
                        drift.drifted_client_indices)
 
             if is_server_adaptability:
@@ -207,5 +207,7 @@ def handle_drift_for_round(round_idx: int, drift: Drift, server_hierarchy: List[
             change_client_drift_recovery_method(clients, drift_recovery_parameters['recovery_method'],
                                                 drift.drifted_client_indices)
 
+            drift.is_drift = True  # Drift occurs in the current step
+
         drift.current_drift_step += 1  # Move to the next drift step
-        drift.is_drift = True  # Drift occurs in the current step
+
