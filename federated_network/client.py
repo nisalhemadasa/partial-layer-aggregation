@@ -55,12 +55,13 @@ class Client:
         self.testloader = convert_dataset_to_loader(_dataset=self.testset, _batch_size=self.mini_batch_size,
                                                     _is_shuffle=False)
 
-    def fit(self, _is_drift: bool, server_model_parameters: OrderedDict, _client_id: int, drift_recovery_method: str,
-            _drifted_client_indices: List[int]) -> None:
+    def fit(self, _is_drift: bool, _is_drift_end: bool, server_model_parameters: OrderedDict, _client_id: int,
+            drift_recovery_method: str, _drifted_client_indices: List[int]) -> None:
         """
         Train the client model using new data and server parameters and return the updated model weights and
         biases
         :param _is_drift: Flag indicating whether drift has occurred or not
+        :param _is_drift_end: Flag indicating whether the drift period has ended or not
         :param server_model_parameters: Aggregated server model parameters
         :param drift_recovery_method: Drift recovery method to be used
         :param _drifted_client_indices: List of client indices that have experienced drift
@@ -71,9 +72,16 @@ class Client:
             # Do not set the server weights and biases if the server aggregation is not None (e.g. initial round)
             if server_model_parameters is not None:
                 set_parameters(self.model, server_model_parameters)  # apply server weights
-            # Train the client model using new data and server parameters
-            train(self.model, self.trainloader, self.epochs)
+
+            if _is_drift_end and drift_recovery_method == constants.RecoveryAlgorithm.FLUID:   # after drift ends
+                # Rapid retraining (2nd order) + reinitialization of client parameters from the global model from scratch
+                rapid_train(self.model, self.trainloader, _epochs=self.epochs, _batch_size=self.mini_batch_size)
+            else:   # before drift begins
+                # Train the client model using new data and server parameters
+                train(self.model, self.trainloader, self.epochs)
         else:
+            set_parameters(self.model, server_model_parameters)  # apply server weights
+
             # Train the client model using new data and server parameters
             if drift_recovery_method == constants.RecoveryAlgorithm.FEDAVG:
                 # Adam-based recovery (1st order) + reinitialization of client parameters from the global model from scratch
@@ -81,7 +89,7 @@ class Client:
             elif drift_recovery_method == constants.RecoveryAlgorithm.RRT:
                 # Rapid retraining (2nd order) + reinitialization of client parameters from the global model from scratch
                 rapid_train(self.model, self.trainloader, _epochs=self.epochs, _batch_size=self.mini_batch_size)
-            elif drift_recovery_method == constants.RecoveryAlgorithm.FEDAU:
+            elif drift_recovery_method == constants.RecoveryAlgorithm.FEDAU or drift_recovery_method == constants.RecoveryAlgorithm.FLUID:
                 # FedAU client side operations
                 self.auxiliary_classifier_parameters = fedau_clientside_train(self.model, self.trainloader,
                                                                               server_model_parameters,
@@ -95,11 +103,12 @@ class Client:
         return float(loss), float(accuracy)
 
 
-def client_initial_training(_clients: List[Client], _is_drift: bool) -> List:
+def client_initial_training(_clients: List[Client], _is_drift: bool, _is_drift_end: bool) -> List:
     """
     Train the clients initially using their local data.
     :param _clients: List of client instances
     :param _is_drift: Flag indicating whether drift has occurred or not
+    :param _is_drift_end: Flag indicating whether the drift period has ended or not
     :return:  List of loss and accuracy of each client after the initial training
     """
     initial_client_loss_and_accuracy = []
@@ -107,7 +116,7 @@ def client_initial_training(_clients: List[Client], _is_drift: bool) -> List:
     for client in _clients:
         client.sample_data()
         # We assume no drift during initial training. Hence, drift related parameters are set to None
-        client.fit(_is_drift, None, client.client_id, None, None)
+        client.fit(_is_drift, _is_drift_end, None, client.client_id, None, None)
         initial_client_loss_and_accuracy.append(client.evaluate())
 
     return initial_client_loss_and_accuracy
