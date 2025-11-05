@@ -42,7 +42,7 @@ def main():
 
     # Define drift recovery algorithm related parameters
     drift_recovery_parameters = dict(
-        recovery_method=constants.RecoveryAlgorithm.FEDAU,  # Aggregation method used during the drift period
+        recovery_method=constants.RecoveryAlgorithm.FLUID,  # Aggregation method used during the drift period
         base_aggregation_method=constants.RecoveryAlgorithm.FEDAVG,  # Aggregation algorithm used outside the drift period
         fedau_alpha=0.9  # EMA weight (alpha) parameter for the FedAU algorithm
     )

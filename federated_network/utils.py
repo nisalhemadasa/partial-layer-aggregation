@@ -190,11 +190,21 @@ def handle_drift_for_round(round_idx: int, drift: Drift, server_hierarchy: List[
             # Change the aggregation strategy back to FedAvg outside the drift window
             change_server_aggregation_strategy(server_hierarchy, constants.RecoveryAlgorithm.FEDAVG, drift)
 
-            # Change the clients' (all of them) drift recovery method
-            change_client_drift_recovery_method(clients, drift_recovery_parameters['base_aggregation_method'],
-                                                drift.drifted_client_indices)
+            if not drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.FLUID:
+                # Change the clients' (all of them) drift recovery method
+                change_client_drift_recovery_method(clients, drift_recovery_parameters['base_aggregation_method'],
+                                                    drift.drifted_client_indices)
+            else:
+                # FLUID
+                # Change the clients' (all of them) drift recovery method
+                change_client_drift_recovery_method(clients, constants.RecoveryAlgorithm.RRT,
+                                                    drift.drifted_client_indices)
 
-        drift.is_drift = False
+            drift.is_drift = False
+
+        # Mark the end of the drift (in contrast to the before the drift starts)
+        if round_idx > drift_end:
+            drift.is_drift_end = True
         return
 
     next_drift_step_round = drift.drift_step_rounds[drift.current_drift_step]
