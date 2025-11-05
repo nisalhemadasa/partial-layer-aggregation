@@ -152,3 +152,12 @@ class Logs:
     SERVER_LVL_AVG_LOG = 'server_level_avg_log'
     SERVER_OVERALL_AVG_LOG = 'server_overall_avg_log'
 
+# Drift recovery algorithms
+class RecoveryAlgorithm:
+    # Client-side algorithms
+    FEDAVG = 'fedavg'   # Adam-based training
+    RRT = 'rrt'
+    FEDAU = 'fedau'
+    FLUID = 'fluid'
+    # Server-side algorithms
+    FEDAVG = 'fedavg'

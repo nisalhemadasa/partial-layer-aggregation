@@ -5,11 +5,12 @@ Author: Nisal Hemadasa
 Date: 09-12-2024
 Version: 1.0
 """
-from typing import List, OrderedDict, Dict
+from typing import List, OrderedDict, Dict, Any
 
+import constants
 from drift_concepts.drift import Drift, apply_drift
-from federated_network.client import set_parameters, Client
-from federated_network.server import Server
+from federated_network.client import set_parameters, Client, change_client_drift_recovery_method
+from federated_network.server import Server, change_server_aggregation_strategy
 
 
 def equal_distribution(num_clients: int, num_servers: int) -> List[int]:
@@ -94,7 +95,7 @@ def link_clients_to_servers(leaf_servers: List[Server], clients: List[List[Clien
 
 
 def train_client_models(all_clients, sampled_client_ids, servers: List[Server], drift: Drift,
-                        simulation_parameters: Dict) -> List:
+                        simulation_parameters: Dict, verbose: bool = False) -> List:
     """
     Train the client models in the network while applying drift if necessary.
     :param all_clients: List of all client instances
@@ -102,12 +103,15 @@ def train_client_models(all_clients, sampled_client_ids, servers: List[Server], 
     :param servers: List of Server instance at a given depth level
     :param drift: Drift instance
     :param simulation_parameters: Parameters specifying the simulation scenarios
+    :param verbose: Flag to enable verbose logging
     :return: List of loss and accuracy of each client after training
     """
     round_client_loss_and_accuracy = []
     is_server_adaptability = simulation_parameters['is_server_adaptability']
 
-    print("Training client models...")
+    if verbose:
+        print("Training client models...")
+
     # Apply drift to the clients
     if drift.is_drift:
         # Sample data from the drift applied datasets
@@ -124,17 +128,21 @@ def train_client_models(all_clients, sampled_client_ids, servers: List[Server], 
         if client.client_id in sampled_client_ids:
             # Download the server model parameters to the client
             set_parameters(client.model, server.model.state_dict())
-            print('server:' + str(server.server_id) + ' -> ' + 'client:' + str(client.client_id))
+
+            if verbose:
+                print('server:' + str(server.server_id) + ' -> ' + 'client:' + str(client.client_id))
 
             if is_server_adaptability:
                 # Evaluates the adaptability of the server model to the data
                 round_client_loss_and_accuracy.append(client.evaluate())
 
             # If the client is sampled in this global training round, then train using the server aggregated parameters
-            client.fit(server.model.state_dict())
+            client.fit(drift.is_drift, server.model.state_dict(), client.client_id, client.drift_recovery_method,
+                       drift.drifted_client_indices)
         else:
             # If the client is not sampled, perform local training without server parameters
-            client.fit(None)
+            client.fit(drift.is_drift, None, client.client_id, client.drift_recovery_method,
+                       drift.drifted_client_indices)
 
             if is_server_adaptability:
                 round_client_loss_and_accuracy.append(client.evaluate())
@@ -146,12 +154,58 @@ def train_client_models(all_clients, sampled_client_ids, servers: List[Server], 
     return round_client_loss_and_accuracy
 
 
-def update_progress(_round, num_training_rounds) -> None:
+def update_progress(_round, num_training_rounds, verbose=True) -> None:
     """
     Update the progress of the simulation
     :param _round: Current simulation iteration number
     :param num_training_rounds: Total number of training rounds
+    :param verbose: Flag to enable verbose logging
     :return: None
     """
     progress = (_round / num_training_rounds) * 100
-    print(f"\rSimulation Percentage completed: {progress:.2f}%", end="")
+    if verbose:
+        print(f"\rSimulation Percentage completed: {progress:.2f}%", end="")
+
+
+def handle_drift_for_round(round_idx: int, drift: Drift, server_hierarchy: List[Any],
+                           drift_recovery_parameters: Dict, clients: List[Client]) -> None:
+    """
+    Update drift state for the given round and switch server aggregation when needed.
+    Mutates `drift.is_drift` and `drift.current_drift_step` and calls `change_aggregation_strategy` when
+    entering/exiting drift steps.
+    By default, the initial server aggregation strategy is FedAvg.
+    :param round_idx: Current training round index
+    :param drift: Drift instance
+    :param server_hierarchy: List of servers in the hierarchy
+    :param drift_recovery_parameters: Parameters specifying the drift recovery strategies
+    :param clients: List of client instances
+    :return: None
+    """
+    drift_start = drift.drift_step_rounds[0]
+    drift_end = drift.drift_step_rounds[-1]
+
+    # Outside the global drift window
+    if round_idx < drift_start or round_idx > drift_end:
+        if drift.is_drift:  # execute only once: after the drift period ends
+            # Change the aggregation strategy back to FedAvg outside the drift window
+            change_server_aggregation_strategy(server_hierarchy, constants.RecoveryAlgorithm.FEDAVG, drift)
+
+            # Change the clients' (all of them) drift recovery method
+            change_client_drift_recovery_method(clients, drift_recovery_parameters['base_aggregation_method'],
+                                                drift.drifted_client_indices)
+
+        drift.is_drift = False
+        return
+
+    next_drift_step_round = drift.drift_step_rounds[drift.current_drift_step]
+    if round_idx >= next_drift_step_round:
+        if not drift.is_drift:  # execute only once: at the beginning of the drift step
+            # The server aggregation strategy needs to change for the FedAU's case, at the start of the drift step.
+            change_server_aggregation_strategy(server_hierarchy, drift_recovery_parameters['recovery_method'], drift)
+
+            # Change the clients' (all of them) drift recovery method
+            change_client_drift_recovery_method(clients, drift_recovery_parameters['recovery_method'],
+                                                drift.drifted_client_indices)
+
+        drift.current_drift_step += 1  # Move to the next drift step
+        drift.is_drift = True  # Drift occurs in the current step

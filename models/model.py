@@ -5,8 +5,9 @@ Author: Nisal Hemadasa
 Date: 04-04-2025
 Version: 2.0
 """
-from typing import Tuple
+from typing import Tuple, OrderedDict, List
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -40,7 +41,7 @@ class SimpleModel(nn.Module):
 
 class CNNModel(nn.Module):
     def __init__(self):
-        """Defined for both MNIST and CIFAR-10 datasets"""
+        """Defined for both MNIST and F_MNIST datasets"""
         super(CNNModel, self).__init__()
 
         self.pool = nn.MaxPool2d(2, 2, 1, 2)
@@ -77,12 +78,114 @@ class CNNModel(nn.Module):
         # print("After fc1:", x.shape)
         x = F.relu(self.bn6(self.fc2(x)))
         # print("After fc2:", x.shape)
-        x = self.fc3(x)
+        x = self.fc3(x)  # classifier in the case of FedAU
         # print("Output shape:", x.shape)
         return x
 
 
-def rapid_train(_model: nn.Module, _dataset: DataLoader, _epochs: int, _batch_size, _verbose: bool = False) -> None:
+def split_to_extractor_and_classifier(_model: nn.Module, _model_params: OrderedDict) -> tuple[OrderedDict, OrderedDict]:
+    """
+    Split the model/model parameters into feature extractor and classifier parts. The feature extractor includes all layers except the
+    final fully connected layer (fc3), while the classifier includes only the final fully connected layer.
+    :param _model: The model to split
+    :param _model_params: The model parameters to split
+    :return: A tuple containing two OrderedDicts: (parameters of the feature extractor, parameters of the classifier)
+    """
+    if _model is not None:
+        _model_params = _model.state_dict()
+
+    # get the extractor parameters (all except fc3 layer)
+    extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if not k.startswith("fc3."))
+
+    # get the classifier parameters (fc3 layer)
+    classifier_params = OrderedDict((k, v) for k, v in _model_params.items() if k.startswith("fc3."))
+
+    return extractor_params, classifier_params
+
+
+def fedau_clientside_train(_model: nn.Module, _dataset: DataLoader, _server_model_params: OrderedDict,
+                           _drifted_client_indices: List[int], _client_id, _epochs: int,
+                           _mini_batch_size: int) -> OrderedDict:
+    """
+    Performs clients dei training operations of the FedAU algorithm, following [2]. 
+    This includes training the (1) learning module and (2) auxiliary module
+    
+    [2] Implementation of FedAU algorithm following the paper: [2]H. Gu, G. Zhu, J. Zhang, X. Zhao, Y. Han, L. Fan and
+    Q. Yang, “Unlearning during Learning: An Efficient Federated Machine Unlearning Method,” in
+    Proceedings of the 33rd International Joint Conference on Artificial Intelligence (IJCAI-24)
+    :param _model: Core learning model
+    :param _dataset: The dataloader containing training dataset
+    :param _server_model_params: The server model parameters (weights and biases from the server)
+    :param _client_id: ID of the given client
+    :param _drifted_client_indices: List of ID's of the drifted clients
+    :param _epochs: The number of epochs to train
+    :param _mini_batch_size: The batch size to use during training
+    :return: None
+    """
+    # FedAU: Learning module training
+    learning_model_train(_model, _dataset, _server_model_params, _epochs=_epochs, )
+
+    # FedAU: Auxiliary module training, only for drifted clients #TODO: implement: drift detection/trusted clients
+    if _client_id in _drifted_client_indices:
+        return auxiliary_model_train(_model, _dataset, _server_model_params, _epochs=_epochs,
+                                     _batch_size=_mini_batch_size)
+
+    return None
+
+
+def learning_model_train(_model: nn.Module, _dataset: DataLoader, _server_model_params: OrderedDict,
+                         _epochs: int) -> None:
+    """
+    Trains the learning model (client side), following [2].
+    :param _model: Core learning model
+    :param _dataset: The dataloader containing training dataset
+    :param _server_model_params: The server model parameters (weights and biases from the server)
+    :param _epochs: The number of epochs to train
+    :return: None
+    """
+    # FedAU: Learning module training
+    if _server_model_params is not None:
+        set_parameters(_model, _server_model_params)  # apply server weights
+
+    train(_model, _dataset, _epochs)  # regular training step for learning module
+
+
+def auxiliary_model_train(_model: nn.Module, _dataset: DataLoader, _server_model_params: OrderedDict, _epochs: int,
+                          _batch_size: int, _verbose: bool = False) -> OrderedDict:
+    """
+    Trains the auxiliary model (client side), following [2].
+    Then the classifier parameters of the auxiliary model are extracted and assigned to the
+    _auxiliary_classifier_parameters attribute of the given client.
+    :param _model: Core learning model
+    :param _dataset: The dataloader containing training dataset
+    :param _server_model_params: The server model parameters (weights and biases from the server)
+    :param _epochs: The number of epochs to train
+    :param _batch_size: The batch size to use during training
+    :param _verbose: Whether to print training progress
+    :return: None
+    """
+    # Initialize the auxiliary model
+    aux_model = CNNModel().to(DEVICE)  # initialize using a fresh base model, similar to learning module architecture
+    aux_model.load_state_dict(_server_model_params, strict=True)  # load server parameters to auxiliary model
+
+    # Replace fc3 layer with a new nn.Linear of the same shape
+    aux_model.fc3 = nn.Linear(aux_model.fc3.in_features, aux_model.fc3.out_features)
+
+    # Train the auxiliary model using data with new patterns
+    # TODO: create trainloader for drifted local_trainset and non-drifted local_trainset
+    # drifted_dataset =
+    # non - drifted_dataset =
+
+    train(aux_model, _dataset, _epochs=_epochs, verbose=_verbose)
+
+    # get the classifier of the auxiliary module
+    _, _auxiliary_classifier_params = split_to_extractor_and_classifier(aux_model, None)
+
+    return _auxiliary_classifier_params
+
+
+def rapid_train(_model: nn.Module, _dataset: DataLoader, _epochs: int, _batch_size: int,
+                _verbose: bool = False) -> None:
     """
     Train a model using a manual rapid-retraining style update (RRT-like).
     [1] Y. Liu, L. Xu, X. Yuan, C. Wang, and B. Li, “The Right to be Forgotten in Federated Learning: An Efficient
@@ -188,7 +291,7 @@ def rapid_train(_model: nn.Module, _dataset: DataLoader, _epochs: int, _batch_si
             # Moves the weights following an update rule, leveraging the calculated gradients. Here, this is manually
             # programmed below referring to Lie et. al.[1] instead of calling optimizer.step(). Update step applies a
             # rule that moves weights a little using the gradients (param.grad) to reduce the loss.
-            for param in _model.parameters():
+            for param in _model.params():
                 if param.grad is not None:
                     # saves a copy of the existing gradients
                     batch_gradients[param] = param.grad.clone().detach()
@@ -279,7 +382,7 @@ def train(_model: nn.Module, _dataset: DataLoader, _epochs: int, verbose=False) 
             print(f"Train Epoch {epoch + 1}: train loss {epoch_loss}, accuracy {epoch_acc}")
 
 
-def test(_model: nn.Module, _dataset: DataLoader) -> Tuple[float, float]:
+def test(_model: nn.Module, _dataset: DataLoader) -> tuple[float, float]:
     """
     Evaluate the network on the entire test set.
     :param _model: The model to evaluate
@@ -312,3 +415,13 @@ def test(_model: nn.Module, _dataset: DataLoader) -> Tuple[float, float]:
     loss /= len(_dataset)
     accuracy = correct / total
     return loss, accuracy
+
+
+def set_parameters(_model, parameters: OrderedDict):
+    """ Set the model weights and biases """
+    _model.load_state_dict(parameters, strict=True)
+
+
+def get_parameters(_model) -> List[np.ndarray]:
+    """ Set the model weights and biases """
+    return [val.cpu().numpy() for _, val in _model.state_dict().items()]

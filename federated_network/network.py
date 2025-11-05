@@ -15,20 +15,20 @@ from data.utils import convert_dataset_to_loader, split_iid_dataset, split_nonii
 from drift_concepts.drift import drift_fn
 from federated_network.client import client_fn, Client, client_initial_training
 from federated_network.server import server_fn, model_aggregation, model_distribution
-from federated_network.utils import update_progress, link_server_hierarchy, train_client_models, link_clients_to_servers
-from logs.analysis_functions import compute_client_average_metrics, compute_server_average_metrics, \
-    split_clients_loss_and_accuracy
+from federated_network.utils import update_progress, link_server_hierarchy, train_client_models, \
+    link_clients_to_servers, handle_drift_for_round
+from logs.analysis_functions import compute_client_average_metrics, compute_server_average_metrics
 from logs.logging import write_logs
 from plots.plotting import plot_client_performance_vs_rounds, plot_server_performance_vs_rounds, \
-    plot_client_avg_performance_vs_rounds, plot_server_lvl_avg_performance_vs_rounds, \
-    plot_server_overall_avg_performance_vs_rounds, plot_client_layer_distance_vs_rounds, plot_client_distance_vs_rounds, \
-    plot_dataset_distribution
+    plot_server_lvl_avg_performance_vs_rounds, plot_server_overall_avg_performance_vs_rounds, \
+    plot_client_layer_distance_vs_rounds, plot_client_distance_vs_rounds, plot_dataset_distribution
 
 
 class FederatedNetwork:
     def __init__(self, num_iid_client_instances, num_noniid_client_instances, server_tree_layout, num_training_rounds,
-                 dataset_name, drift_specs, simulation_parameters, client_select_fraction=0.5, minibatch_size=32,
-                 num_local_epochs=4):
+                 dataset_name, drift_specs, simulation_parameters, drift_recovery_parameters,
+                 client_select_fraction=0.5,
+                 minibatch_size=32, num_local_epochs=4):
         # Dataset name
         self.dataset_name = dataset_name
 
@@ -78,6 +78,9 @@ class FederatedNetwork:
         # Simulation parameters
         self.simulation_parameters = simulation_parameters
 
+        # Drift recovery parameters
+        self.drift_recovery_parameters = drift_recovery_parameters
+
         # Create client instances
         self.noniid_clients = [
             client_fn(
@@ -85,7 +88,8 @@ class FederatedNetwork:
                 False,  # Non-IID clients
                 self.num_local_epochs,
                 self.minibatch_size,
-                [partitioned_noniid_trainsets[i], partitioned_noniid_testsets[i]]
+                [partitioned_noniid_trainsets[i], partitioned_noniid_testsets[i]],
+                self.drift_recovery_parameters['base_aggregation_method']
             )
             for i in range(num_noniid_client_instances)
         ]
@@ -96,7 +100,8 @@ class FederatedNetwork:
                 True,  # IID clients
                 self.num_local_epochs,
                 self.minibatch_size,
-                [partitioned_iid_trainsets[i], partitioned_iid_testsets[i]]
+                [partitioned_iid_trainsets[i], partitioned_iid_testsets[i]],
+                self.drift_recovery_parameters['base_aggregation_method']
             )
             for i in range(num_iid_client_instances)
         ]
@@ -145,7 +150,7 @@ class FederatedNetwork:
         start_time = time.time()
 
         # Train the clients initially using their local data
-        initial_client_loss_and_accuracy = client_initial_training(self.clients)
+        initial_client_loss_and_accuracy = client_initial_training(self.clients, self.drift.is_drift)
         # clients_loss_and_accuracy.append(initial_client_loss_and_accuracy)
 
         # Load the test set for server evaluation
@@ -153,12 +158,8 @@ class FederatedNetwork:
 
         for _round in range(self.num_training_rounds):
             # Add drift to the clients
-            if _round < self.drift.drift_step_rounds[0] or _round > self.drift.drift_step_rounds[-1]:
-                # No drift before the first drift step and after the last drift step
-                self.drift.is_drift = False
-            elif _round >= self.drift.drift_step_rounds[self.drift.current_drift_step]:
-                self.drift.is_drift = True  # Drift occurs in the current step
-                self.drift.current_drift_step += 1  # Move to the next drift step.
+            handle_drift_for_round(_round, self.drift, self.server_hierarchy, self.drift_recovery_parameters,
+                                   self.clients)
 
             # Clients sampled for a single round. In this simulation, all clients are sampled, in order (not randomly)
             sampled_clients = self.clients
@@ -167,13 +168,11 @@ class FederatedNetwork:
             sampled_client_ids = [client.client_id for client in sampled_clients]
             sampled_clients_in_each_round.append(sampled_client_ids)
 
-            # As an example, only one server is considered
-            sampled_clients_model_parameters = [sampled_client.model.state_dict() for sampled_client in self.clients]
-
             # Aggregation (upwards): Aggregate client model parameters to the edge model and edge model parameters to
             # the global model (returns the round_server_loss_and_accuracy, global_avg_loss_and_accuracy after
             # aggregating upwards, before the distribution stage)
-            _ = model_aggregation(self.server_hierarchy, sampled_clients_model_parameters, server_test_set)
+            _ = model_aggregation(self.server_hierarchy, server_test_set, sampled_clients, self.drift,
+                                  self.drift_recovery_parameters['fedau_alpha'])
 
             # Updating (downwards): update the edge models using the global model parameters. (returns the
             # round_server_loss_and_accuracy, global_avg_loss_and_accuracy after both aggregating upwards and
@@ -205,7 +204,7 @@ class FederatedNetwork:
         if self.simulation_parameters['is_plot_client_data_distributions']:
             client_ids = self.simulation_parameters['client_ids_to_plot_data_distributions']
             clients_to_plot = [self.clients[i] for i in client_ids]
-            plot_dataset_distribution(clients_to_plot,  self.dataset_name, file_save_path=file_save_path)
+            plot_dataset_distribution(clients_to_plot, self.dataset_name, file_save_path=file_save_path)
 
         # Plot layer-distance (between the layers of the client model and the corresponding edge server model)
         plot_client_layer_distance_vs_rounds(client_layer_distance, file_save_path=file_save_path)
