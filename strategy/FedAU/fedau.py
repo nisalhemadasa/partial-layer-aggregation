@@ -37,7 +37,7 @@ class FedAU:
             extractor_params, _learning_classifier_params = split_to_extractor_and_classifier(None,
                                                                                               client_model_params_dict[
                                                                                                   client_id])
-            if client_id in auxiliary_classifier_params_dict:  # Drifted clients
+            if auxiliary_classifier_params_dict[client_id] is not None:  # Drifted clients
 
                 # Get auxiliary classifier parameters of the drifted client
                 auxiliary_classifier_params = auxiliary_classifier_params_dict[client_id]
@@ -68,25 +68,18 @@ class FedAU:
         server_model.load_state_dict(unlearning_composite_params)
 
 
-def aggregator_fn():
-    """ Returns an instance of the FedAvg aggregation strategy """
-    _strategy = FedAU()
-    return _strategy
-
-
-def get_exponential_moving_average(params_1: OrderedDict, params_2: OrderedDict,
+def get_exponential_moving_average(learning_params: OrderedDict, aux_params: OrderedDict,
                                    _ema_weight: float) -> OrderedDict:
     """
     Get the exponential moving average of two sets of parameters
-    :param params_1: First set of parameters
-    :param params_2: Second set of parameters
+    :param learning_params: First set of parameters (learning module classifier parameters)
+    :param aux_params: Second set of parameters (auxiliary classifier parameters)
     :param _ema_weight: averaging weights
     :return averaged_params: Averaged parameters
     """
-    # Make a deep copy so we don't modify originals
-    averaged_params = copy.deepcopy(params_1)
-    for key in params_1.keys():
-        averaged_params[key] = _ema_weight * params_1[key] + (1 - _ema_weight) * params_2[key]
+    averaged_params = OrderedDict()
+    for key in learning_params.keys():
+        averaged_params[key] = _ema_weight * learning_params[key] + (1 - _ema_weight) * aux_params[key]
     return averaged_params
 
 
@@ -105,3 +98,9 @@ def average_model_parameters(model_params_list: List[OrderedDict]) -> OrderedDic
             [model_params[i].float() for model_params in model_params_list], 0).mean(0)
 
     return averaged_model_params
+
+
+def aggregator_fn():
+    """ Returns an instance of the FedAvg aggregation strategy """
+    _strategy = FedAU()
+    return _strategy

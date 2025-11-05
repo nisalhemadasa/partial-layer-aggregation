@@ -188,8 +188,7 @@ class FederatedNetwork:
                                                                  sampled_client_ids,
                                                                  self.server_hierarchy[server_depth],
                                                                  self.drift,
-                                                                 self.simulation_parameters,
-                                                                 self.drift_recovery_parameters)
+                                                                 self.simulation_parameters)
             clients_loss_and_accuracy.append(round_client_loss_and_accuracy)
 
             # Update the progress of the simulation

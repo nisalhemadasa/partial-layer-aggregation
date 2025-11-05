@@ -95,7 +95,7 @@ def link_clients_to_servers(leaf_servers: List[Server], clients: List[List[Clien
 
 
 def train_client_models(all_clients, sampled_client_ids, servers: List[Server], drift: Drift,
-                        simulation_parameters: Dict, drift_recovery_parameters: Dict, verbose: bool = False) -> List:
+                        simulation_parameters: Dict, verbose: bool = False) -> List:
     """
     Train the client models in the network while applying drift if necessary.
     :param all_clients: List of all client instances
@@ -103,7 +103,6 @@ def train_client_models(all_clients, sampled_client_ids, servers: List[Server], 
     :param servers: List of Server instance at a given depth level
     :param drift: Drift instance
     :param simulation_parameters: Parameters specifying the simulation scenarios
-    :param drift_recovery_parameters: Parameters specifying the drift recovery strategies
     :param verbose: Flag to enable verbose logging
     :return: List of loss and accuracy of each client after training
     """
@@ -112,6 +111,7 @@ def train_client_models(all_clients, sampled_client_ids, servers: List[Server], 
 
     if verbose:
         print("Training client models...")
+
     # Apply drift to the clients
     if drift.is_drift:
         # Sample data from the drift applied datasets
@@ -159,6 +159,7 @@ def update_progress(_round, num_training_rounds, verbose=True) -> None:
     Update the progress of the simulation
     :param _round: Current simulation iteration number
     :param num_training_rounds: Total number of training rounds
+    :param verbose: Flag to enable verbose logging
     :return: None
     """
     progress = (_round / num_training_rounds) * 100

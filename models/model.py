@@ -104,8 +104,8 @@ def split_to_extractor_and_classifier(_model: nn.Module, _model_params: OrderedD
 
 
 def fedau_clientside_train(_model: nn.Module, _dataset: DataLoader, _server_model_params: OrderedDict,
-                           _drifted_client_indices: List[int], _auxiliary_classifier_params: OrderedDict, _client_id,
-                           _epochs: int, _mini_batch_size: int) -> None:
+                           _drifted_client_indices: List[int], _client_id, _epochs: int,
+                           _mini_batch_size: int) -> OrderedDict:
     """
     Performs clients dei training operations of the FedAU algorithm, following [2]. 
     This includes training the (1) learning module and (2) auxiliary module
@@ -118,7 +118,6 @@ def fedau_clientside_train(_model: nn.Module, _dataset: DataLoader, _server_mode
     :param _server_model_params: The server model parameters (weights and biases from the server)
     :param _client_id: ID of the given client
     :param _drifted_client_indices: List of ID's of the drifted clients
-    :param _auxiliary_classifier_params: Client attribute (placeholder) to store the auxiliary classifier parameters
     :param _epochs: The number of epochs to train
     :param _mini_batch_size: The batch size to use during training
     :return: None
@@ -128,8 +127,10 @@ def fedau_clientside_train(_model: nn.Module, _dataset: DataLoader, _server_mode
 
     # FedAU: Auxiliary module training, only for drifted clients #TODO: implement: drift detection/trusted clients
     if _client_id in _drifted_client_indices:
-        auxiliary_model_train(_model, _dataset, _server_model_params, _auxiliary_classifier_params, _epochs=_epochs,
-                              _batch_size=_mini_batch_size)
+        return auxiliary_model_train(_model, _dataset, _server_model_params, _epochs=_epochs,
+                                     _batch_size=_mini_batch_size)
+
+    return None
 
 
 def learning_model_train(_model: nn.Module, _dataset: DataLoader, _server_model_params: OrderedDict,
@@ -149,9 +150,8 @@ def learning_model_train(_model: nn.Module, _dataset: DataLoader, _server_model_
     train(_model, _dataset, _epochs)  # regular training step for learning module
 
 
-def auxiliary_model_train(_model: nn.Module, _dataset: DataLoader, _server_model_params: OrderedDict,
-                          _auxiliary_classifier_params: OrderedDict, _epochs: int, _batch_size: int,
-                          _verbose: bool = False) -> None:
+def auxiliary_model_train(_model: nn.Module, _dataset: DataLoader, _server_model_params: OrderedDict, _epochs: int,
+                          _batch_size: int, _verbose: bool = False) -> OrderedDict:
     """
     Trains the auxiliary model (client side), following [2].
     Then the classifier parameters of the auxiliary model are extracted and assigned to the
@@ -159,7 +159,6 @@ def auxiliary_model_train(_model: nn.Module, _dataset: DataLoader, _server_model
     :param _model: Core learning model
     :param _dataset: The dataloader containing training dataset
     :param _server_model_params: The server model parameters (weights and biases from the server)
-    :param _auxiliary_classifier_params: The auxiliary model classifier parameters (fc3 layer parameters)
     :param _epochs: The number of epochs to train
     :param _batch_size: The batch size to use during training
     :param _verbose: Whether to print training progress
@@ -180,7 +179,9 @@ def auxiliary_model_train(_model: nn.Module, _dataset: DataLoader, _server_model
     train(aux_model, _dataset, _epochs=_epochs, verbose=_verbose)
 
     # get the classifier of the auxiliary module
-    _, _auxiliary_classifier_params = split_to_extractor_and_classifier(aux_model)
+    _, _auxiliary_classifier_params = split_to_extractor_and_classifier(aux_model, None)
+
+    return _auxiliary_classifier_params
 
 
 def rapid_train(_model: nn.Module, _dataset: DataLoader, _epochs: int, _batch_size: int,
@@ -381,7 +382,7 @@ def train(_model: nn.Module, _dataset: DataLoader, _epochs: int, verbose=False) 
             print(f"Train Epoch {epoch + 1}: train loss {epoch_loss}, accuracy {epoch_acc}")
 
 
-def test(_model: nn.Module, _dataset: DataLoader) -> Tuple[float, float]:
+def test(_model: nn.Module, _dataset: DataLoader) -> tuple[float, float]:
     """
     Evaluate the network on the entire test set.
     :param _model: The model to evaluate

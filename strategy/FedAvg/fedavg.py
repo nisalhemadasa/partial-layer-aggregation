@@ -18,8 +18,8 @@ class FedAvg:
         pass
 
     def aggregate_models(self, server_model: CNNModel,
-                         client_model_params_dict: Dict[str, List[OrderedDict]],
-                         client_model_params_list: List[OrderedDict]=None) -> None:
+                         client_model_params_dict: Dict[str, OrderedDict],
+                         client_model_params_list: List[OrderedDict] = None) -> None:
         """
         Aggregate the client models to the global model and returns the new aggregated model
         :param server_model: The server (edge or global) model
@@ -34,9 +34,9 @@ class FedAvg:
 
         # Simple averaging of weights
         updated_server_model_params = server_model_params.copy()
-        for i in updated_server_model_params.keys():
-            updated_server_model_params[i] = torch.stack(
-                [client_model_params[i].float() for client_model_params in client_model_params_list], 0).mean(0)
+        for key in updated_server_model_params.keys():
+            updated_server_model_params[key] = torch.stack(
+                [client_model_params[key].float() for client_model_params in client_model_params_list], 0).mean(0)
 
         server_model.load_state_dict(updated_server_model_params)
 

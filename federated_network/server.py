@@ -39,16 +39,16 @@ class Server:
         """
         if aux_classifier_parameters:
             # check if all the elements in the aux_classifier_parameters are None
-            if all(param is None for param in aux_classifier_parameters):
+            if all(param is None for param in aux_classifier_parameters.values()):
                 return
             # FedAU: For servers with clients with auxiliary classifiers (i.e., leaf servers, having drifted nodes)
             self.strategy.aggregate_models(self.model, client_model_parameters, aux_classifier_parameters,
-                                                        ema_weight)
+                                           ema_weight)
         else:
             # FedAvg: For internal servers or when there are no drifted clients
             self.strategy.aggregate_models(self.model, client_model_parameters)
 
-    def evaluate(self, _test_set: DataLoader) -> (float, float):
+    def evaluate(self, _test_set: DataLoader) -> Tuple[float, float]:
         """
         Evaluate the server model using the validation data.
         :param _test_set: test data
@@ -108,7 +108,9 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
                                                              if client_id in drifted_client_ids else None)
                                                         # drifted clients only
                                                         for client_id in server.client_ids}  # connected to this server
+
                     ema_weight = fedau_alpha
+
                 if verbose:
                     print('server:' + str(server.server_id) + ' -> ' + 'clients:' + str(server.client_ids))
 
@@ -135,6 +137,7 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
 
     if is_evaluate_server_model:
         server_loss_and_accuracy.reverse()  # Reverse the list to get the root first, to be consistent throughout the code
+
     return server_loss_and_accuracy
 
 
@@ -165,7 +168,8 @@ def model_distribution(server_hierarchy: List[List[Server]], server_test_set: Da
         for server in server_hierarchy[depth_level + 1]:
             # Get global server parameters and update the edge server model
             parent_server = server_hierarchy[depth_level][server.parent_server_id]
-            server_parameters = {server.server_id: [server.model.state_dict(), parent_server.model.state_dict()]}
+            server_parameters = {server.server_id: server.model.state_dict(),
+                                 parent_server.server_id: parent_server.model.state_dict()}
             # Update edge server models
             server.train(server_parameters, None, None)
 

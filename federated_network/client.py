@@ -83,9 +83,11 @@ class Client:
                 rapid_train(self.model, self.trainloader, _epochs=self.epochs, _batch_size=self.mini_batch_size)
             elif drift_recovery_method == constants.RecoveryAlgorithm.FEDAU:
                 # FedAU client side operations
-                fedau_clientside_train(self.model, self.trainloader, server_model_parameters,
-                                       _drifted_client_indices, self.auxiliary_classifier_parameters, _client_id,
-                                       _epochs=self.epochs, _mini_batch_size=self.mini_batch_size)
+                self.auxiliary_classifier_parameters = fedau_clientside_train(self.model, self.trainloader,
+                                                                              server_model_parameters,
+                                                                              _drifted_client_indices, _client_id,
+                                                                              _epochs=self.epochs,
+                                                                              _mini_batch_size=self.mini_batch_size)
 
     def evaluate(self):
         """ Evaluate the client model on the validation data and return the loss and accuracy """
