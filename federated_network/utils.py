@@ -202,8 +202,8 @@ def handle_drift_for_round(round_idx: int, drift: Drift, server_hierarchy: List[
 
             drift.is_drift = False
 
-        # Mark the end of the drift (in contrast to the before the drift starts)
-        if round_idx >= drift_end:
+        # Mark the end of the drift (in contrast to the before the drift starts), only once
+        if round_idx >= drift_end and not drift.is_drift_end:
             drift.is_drift_end = True
         return
 
