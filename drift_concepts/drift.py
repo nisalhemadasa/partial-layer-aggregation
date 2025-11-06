@@ -65,6 +65,9 @@ class Drift:
         # Flag ot indicate when the drift is being applied to the client data
         self.is_drift = False
 
+        # Flag ot indicate when the drift is over
+        self.is_drift_end = False
+
         # Flag to indicate if the drift is applied on the client data at least once before
         self.is_already_applied = False
 

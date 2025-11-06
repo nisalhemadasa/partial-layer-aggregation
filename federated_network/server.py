@@ -190,7 +190,7 @@ def change_server_aggregation_strategy(server_hierarchy: List[Any], drift_recove
     :param drift: Drift instance
     :return: None
     """
-    if drift_recovery_method == constants.RecoveryAlgorithm.FEDAU:
+    if drift_recovery_method == constants.RecoveryAlgorithm.FEDAU or drift_recovery_method == constants.RecoveryAlgorithm.FLUID:
         for server in server_hierarchy[-1]:  # applied only to leaf servers
             # change the strategy only in the servers where drifted clients are connected
             drifted = set(drift.drifted_client_indices or [])  # makes sure it's at least an empty set and not None

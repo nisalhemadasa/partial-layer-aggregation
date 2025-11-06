@@ -150,13 +150,14 @@ class FederatedNetwork:
         start_time = time.time()
 
         # Train the clients initially using their local data
-        initial_client_loss_and_accuracy = client_initial_training(self.clients, self.drift.is_drift)
+        initial_client_loss_and_accuracy = client_initial_training(self.clients, self.drift.is_drift,
+                                                                   self.drift.is_drift_end)
         # clients_loss_and_accuracy.append(initial_client_loss_and_accuracy)
 
         # Load the test set for server evaluation
         server_test_set = convert_dataset_to_loader(_dataset=self.testset, _batch_size=self.minibatch_size)
 
-        for _round in range(self.num_training_rounds):
+        for _round in range(self.num_training_rounds + 1):
             # Add drift to the clients
             handle_drift_for_round(_round, self.drift, self.server_hierarchy, self.drift_recovery_parameters,
                                    self.clients)
@@ -168,22 +169,35 @@ class FederatedNetwork:
             sampled_client_ids = [client.client_id for client in sampled_clients]
             sampled_clients_in_each_round.append(sampled_client_ids)
 
-            # Aggregation (upwards): Aggregate client model parameters to the edge model and edge model parameters to
-            # the global model (returns the round_server_loss_and_accuracy, global_avg_loss_and_accuracy after
-            # aggregating upwards, before the distribution stage)
+            # Server aggregation (upwards): Aggregate client model parameters to the edge model and edge model
+            # parameters to the global model (returns the round_server_loss_and_accuracy, global_avg_loss_and_accuracy
+            # after aggregating upwards, before the distribution stage)
             _ = model_aggregation(self.server_hierarchy, server_test_set, sampled_clients, self.drift,
                                   self.drift_recovery_parameters['fedau_alpha'])
 
-            # Updating (downwards): update the edge models using the global model parameters. (returns the
+            # Updating (downwards) & evaluation: update the edge models using the global model parameters. (returns the
             # round_server_loss_and_accuracy, global_avg_loss_and_accuracy after both aggregating upwards and
             # distribution stage)
             round_server_loss_and_accuracy = model_distribution(self.server_hierarchy, server_test_set)
 
             server_loss_and_accuracy.append(round_server_loss_and_accuracy)
 
+            # Update the progress of the simulation
+            update_progress(_round=_round, num_training_rounds=self.num_training_rounds)
+
+            # Break the federated learning training round.
+            # A training round in FL is defined as follows:
+            # 1. Server → Clients
+            # 2. Clients (local training) & evaluation
+            # 3. Clients → Server
+            # 4. Server aggregation & evaluation
+            if _round == self.num_training_rounds:
+                break
+
             # If the clients download the model from the leaf servers of the hierarchy
             server_depth = len(self.server_hierarchy) - 1
 
+            # Client local training and evaluation
             round_client_loss_and_accuracy = train_client_models(self.clients,
                                                                  sampled_client_ids,
                                                                  self.server_hierarchy[server_depth],
@@ -191,13 +205,10 @@ class FederatedNetwork:
                                                                  self.simulation_parameters)
             clients_loss_and_accuracy.append(round_client_loss_and_accuracy)
 
-            # Update the progress of the simulation
-            update_progress(_round=_round + 1, num_training_rounds=self.num_training_rounds)
-
         # Stop the timer
         end_time = time.time()
-
-        print(f"Runtime: {end_time - start_time} seconds")
+        minutes, secs = divmod(end_time - start_time, 60)
+        print(f"Runtime: {minutes} minutes {secs} seconds")
 
         # =========PLOTTING FUNCTION CALLS==============
         # plot data distribution of a given list of clients

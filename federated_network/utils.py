@@ -115,7 +115,7 @@ def train_client_models(all_clients, sampled_client_ids, servers: List[Server], 
     # Apply drift to the clients
     if drift.is_drift:
         # Sample data from the drift applied datasets
-        apply_drift(all_clients, drift)
+        _ = apply_drift(all_clients, drift)
     else:
         for client in all_clients:
             # Sample data from the original datasets
@@ -137,11 +137,11 @@ def train_client_models(all_clients, sampled_client_ids, servers: List[Server], 
                 round_client_loss_and_accuracy.append(client.evaluate())
 
             # If the client is sampled in this global training round, then train using the server aggregated parameters
-            client.fit(drift.is_drift, server.model.state_dict(), client.client_id, client.drift_recovery_method,
-                       drift.drifted_client_indices)
+            client.fit(drift.is_drift, drift.is_drift_end, server.model.state_dict(), client.client_id,
+                       client.drift_recovery_method, drift.drifted_client_indices)
         else:
             # If the client is not sampled, perform local training without server parameters
-            client.fit(drift.is_drift, None, client.client_id, client.drift_recovery_method,
+            client.fit(drift.is_drift, drift.is_drift_end, None, client.client_id, client.drift_recovery_method,
                        drift.drifted_client_indices)
 
             if is_server_adaptability:
@@ -185,16 +185,26 @@ def handle_drift_for_round(round_idx: int, drift: Drift, server_hierarchy: List[
     drift_end = drift.drift_step_rounds[-1]
 
     # Outside the global drift window
-    if round_idx < drift_start or round_idx > drift_end:
+    if round_idx < drift_start or round_idx >= drift_end:
         if drift.is_drift:  # execute only once: after the drift period ends
             # Change the aggregation strategy back to FedAvg outside the drift window
             change_server_aggregation_strategy(server_hierarchy, constants.RecoveryAlgorithm.FEDAVG, drift)
 
-            # Change the clients' (all of them) drift recovery method
-            change_client_drift_recovery_method(clients, drift_recovery_parameters['base_aggregation_method'],
-                                                drift.drifted_client_indices)
+            if not drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.FLUID:
+                # Change the clients' (all of them) drift recovery method
+                change_client_drift_recovery_method(clients, drift_recovery_parameters['base_aggregation_method'],
+                                                    drift.drifted_client_indices)
+            else:
+                # FLUID
+                # Change the clients' (only the drift affected clients) drift recovery method
+                change_client_drift_recovery_method(clients, constants.RecoveryAlgorithm.FLUID,
+                                                    drift.drifted_client_indices)
 
-        drift.is_drift = False
+            drift.is_drift = False
+
+        # Mark the end of the drift (in contrast to the before the drift starts), only once
+        if round_idx >= drift_end and not drift.is_drift_end:
+            drift.is_drift_end = True
         return
 
     next_drift_step_round = drift.drift_step_rounds[drift.current_drift_step]
@@ -207,5 +217,7 @@ def handle_drift_for_round(round_idx: int, drift: Drift, server_hierarchy: List[
             change_client_drift_recovery_method(clients, drift_recovery_parameters['recovery_method'],
                                                 drift.drifted_client_indices)
 
+            drift.is_drift = True  # Drift occurs in the current step
+
         drift.current_drift_step += 1  # Move to the next drift step
-        drift.is_drift = True  # Drift occurs in the current step
+
