@@ -291,7 +291,7 @@ def rapid_train(_model: nn.Module, _dataset: DataLoader, _epochs: int, _batch_si
             # Moves the weights following an update rule, leveraging the calculated gradients. Here, this is manually
             # programmed below referring to Lie et. al.[1] instead of calling optimizer.step(). Update step applies a
             # rule that moves weights a little using the gradients (param.grad) to reduce the loss.
-            for param in _model.params():
+            for param in _model.parameters():
                 if param.grad is not None:
                     # saves a copy of the existing gradients
                     batch_gradients[param] = param.grad.clone().detach()
