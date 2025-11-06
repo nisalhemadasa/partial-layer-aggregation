@@ -427,7 +427,7 @@ def set_parameters(_model: nn.Module, parameters: OrderedDict) -> None:
     _model.load_state_dict(parameters, strict=True)
 
 
-def get_parameters(_model:  nn.Module) -> List[np.ndarray]:
+def get_parameters_as_np_array(_model:  nn.Module) -> List[np.ndarray]:
     """
     Set the model weights and biases
     :param _model: The model to get parameters from

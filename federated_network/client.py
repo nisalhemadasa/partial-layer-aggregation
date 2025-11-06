@@ -69,10 +69,6 @@ class Client:
         :return: None
         """
         if not _is_drift:
-            # Do not set the server weights and biases if the server aggregation is not None (e.g. initial round)
-            if server_model_parameters is not None:
-                set_parameters(self.model, server_model_parameters)  # apply server weights
-
             if _is_drift_end and drift_recovery_method == constants.RecoveryAlgorithm.FLUID:   # after drift ends
                 # Rapid retraining (2nd order) + reinitialization of client parameters from the global model from scratch
                 rapid_train(self.model, self.trainloader, _epochs=self.epochs, _batch_size=self.mini_batch_size)
@@ -80,8 +76,6 @@ class Client:
                 # Train the client model using new data and server parameters
                 train(self.model, self.trainloader, self.epochs)
         else:
-            set_parameters(self.model, server_model_parameters)  # apply server weights
-
             # Train the client model using new data and server parameters
             if drift_recovery_method == constants.RecoveryAlgorithm.FEDAVG:
                 # Adam-based recovery (1st order) + reinitialization of client parameters from the global model from scratch
