@@ -115,7 +115,7 @@ def train_client_models(all_clients, sampled_client_ids, servers: List[Server], 
     # Apply drift to the clients
     if drift.is_drift:
         # Sample data from the drift applied datasets
-        apply_drift(all_clients, drift)
+        _ = apply_drift(all_clients, drift)
     else:
         for client in all_clients:
             # Sample data from the original datasets
@@ -185,7 +185,7 @@ def handle_drift_for_round(round_idx: int, drift: Drift, server_hierarchy: List[
     drift_end = drift.drift_step_rounds[-1]
 
     # Outside the global drift window
-    if round_idx < drift_start or round_idx > drift_end:
+    if round_idx < drift_start or round_idx >= drift_end:
         if drift.is_drift:  # execute only once: after the drift period ends
             # Change the aggregation strategy back to FedAvg outside the drift window
             change_server_aggregation_strategy(server_hierarchy, constants.RecoveryAlgorithm.FEDAVG, drift)
@@ -196,14 +196,14 @@ def handle_drift_for_round(round_idx: int, drift: Drift, server_hierarchy: List[
                                                     drift.drifted_client_indices)
             else:
                 # FLUID
-                # Change the clients' (all of them) drift recovery method
-                change_client_drift_recovery_method(clients, constants.RecoveryAlgorithm.RRT,
+                # Change the clients' (only the drift affected clients) drift recovery method
+                change_client_drift_recovery_method(clients, constants.RecoveryAlgorithm.FLUID,
                                                     drift.drifted_client_indices)
 
             drift.is_drift = False
 
         # Mark the end of the drift (in contrast to the before the drift starts)
-        if round_idx > drift_end:
+        if round_idx >= drift_end:
             drift.is_drift_end = True
         return
 
