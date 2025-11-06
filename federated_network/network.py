@@ -207,8 +207,8 @@ class FederatedNetwork:
 
         # Stop the timer
         end_time = time.time()
-
-        print(f"Runtime: {end_time - start_time} seconds")
+        minutes, secs = divmod(end_time - start_time, 60)
+        print(f"Runtime: {minutes} minutes {secs} seconds")
 
         # =========PLOTTING FUNCTION CALLS==============
         # plot data distribution of a given list of clients
