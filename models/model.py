@@ -166,7 +166,7 @@ def auxiliary_model_train(_model: nn.Module, _dataset: DataLoader, _server_model
     """
     # Initialize the auxiliary model
     aux_model = CNNModel().to(DEVICE)  # initialize using a fresh base model, similar to learning module architecture
-    aux_model.load_state_dict(_server_model_params, strict=True)  # load server parameters to auxiliary model
+    set_parameters(aux_model, _server_model_params) # load server parameters to auxiliary model
 
     # Replace fc3 layer with a new nn.Linear of the same shape
     aux_model.fc3 = nn.Linear(aux_model.fc3.in_features, aux_model.fc3.out_features)
@@ -417,11 +417,20 @@ def test(_model: nn.Module, _dataset: DataLoader) -> tuple[float, float]:
     return loss, accuracy
 
 
-def set_parameters(_model, parameters: OrderedDict):
-    """ Set the model weights and biases """
+def set_parameters(_model: nn.Module, parameters: OrderedDict) -> None:
+    """
+    Set the model weights and biases
+    :param _model: The model to set parameters for
+    :param parameters: The parameters to set
+    :return: None
+    """
     _model.load_state_dict(parameters, strict=True)
 
 
-def get_parameters(_model) -> List[np.ndarray]:
-    """ Set the model weights and biases """
+def get_parameters(_model:  nn.Module) -> List[np.ndarray]:
+    """
+    Set the model weights and biases
+    :param _model: The model to get parameters from
+    :return: List of model parameters as numpy arrays
+    """
     return [val.cpu().numpy() for _, val in _model.state_dict().items()]

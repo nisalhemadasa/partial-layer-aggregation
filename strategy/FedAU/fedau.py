@@ -10,7 +10,7 @@ from typing import OrderedDict, Dict, List
 
 import torch
 
-from models.model import CNNModel, split_to_extractor_and_classifier
+from models.model import CNNModel, split_to_extractor_and_classifier, set_parameters
 from strategy.FedAvg import fedavg
 
 
@@ -65,7 +65,7 @@ class FedAU:
             list(fedavg_extractor_params.items()) + list(unlearning_classifier_params.items()))
 
         # Load the composite unlearning model ({E, W_hat}) to the server model
-        server_model.load_state_dict(unlearning_composite_params)
+        set_parameters(server_model, unlearning_composite_params)
 
 
 def get_exponential_moving_average(learning_params: OrderedDict, aux_params: OrderedDict,

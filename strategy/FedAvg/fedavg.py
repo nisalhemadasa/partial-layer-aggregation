@@ -10,7 +10,7 @@ from typing import List, OrderedDict, Dict
 import torch
 
 from distance_metrics.distance_metrics import compute_euclidean_distance_weights
-from models.model import CNNModel
+from models.model import CNNModel, set_parameters
 
 
 class FedAvg:
@@ -38,7 +38,8 @@ class FedAvg:
             updated_server_model_params[key] = torch.stack(
                 [client_model_params[key].float() for client_model_params in client_model_params_list], 0).mean(0)
 
-        server_model.load_state_dict(updated_server_model_params)
+        # Load the FedAvg-ed parameters to the server model
+        set_parameters(server_model, updated_server_model_params)
 
 
 def aggregator_fn():
