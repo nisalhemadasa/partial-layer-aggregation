@@ -36,3 +36,6 @@ logs/saved_logs/**
 #Plots
 plots/saved_plots/
 plots/saved_plots/**
+#Configs
+configs/
+configs/**
