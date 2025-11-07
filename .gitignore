@@ -31,6 +31,8 @@ TestResults.xml
 #pycache
 *__pycache__
 #Logs
-*.logs/
+logs/
+logs/**
 #Plots
-*.plots/
+plots/
+plots/**
