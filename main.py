@@ -30,7 +30,7 @@ def main():
         class_pairs_to_swap=[(1, 2), (5, 7)],  # Classes to be swapped in the label-swapping drift method
         # class_pairs_to_swap=[('T-shirt/top', 'Pullover'), ('Sandal', 'Sneaker')],  # Classes to be swapped in F_MNIST
         label_swap_percentage_steps=[0.2, 0.4, 0.6, 0.8],  # Percentages to swap per step (label-swapping)
-        current_drift_step=0  # Current drift step (used internally during simulation)
+        current_drift_step=-1  # Current drift step (used internally during simulation. -1 represents no drift yet)
     )
 
     # Define simulation parameters
@@ -58,7 +58,7 @@ def main():
         server_tree_layout=[1],
         # Number of servers at each level of the server tree of depth n = [n, n-1,..., 1]
         # num_training_rounds=100,  # In literature, over 50 rounds are trained. FLUID trains 100 rounds
-        num_training_rounds=20,  # Number of training rounds (in literature, over 50 rounds are trained.
+        num_training_rounds=5,  # Number of training rounds (in literature, over 50 rounds are trained.)
         dataset_name=constants.DatasetNames.MNIST,  # Name of the dataset
         drift_specs=drift_specifications,  # Drift specifications
         simulation_parameters=simulation_parameters,  # Parameters specifying the simulation scenarios

@@ -207,7 +207,7 @@ def handle_drift_for_round(round_idx: int, drift: Drift, server_hierarchy: List[
             drift.is_drift_end = True
         return
 
-    next_drift_step_round = drift.drift_step_rounds[drift.current_drift_step]
+    next_drift_step_round = drift.drift_step_rounds[drift.current_drift_step + 1]
     if round_idx >= next_drift_step_round:
         if not drift.is_drift:  # execute only once: at the beginning of the drift step
             # The server aggregation strategy needs to change for the FedAU's case, at the start of the drift step.
