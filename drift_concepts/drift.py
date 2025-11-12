@@ -27,7 +27,7 @@ class Drift:
         self.num_drifted_clients = num_drifted_clients
 
         # Factor to localize the drift to a certain concentrated group of clients. The value ranges from 0 to 1. E.g.,
-        # 0.25 indicates that all drifted clients are concentrated to the first 0.25 indices of the clients.
+        # 0.25 indicates that all drifted clients are concentrated on the first 0.25 indices of the clients.
         self.drift_localization_factor = drift_localization_factor
 
         # If the drift is synchronous or asynchronous
@@ -133,7 +133,7 @@ class Drift:
 
         return clients
 
-    def swap_labels(self, clients: List[Client], percentage_to_swap: float) -> List[Client]:
+    def swap_labels(self, clients: List[Client], percentage_to_swap: float=None) -> List[Client]:
         """
         Swap the labels of the specified classes in the training and testing sets for drifted clients.
         :param clients: List of Client objects
@@ -155,31 +155,35 @@ class Drift:
                 indices_a = (labels == class_a).nonzero(as_tuple=True)[0]
                 indices_b = (labels == class_b).nonzero(as_tuple=True)[0]
 
-                # Swap the labels
-                if _percentage_to_swap >= 1.0:
-                    # old behavior (swap all)
-                    labels[indices_a] = class_b
-                    labels[indices_b] = class_a
-                elif _percentage_to_swap <= 0.0:
-                    # do nothing
-                    continue
-                else:
-                    # gets the total count of the elements belonging to the classes that needs to be swapped
-                    total_samples_count_a = indices_a.numel()
-                    total_samples_count_b = indices_b.numel()
+                # TODO: remove after testing
+                labels[indices_a] = class_b
+                labels[indices_b] = class_a
 
-                    # calculates the count of the samples whose labels need to be swapped
-                    swapped_sample_count_a = int(round(_percentage_to_swap * total_samples_count_a))
-                    swapped_sample_count_b = int(round(_percentage_to_swap * total_samples_count_b))
-
-                    # randomly select 'swapped_sample_count_a' samples from class_a and relabel them to class_b
-                    if swapped_sample_count_a > 0 and total_samples_count_a > 0:
-                        indices_to_swap_a = indices_a[torch.randperm(total_samples_count_a)[:swapped_sample_count_a]]
-                        labels[indices_to_swap_a] = class_b
-                    # randomly select 'swapped_sample_count_a' samples from class_a and relabel them to class_b
-                    if swapped_sample_count_b > 0 and total_samples_count_b > 0:
-                        indices_to_swap_b = indices_b[torch.randperm(total_samples_count_b)[:swapped_sample_count_b]]
-                        labels[indices_to_swap_b] = class_a
+                # # Swap the labels
+                # if _percentage_to_swap >= 1.0:
+                #     # old behavior (swap all)
+                #     labels[indices_a] = class_b
+                #     labels[indices_b] = class_a
+                # elif _percentage_to_swap <= 0.0:
+                #     # do nothing
+                #     continue
+                # else:
+                #     # gets the total count of the elements belonging to the classes that needs to be swapped
+                #     total_samples_count_a = indices_a.numel()
+                #     total_samples_count_b = indices_b.numel()
+                #
+                #     # calculates the count of the samples whose labels need to be swapped
+                #     swapped_sample_count_a = int(round(_percentage_to_swap * total_samples_count_a))
+                #     swapped_sample_count_b = int(round(_percentage_to_swap * total_samples_count_b))
+                #
+                #     # randomly select 'swapped_sample_count_a' samples from class_a and relabel them to class_b
+                #     if swapped_sample_count_a > 0 and total_samples_count_a > 0:
+                #         indices_to_swap_a = indices_a[torch.randperm(total_samples_count_a)[:swapped_sample_count_a]]
+                #         labels[indices_to_swap_a] = class_b
+                #     # randomly select 'swapped_sample_count_a' samples from class_a and relabel them to class_b
+                #     if swapped_sample_count_b > 0 and total_samples_count_b > 0:
+                #         indices_to_swap_b = indices_b[torch.randperm(total_samples_count_b)[:swapped_sample_count_b]]
+                #         labels[indices_to_swap_b] = class_a
 
             return images, labels
 

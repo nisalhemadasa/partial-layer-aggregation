@@ -5,6 +5,7 @@ Author: Nisal Hemadasa
 Date: 09-12-2024
 Version: 1.0
 """
+import copy
 from typing import List, OrderedDict, Dict, Any
 
 import constants
@@ -116,6 +117,10 @@ def train_client_models(all_clients, sampled_client_ids, servers: List[Server], 
     if drift.is_drift:
         # Sample data from the drift applied datasets
         _ = apply_drift(all_clients, drift)
+
+        # # TODO: remove this after testing
+        # all_clients_copy = copy.deepcopy(all_clients)
+        # all_clients = apply_drift(all_clients_copy, drift)
     else:
         for client in all_clients:
             # Sample data from the original datasets
@@ -181,8 +186,11 @@ def handle_drift_for_round(round_idx: int, drift: Drift, server_hierarchy: List[
     :param clients: List of client instances
     :return: None
     """
-    drift_start = drift.drift_step_rounds[0]
-    drift_end = drift.drift_step_rounds[-1]
+    # drift_start = drift.drift_step_rounds[0]
+    # drift_end = drift.drift_step_rounds[-1]
+    # TODO: remove after testing
+    drift_start = 10
+    drift_end = 15
 
     # Outside the global drift window
     if round_idx < drift_start or round_idx >= drift_end:
@@ -218,6 +226,6 @@ def handle_drift_for_round(round_idx: int, drift: Drift, server_hierarchy: List[
                                                 drift.drifted_client_indices)
 
             drift.is_drift = True  # Drift occurs in the current step
-
-        drift.current_drift_step += 1  # Move to the next drift step
+        # TODO: remove after testing
+        # drift.current_drift_step += 1  # Move to the next drift step
 

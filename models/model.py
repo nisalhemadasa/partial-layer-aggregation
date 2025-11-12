@@ -39,48 +39,72 @@ class SimpleModel(nn.Module):
         return x
 
 
+# class CNNModel(nn.Module):
+#     def __init__(self):
+#         """Defined for both MNIST and F_MNIST datasets"""
+#         super(CNNModel, self).__init__()
+#
+#         self.pool = nn.MaxPool2d(2, 2, 1, 2)
+#
+#         self.conv1 = nn.Conv2d(1, 6, 5, 1, 2)
+#         self.conv2 = nn.Conv2d(6, 16, 5, 1, 2)
+#         self.conv3 = nn.Conv2d(16, 32, 3, 1, 2)
+#         self.conv4 = nn.Conv2d(32, 64, 3, 1, 2)
+#
+#         self.fc1 = nn.Linear(64 * 4 * 4, 120)
+#         self.fc2 = nn.Linear(120, 84)
+#         self.fc3 = nn.Linear(84, 10)
+#
+#         self.bn1 = nn.BatchNorm2d(6)
+#         self.bn2 = nn.BatchNorm2d(16)
+#         self.bn3 = nn.BatchNorm2d(32)
+#         self.bn4 = nn.BatchNorm2d(64)
+#         self.bn5 = nn.BatchNorm1d(120)
+#         self.bn6 = nn.BatchNorm1d(84)
+#
+#     def forward(self, x):
+#         # print("Input shape:", x.shape)
+#         x = self.pool(F.relu(self.bn1(self.conv1(x))))
+#         # print("After conv1 and pool:", x.shape)
+#         x = self.pool(F.relu(self.bn2(self.conv2(x))))
+#         # print("After conv2 and pool:", x.shape)
+#         x = self.pool(F.relu(self.bn3(self.conv3(x))))
+#         # print("After conv3 and pool:", x.shape)
+#         x = self.pool(F.relu(self.bn4(self.conv4(x))))
+#         # print("After conv4 and pool:", x.shape)
+#         x = x.view(-1, 64 * 4 * 4)
+#         # print("After view:", x.shape)
+#         x = F.relu(self.bn5(self.fc1(x)))
+#         # print("After fc1:", x.shape)
+#         x = F.relu(self.bn6(self.fc2(x)))
+#         # print("After fc2:", x.shape)
+#         x = self.fc3(x)  # classifier in the case of FedAU
+#         # print("Output shape:", x.shape)
+#         return x
+#
+# for MNIST and F_MNIST dataset (28 x 28 dimensional images)
 class CNNModel(nn.Module):
     def __init__(self):
-        """Defined for both MNIST and F_MNIST datasets"""
+        """Defines the architecture of the network"""
         super(CNNModel, self).__init__()
-
-        self.pool = nn.MaxPool2d(2, 2, 1, 2)
-
-        self.conv1 = nn.Conv2d(1, 6, 5, 1, 2)
-        self.conv2 = nn.Conv2d(6, 16, 5, 1, 2)
-        self.conv3 = nn.Conv2d(16, 32, 3, 1, 2)
-        self.conv4 = nn.Conv2d(32, 64, 3, 1, 2)
-
-        self.fc1 = nn.Linear(64 * 4 * 4, 120)
-        self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, 10)
-
-        self.bn1 = nn.BatchNorm2d(6)
-        self.bn2 = nn.BatchNorm2d(16)
-        self.bn3 = nn.BatchNorm2d(32)
-        self.bn4 = nn.BatchNorm2d(64)
-        self.bn5 = nn.BatchNorm1d(120)
-        self.bn6 = nn.BatchNorm1d(84)
+        self.conv1 = nn.Conv2d(in_channels=1, out_channels=32, kernel_size=3)
+        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3)
+        self.fc1 = nn.Linear(in_features=64 * 5 * 5, out_features=128)
+        self.fc2 = nn.Linear(in_features=128, out_features=10)
+        self.dropout = nn.Dropout(p=0.5)
 
     def forward(self, x):
-        # print("Input shape:", x.shape)
-        x = self.pool(F.relu(self.bn1(self.conv1(x))))
-        # print("After conv1 and pool:", x.shape)
-        x = self.pool(F.relu(self.bn2(self.conv2(x))))
-        # print("After conv2 and pool:", x.shape)
-        x = self.pool(F.relu(self.bn3(self.conv3(x))))
-        # print("After conv3 and pool:", x.shape)
-        x = self.pool(F.relu(self.bn4(self.conv4(x))))
-        # print("After conv4 and pool:", x.shape)
-        x = x.view(-1, 64 * 4 * 4)
-        # print("After view:", x.shape)
-        x = F.relu(self.bn5(self.fc1(x)))
-        # print("After fc1:", x.shape)
-        x = F.relu(self.bn6(self.fc2(x)))
-        # print("After fc2:", x.shape)
-        x = self.fc3(x)  # classifier in the case of FedAU
-        # print("Output shape:", x.shape)
-        return x
+        """Describes how input data flows through the network"""
+        x = torch.relu(self.conv1(x))
+        x = torch.max_pool2d(x, kernel_size=2, stride=2)
+        x = torch.relu(self.conv2(x))
+        x = torch.max_pool2d(x, kernel_size=2, stride=2)
+        x = x.view(-1, 64 * 5 * 5)
+        x = torch.relu(self.fc1(x))
+        x = self.dropout(x)
+        x = self.fc2(x)
+        # return x
+        return torch.log_softmax(x, dim=1)
 
 
 def split_to_extractor_and_classifier(_model: nn.Module, _model_params: OrderedDict) -> tuple[OrderedDict, OrderedDict]:

@@ -315,7 +315,7 @@ def plot_client_layer_distance_vs_rounds(client_layer_distance: List[Dict[int, D
 
 
 def configure_and_save_plot(_plt, _x_label, _y_label, _title, _file_path, _legend_handles=None,
-                            _label_rotate=None) -> None:
+                            _label_rotate=None, _if_grid=None) -> None:
     """
     Add labels, title, legend and save the plot and displays it.
     :param _plt: The matplotlib pyplot object.
@@ -325,6 +325,7 @@ def configure_and_save_plot(_plt, _x_label, _y_label, _title, _file_path, _legen
     :param _file_path: The path and file name to save the plot.
     :param _legend_handles: The legend handles to be displayed.
     :param _label_rotate: Rotation angle for x-axis labels.
+    :param _if_grid: Boolean to indicate whether to show grid or not.
     :return: None
     """
     _plt.xlabel(_x_label)
@@ -334,8 +335,11 @@ def configure_and_save_plot(_plt, _x_label, _y_label, _title, _file_path, _legen
     if _legend_handles is not None:
         _plt.legend(handles=_legend_handles, loc='best', fontsize=4)
 
+    # if _if_grid is not None:
+    #     _plt.grid()
+
     if _label_rotate is not None:
-        _plt.xticks(rotation=_label_rotate, ha='right') # test is horizintally aligned to right
+        _plt.xticks(rotation=_label_rotate, ha='right') # test is horizontally aligned to right
         _plt.tight_layout()  # Automatically adjusts subplot margins so labels fit inside the figure.
 
     # Save the plot as a high-quality PNG
