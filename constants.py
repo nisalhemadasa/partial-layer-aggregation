@@ -146,8 +146,8 @@ class DriftCreationMethods:
 
 # Advanced drift modes
 class DriftMode:
-    # two classes are swapped on time
-    LABEL_SWAP_ONE_TIME = 'label_swap_one_time'
+    # two classes are swapped one time
+    LABEL_SWAP_ONCE = 'label_swap_once'
     # two classes are swapped during the first step (e.g., in MNIST: 1,2), and four classes are swapped during the next
     # step (e.g., in MNIST: 3,4 and 5,6)
     LABEL_SWAP_INCREMENTAL_STEPS = 'label_swap_incremental_steps'

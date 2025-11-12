@@ -79,13 +79,13 @@ def main():
         drift_localization_factor=1,  # Factor to localize the drift to a certain concentrated group of clients
         is_synchronous=True,  # If the drift is synchronous or asynchronous
         async_drift_specs=async_drift_specs,  # Specifications for the asynchronous case
-        drift_mode=constants.DriftMode.LABEL_SWAP_ONE_TIME,
-        # Drift creation method, i.e., label-swapping, rotations
-        drift_step_rounds=[0.2],  # Rounds at which the drift steps occur in the step drift pattern
+        drift_mode=constants.DriftMode.LABEL_SWAP_ONCE, # Drift creation method
+        drift_step_rounds=[0.2, 0.6],  # Rounds at which the drift steps occurs. Also indicates the start and end of drift period.
+        # Therefore, it must have at least two entries (start and end of drift).
         max_rotation=45,  # Maximum rotation angle for the drift created by rotations
-        class_pairs_to_swap=[(1, 2), (5, 7)],  # Classes to be swapped in the label-swapping drift method
+        class_pairs_to_swap=[[(1, 2), (5, 7)]],  # Classes to be swapped in the label-swapping drift method
         # class_pairs_to_swap=[('T-shirt/top', 'Pullover'), ('Sandal', 'Sneaker')],  # Classes to be swapped in F_MNIST
-        label_swap_percentage_steps=[1],  # Percentages to swap per step (label-swapping)
+        label_swap_percentage_steps=[1,  1],  # Percentages to swap per step (label-swapping)
         current_drift_step=-1  # Current drift step (used internally during simulation. -1 represents no drift yet)
     )
 
@@ -104,7 +104,7 @@ def main():
         server_tree_layout=[1],
         # Number of servers at each level of the server tree of depth n = [n, n-1,..., 1]
         # num_training_rounds=100,  # In literature, over 50 rounds are trained. FLUID trains 100 rounds
-        num_training_rounds=50,  # Number of training rounds (in literature, over 50 rounds are trained.)
+        num_training_rounds=20,  # Number of training rounds (in literature, over 50 rounds are trained.)
         dataset_name=constants.DatasetNames.MNIST,  # Name of the dataset
         drift_specs=drift_specifications,  # Drift specifications
         simulation_parameters=simulation_parameters,  # Parameters specifying the simulation scenarios
