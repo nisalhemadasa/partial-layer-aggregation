@@ -31,6 +31,11 @@ TestResults.xml
 #pycache
 *__pycache__
 #Logs
-*.logs/
+logs/saved_logs/
+logs/saved_logs/**
 #Plots
-*.plots/
+plots/saved_plots/
+plots/saved_plots/**
+#Configs
+configs/
+configs/**

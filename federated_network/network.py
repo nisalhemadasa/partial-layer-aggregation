@@ -17,18 +17,20 @@ from federated_network.client import client_fn, Client, client_initial_training
 from federated_network.server import server_fn, model_aggregation, model_distribution
 from federated_network.utils import update_progress, link_server_hierarchy, train_client_models, \
     link_clients_to_servers, handle_drift_for_round
-from logs.analysis_functions import compute_client_average_metrics, compute_server_average_metrics
+from logs.analysis_functions import compute_client_average_metrics, compute_server_average_metrics, \
+    split_clients_loss_and_accuracy
 from logs.logging import write_logs
 from plots.plotting import plot_client_performance_vs_rounds, plot_server_performance_vs_rounds, \
     plot_server_lvl_avg_performance_vs_rounds, plot_server_overall_avg_performance_vs_rounds, \
-    plot_client_layer_distance_vs_rounds, plot_client_distance_vs_rounds, plot_dataset_distribution
+    plot_client_layer_distance_vs_rounds, plot_client_distance_vs_rounds, plot_dataset_distribution, \
+    plot_client_avg_performance_vs_rounds
 
 
 class FederatedNetwork:
     def __init__(self, num_iid_client_instances, num_noniid_client_instances, server_tree_layout, num_training_rounds,
                  dataset_name, drift_specs, simulation_parameters, drift_recovery_parameters,
                  client_select_fraction=0.5,
-                 minibatch_size=32, num_local_epochs=4):
+                 minibatch_size=128, num_local_epochs=6):
         # Dataset name
         self.dataset_name = dataset_name
 
@@ -163,6 +165,11 @@ class FederatedNetwork:
                                    self.clients)
 
             # Clients sampled for a single round. In this simulation, all clients are sampled, in order (not randomly)
+            # if _round > self.drift.drift_step_rounds[0] + 1 and _round >= self.drift.drift_step_rounds[-1]:
+            #     # TODO: remove after testing
+            #     sampled_clients = [client for client in self.clients if
+            #                           client.client_id not in self.drift.drifted_client_indices]
+            # else:
             sampled_clients = self.clients
 
             # Extract the sampled client IDs and store them
@@ -217,11 +224,11 @@ class FederatedNetwork:
             clients_to_plot = [self.clients[i] for i in client_ids]
             plot_dataset_distribution(clients_to_plot, self.dataset_name, file_save_path=file_save_path)
 
-        # Plot layer-distance (between the layers of the client model and the corresponding edge server model)
-        plot_client_layer_distance_vs_rounds(client_layer_distance, file_save_path=file_save_path)
+        # # Plot layer-distance (between the layers of the client model and the corresponding edge server model)
+        # plot_client_layer_distance_vs_rounds(client_layer_distance, file_save_path=file_save_path)
 
-        # Plot client-edgeserver-distance (overall L2 distance between client model weights and the edge model weights)
-        plot_client_distance_vs_rounds(client_model_distance, file_save_path=file_save_path)
+        # # Plot client-edgeserver-distance (overall L2 distance between client model weights and the edge model weights)
+        # plot_client_distance_vs_rounds(client_model_distance, file_save_path=file_save_path)
 
         # Plot the performance of the clients
         plot_client_performance_vs_rounds(clients_loss_and_accuracy, file_save_path=file_save_path)
@@ -252,8 +259,15 @@ class FederatedNetwork:
         write_logs(server_overall_averages, file_name=log_save_path + constants.Logs.SERVER_OVERALL_AVG_LOG)
 
         # =========PLOTTING FUNCTION CALLS==============
+        # Split the average performance of the clients to drifted and non-drifted clients
+        non_drifted_clients_loss_and_accuracy, drifted_clients_loss_and_accuracy = split_clients_loss_and_accuracy(
+            clients_loss_and_accuracy, self.drift.drifted_client_indices)
+        non_drifted_client_averages = compute_client_average_metrics(non_drifted_clients_loss_and_accuracy)
+        drifted_client_averages = compute_client_average_metrics(drifted_clients_loss_and_accuracy)
+
         # Plot average performances
-        # plot_client_avg_performance_vs_rounds([client_averages], self.drift.is_synchronous,
-        #                                       file_save_path=file_save_path)
-        plot_server_lvl_avg_performance_vs_rounds(server_level_averages, file_save_path=file_save_path)
-        plot_server_overall_avg_performance_vs_rounds(server_overall_averages, file_save_path=file_save_path)
+        plot_client_avg_performance_vs_rounds([non_drifted_client_averages, drifted_client_averages],
+                                              self.drift.is_synchronous,
+                                              file_save_path=file_save_path)
+        # plot_server_lvl_avg_performance_vs_rounds(server_level_averages, file_save_path=file_save_path)
+        # plot_server_overall_avg_performance_vs_rounds(server_overall_averages, file_save_path=file_save_path)
