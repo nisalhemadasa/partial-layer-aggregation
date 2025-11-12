@@ -20,8 +20,8 @@ from federated_network.client import Client
 
 
 class Drift:
-    def __init__(self, num_drifted_clients, drift_localization_factor, is_synchronous, async_drift_specs, drift_pattern,
-                 drift_method, drift_step_rounds, drift_start_round, drift_end_round, drifted_client_indices, max_rotation,
+    def __init__(self, num_drifted_clients, drift_localization_factor, is_synchronous, async_drift_specs, drift_mode,
+                 drift_step_rounds, drift_start_round, drift_end_round, drifted_client_indices, max_rotation,
                  class_pairs_to_swap, label_swap_percentage_steps, current_drift_step):
         # Number of clients to be applied with drifted data
         self.num_drifted_clients = num_drifted_clients
@@ -36,11 +36,18 @@ class Drift:
         # Drift specifications for asynchronous drift
         self.async_drift_specs = async_drift_specs
 
-        # Drift pattern, i.e., abrupt, gradual, incremental, reoccurring, incr-abrupt-reoc, incr-reoc, out-of-control.
-        self.drift_pattern = drift_pattern
-
-        # Label-swapping, rotations
-        self.drift_method = drift_method
+        # Drift modes
+        # 1. label_swap_one_time -> two classes are swapped on time
+        # 2. label_swap_incremental_steps -> two classes are swapped during the first step (e.g., in MNIST: 1,2), and
+        # 3. label_swap_incremental_steps -> four classes are swapped during the next step (e.g., in MNIST: 3,4 and 5,6)
+        # 4. rotation_gradual -> rotation angles are gradually increased over time. (samples that are rotated are fixed)
+        # 5. rotation_gradual_incremental -> rotation angles are gradually increased over time. Also, the number of
+        # 6. rotation_gradual_incremental -> samples to be rotated is gradually increased
+        # 7. rotation_random_incremental -> rotation angles are randomly changed over time. Also, the number of samples
+        # to be rotated is gradually increased
+        # 8. rotation_step_incremental -> rotation angles are changed abruptly for a given set of samples in a class
+        # (e.g., rotation of the images by  +90 degrees). The number of samples to be rotated is gradually increased
+        self.drift_mode = drift_mode
 
         # Defines the training rounds which drift starts appearing in clients as steps
         self.drift_step_rounds = drift_step_rounds
@@ -471,8 +478,7 @@ def drift_fn(num_client_instances: int, num_training_rounds: int, drift_specs: D
                  drift_localization_factor=drift_specs['drift_localization_factor'],
                  is_synchronous=drift_specs['is_synchronous'],
                  async_drift_specs=drift_specs['async_drift_specs'],
-                 drift_pattern=drift_specs['drift_pattern'],
-                 drift_method=drift_specs['drift_method'],
+                 drift_mode=drift_specs['drift_mode'],
                  drift_start_round=drift_start_round,
                  drift_end_round=drift_end_round,
                  drift_step_rounds=[math.ceil(i * num_training_rounds) for i in drift_specs['drift_step_rounds']],
@@ -493,14 +499,14 @@ def apply_drift(clients: List[Client], drift: Drift) -> List[Client]:
     :param drift: Drift object
     :return: List of Client objects with drifted data (dataloaders)
     """
-    if drift.drift_method == constants.DriftCreationMethods.LABEL_SWAPPING:
+    if drift.drift_mode == constants.DriftMode.LABEL_SWAP_ONE_TIME:
         # For label swapping, application of drift once in the simulation is sufficient & speeds up the simulation
         if not drift.is_already_applied:
             drift.is_already_applied = True
             return drift.swap_labels(clients, drift.label_swap_percentage_steps[drift.current_drift_step])
         else:
             return clients
-    elif drift.drift_method == constants.DriftCreationMethods.ROTATION:
+    elif drift.drift_mode == constants.DriftCreationMethods.ROTATION:
         # Since rotation is continuously applied, it is speed-wise optimum to apply drift for sampled data in each round
         for client in clients:
             # Each client samples data for local training from their mutually own (exclusively partitioned) datasets

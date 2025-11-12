@@ -79,8 +79,7 @@ def main():
         drift_localization_factor=1,  # Factor to localize the drift to a certain concentrated group of clients
         is_synchronous=True,  # If the drift is synchronous or asynchronous
         async_drift_specs=async_drift_specs,  # Specifications for the asynchronous case
-        drift_pattern=constants.DriftPatterns.ABRUPT,  # Drift pattern, i.e., abrupt, gradual, etc.
-        drift_method=constants.DriftCreationMethods.LABEL_SWAPPING,
+        drift_mode=constants.DriftMode.LABEL_SWAP_ONE_TIME,
         # Drift creation method, i.e., label-swapping, rotations
         drift_step_rounds=[0.2],  # Rounds at which the drift steps occur in the step drift pattern
         max_rotation=45,  # Maximum rotation angle for the drift created by rotations

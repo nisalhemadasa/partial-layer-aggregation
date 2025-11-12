@@ -125,6 +125,7 @@ class Plots:
     LABEL_DISTRIBUTION_TITLE = 'Label Distribution per Client'
     LABEL_DISTRIBUTION_PNG = 'label_distribution_per_client'
 
+
 # Drift patterns
 class DriftPatterns:
     ABRUPT = 'abrupt'
@@ -143,6 +144,23 @@ class DriftCreationMethods:
     ROTATION = 'rotation'
 
 
+# Advanced drift modes
+class DriftMode:
+    # two classes are swapped on time
+    LABEL_SWAP_ONE_TIME = 'label_swap_one_time'
+    # two classes are swapped during the first step (e.g., in MNIST: 1,2), and four classes are swapped during the next
+    # step (e.g., in MNIST: 3,4 and 5,6)
+    LABEL_SWAP_INCREMENTAL_STEPS = 'label_swap_incremental_steps'
+    # rotation angles are gradually increased over time. (samples that are rotated are fixed)
+    ROTATION_GRADUAL = 'rotation_gradual'
+    # rotation angles are gradually increased over time. Also, the number of samples to be rotated is gradually increased
+    ROTATION_GRADUAL_INCREMENTAL = 'rotation_gradual_incremental'
+    # rotation angles are randomly changed over time. Also, the number of samples to be rotated is gradually increased
+    ROTATION_RANDOM_INCREMENTAL = 'rotation_random_incremental'
+    # rotation angles are changed abruptly for a given set of samples in a class (e.g., rotation of the images by
+    # +90 degrees). The number of samples to be rotated is gradually increased
+    ROTATION_STEP_INCREMENTAL = 'rotation_step_incremental'
+
 # file names related to logging
 class Logs:
     CLIENT_LOG = 'client_log'
@@ -152,10 +170,11 @@ class Logs:
     SERVER_LVL_AVG_LOG = 'server_level_avg_log'
     SERVER_OVERALL_AVG_LOG = 'server_overall_avg_log'
 
+
 # Drift recovery algorithms
 class RecoveryAlgorithm:
     # Client-side algorithms
-    FEDAVG = 'fedavg'   # Adam-based training
+    FEDAVG = 'fedavg'  # Adam-based training
     RRT = 'rrt'
     FEDAU = 'fedau'
     FLUID = 'fluid'
