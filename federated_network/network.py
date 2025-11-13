@@ -30,7 +30,7 @@ class FederatedNetwork:
     def __init__(self, num_iid_client_instances, num_noniid_client_instances, server_tree_layout, num_training_rounds,
                  dataset_name, drift_specs, simulation_parameters, drift_recovery_parameters,
                  client_select_fraction=0.5,
-                 minibatch_size=128, num_local_epochs=6):
+                 minibatch_size=32, num_local_epochs=4):
         # Dataset name
         self.dataset_name = dataset_name
 

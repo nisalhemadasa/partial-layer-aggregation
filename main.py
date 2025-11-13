@@ -80,7 +80,7 @@ def main():
         is_synchronous=True,  # If the drift is synchronous or asynchronous
         async_drift_specs=async_drift_specs,  # Specifications for the asynchronous case
         drift_mode=constants.DriftMode.LABEL_SWAP_ONCE, # Drift creation method
-        drift_step_rounds=[0.2, 0.6],  # Rounds at which the drift steps occurs. Also indicates the start and end of drift period.
+        drift_step_rounds=[0.2, 0.8],  # Rounds at which the drift steps occurs. Also indicates the start and end of drift period.
         # Therefore, it must have at least two entries (start and end of drift).
         max_rotation=45,  # Maximum rotation angle for the drift created by rotations
         class_pairs_to_swap=[[(1, 2), (5, 7)]],  # Classes to be swapped in the label-swapping drift method
@@ -98,7 +98,7 @@ def main():
 
     # Create a federated network
     fed_net = FederatedNetwork(
-        num_iid_client_instances=10,  # Number of IID clients in the federated network
+        num_iid_client_instances=5,  # Number of IID clients in the federated network
         # num_iid_client_instances=100,  # Suggested at FLTA
         num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
         server_tree_layout=[1],
@@ -114,8 +114,8 @@ def main():
 
     # Running the simulation
     fed_net.run_simulation(
-        file_save_path='./plots/saved_plots_4/',
-        log_save_path='./logs/saved_logs_4/')
+        file_save_path='./plots/saved_plots_5/',
+        log_save_path='./logs/saved_logs_5/')
 
 
 if __name__ == "__main__":

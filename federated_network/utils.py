@@ -121,6 +121,10 @@ def train_client_models(all_clients, sampled_client_ids, servers: List[Server], 
         # # TODO: remove this after testing
         # all_clients_copy = copy.deepcopy(all_clients)
         # all_clients = apply_drift(all_clients_copy, drift)
+
+        # # TODO: the following needs to add the sampling refresh after drift
+        # for client in all_clients:
+        #     client.sample_data()  # refresh loaders from drifted datasets
     else:
         for client in all_clients:
             # Sample data from the original datasets
@@ -186,12 +190,8 @@ def handle_drift_for_round(round_idx: int, drift: Drift, server_hierarchy: List[
     :param clients: List of client instances
     :return: None
     """
-
-    drift_start = drift.drift_step_rounds[0]
-    drift_end = drift.drift_step_rounds[-1]
-
     # Outside the global drift window
-    if round_idx < drift_start or round_idx >= drift_end:
+    if round_idx < drift.drift_start_round or round_idx >= drift.drift_end_round:
         if drift.is_drift:  # execute only once: after the drift period ends
             # Change the aggregation strategy back to FedAvg outside the drift window
             change_server_aggregation_strategy(server_hierarchy, constants.RecoveryAlgorithm.FEDAVG, drift)
@@ -209,7 +209,7 @@ def handle_drift_for_round(round_idx: int, drift: Drift, server_hierarchy: List[
             drift.is_drift = False
 
         # Mark the end of the drift (in contrast to the before the drift starts), only once
-        if round_idx >= drift_end and not drift.is_drift_end:
+        if round_idx >= drift.drift_end_round and not drift.is_drift_end:
             drift.is_drift_end = True
         return
 
