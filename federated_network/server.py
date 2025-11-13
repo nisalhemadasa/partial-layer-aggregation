@@ -29,7 +29,7 @@ class Server:
         self.parent_server_id = None  # Parent server ID in the server hierarchy
 
     def train(self, client_model_parameters: Dict[str, OrderedDict],
-              aux_classifier_parameters: Dict[str, OrderedDict], ema_weight: float) -> None:
+              aux_classifier_parameters: Dict[str, OrderedDict] = None, ema_weight: float = None) -> None:
         """
         Train the server model using the client model parameters.
         :param client_model_parameters: List of client model parameters
@@ -75,8 +75,9 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
     # Store the loss and accuracy at each level of the server model hierarchy
     server_loss_and_accuracy = []
 
-    # EMA weight parameter for the FedAU algorithm
+    # EMA weight, and auxiliary classifier parameters, for the FedAU algorithm
     ema_weight = None
+    client_aux_classifier_parameters = None
 
     # Evaluate server model on the upward traversal aggregation  only if the hierarchy has more than one level. Else,
     # this evaluation will be redundant as it is already done during the server model distribution phase.
@@ -97,19 +98,23 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
                 client_model_parameters = {client_id: sampled_clients[client_id].model.state_dict()
                                            for client_id in server.client_ids}
 
+                # TODO: beware that FedAU depicted behavior of performance compromise, that this code section may cause
                 # Get auxiliary classifier parameters from drifted clients only
-                drifted_client_ids = set(drift.drifted_client_indices or [])
-                client_aux_classifier_parameters = None
-                if drift.is_drift and drifted_client_ids:
-                    # Collect the parameters to a dictionary (client_id: aux_classifier_parameters)
-                    client_aux_classifier_parameters = {client_id:
-                                                            (sampled_clients[
-                                                                 client_id].auxiliary_classifier_parameters  # get aux classifier params
-                                                             if client_id in drifted_client_ids else None)
-                                                        # drifted clients only
-                                                        for client_id in server.client_ids}  # connected to this server
+                if drift.is_drift:
+                    if server.strategy == constants.RecoveryAlgorithm.FEDAU or server.strategy == constants.RecoveryAlgorithm.FLUID:
+                        print('inside!!!')
+                        drifted_client_ids = set(drift.drifted_client_indices or [])
+                        if drift.is_drift and drifted_client_ids:
+                            # Collect the parameters to a dictionary (client_id: aux_classifier_parameters)
+                            client_aux_classifier_parameters = {client_id:
+                                                                    (sampled_clients[
+                                                                         client_id].auxiliary_classifier_parameters  # get aux classifier params
+                                                                     if client_id in drifted_client_ids else None)
+                                                                # drifted clients only
+                                                                for client_id in
+                                                                server.client_ids}  # connected to this server
 
-                    ema_weight = fedau_alpha
+                            ema_weight = fedau_alpha
 
                 if verbose:
                     print('server:' + str(server.server_id) + ' -> ' + 'clients:' + str(server.client_ids))
