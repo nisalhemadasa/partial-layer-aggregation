@@ -16,13 +16,14 @@ from scipy.ndimage import rotate
 import torchvision.transforms as transforms
 
 import constants
+from data.utils import get_num_classes_from_dataset
 from federated_network.client import Client
 
 
 class Drift:
     def __init__(self, num_drifted_clients, drift_localization_factor, is_synchronous, async_drift_specs, drift_mode,
-                 drift_step_rounds, drifted_client_indices, max_rotation, class_pairs_to_swap,
-                 label_swap_percentage_steps, current_drift_step):
+                 drift_start_round, drift_end_round, drift_step_rounds, drifted_client_indices, max_rotation,
+                 class_pairs_to_swap, label_swap_percentage_steps, current_drift_step):
         # Number of clients to be applied with drifted data
         self.num_drifted_clients = num_drifted_clients
 
@@ -53,8 +54,8 @@ class Drift:
         self.drift_step_rounds = drift_step_rounds
 
         # Defines the rounds where drift starts and ends affecting the clients
-        self.drift_start_round = self.drift_step_rounds[0]
-        self.drift_end_round = self.drift_step_rounds[-1]
+        self.drift_start_round = drift_start_round
+        self.drift_end_round = drift_end_round
 
         # List of clients that have drifted data
         self.drifted_client_indices = drifted_client_indices
@@ -132,12 +133,14 @@ class Drift:
             first_drifted_client = copy.deepcopy(clients[self.drifted_client_indices[0]])
 
             # Process training dataset
-            train_images, train_labels = apply_rotation(first_drifted_client.local_trainset.dataset, rotation_angle, fraction_rotated)
+            train_images, train_labels = apply_rotation(first_drifted_client.local_trainset.dataset, rotation_angle,
+                                                        fraction_rotated)
             first_drifted_client.local_trainset.dataset.data = train_images
             first_drifted_client.local_trainset.dataset.targets = train_labels
 
             # Process testing dataset
-            test_images, test_labels = apply_rotation(first_drifted_client.testset.dataset, rotation_angle, fraction_rotated)
+            test_images, test_labels = apply_rotation(first_drifted_client.testset.dataset, rotation_angle,
+                                                      fraction_rotated)
             first_drifted_client.testset.dataset.data = test_images
             first_drifted_client.testset.dataset.targets = test_labels
 
@@ -201,15 +204,19 @@ class Drift:
 
         return clients
 
-    def swap_labels(self, clients: List[Client], class_pair_to_swap: tuple[int, int]) -> List[Client]:
+    def swap_labels(self, clients: List[Client], class_pair_to_swap: list[tuple[int, int]], verbose: bool = False) -> \
+            List[Client]:
         """
         Swap the labels of the specified classes in the training and testing sets for drifted clients.
         :param clients: List of Client objects
         :param class_pair_to_swap: Tuple of the pair of classes whose labels should be swapped
+        :param verbose: Flag to enable verbose logging
         :return: Updated list of Client objects with swapped labels in their datasets
         """
 
-        def swap_labels_in_dataset(_dataset, _class_pair_to_swap: tuple[int, int]):
+        # no_grad decorator to avoid tracking in autograd, thereby saving memory and computations
+        @torch.no_grad()
+        def swap_labels_in_dataset(_dataset, _class_pair_to_swap: list[tuple[int, int]]):
             """
             Swap labels in a dataset based on the class pairs to swap.
             :param _dataset: Dataset to process
@@ -231,25 +238,32 @@ class Drift:
 
         # Check if there are drifted clients
         if self.drifted_client_indices:
-            # Identify the first drifted client to process the dataset and duplicate a copy (not the reference)
-            first_drifted_client = copy.deepcopy(clients[self.drifted_client_indices[0]])
-
-            # Process training dataset
-            train_images, train_labels = swap_labels_in_dataset(first_drifted_client.local_trainset.dataset,
-                                                                class_pair_to_swap)
-            first_drifted_client.local_trainset.dataset.data = train_images
-            first_drifted_client.local_trainset.dataset.targets = train_labels
-
-            # Process testing dataset
-            test_images, test_labels = swap_labels_in_dataset(first_drifted_client.testset.dataset,
-                                                              class_pair_to_swap)
-            first_drifted_client.testset.dataset.data = test_images
-            first_drifted_client.testset.dataset.targets = test_labels
-
             # Assign the updated datasets to all drifted clients, since they share the same data
             for idx in self.drifted_client_indices:
+                # Identify the first drifted client to process the dataset and duplicate a copy (not the reference)
+                first_drifted_client = copy.deepcopy(clients[idx])
+
+                # Process training dataset
+                train_images, train_labels = swap_labels_in_dataset(first_drifted_client.local_trainset.dataset,
+                                                                    class_pair_to_swap)
+                first_drifted_client.local_trainset.dataset.data = train_images
+                first_drifted_client.local_trainset.dataset.targets = train_labels
+
+                # Process testing dataset
+                test_images, test_labels = swap_labels_in_dataset(first_drifted_client.testset.dataset,
+                                                                  class_pair_to_swap)
+                first_drifted_client.testset.dataset.data = test_images
+                first_drifted_client.testset.dataset.targets = test_labels
+
                 clients[idx].local_trainset.dataset = first_drifted_client.local_trainset.dataset
                 clients[idx].testset.dataset = first_drifted_client.testset.dataset
+
+                if verbose:
+                    print(f"client {idx} train_dataset_id: {id(clients[idx].local_trainset.dataset)}")
+
+        if verbose:
+            for i, c in enumerate(clients):
+                print(f"client {i} train_dataset_id: {id(c.local_trainset.dataset)}")
 
         return clients
 
@@ -515,6 +529,8 @@ def drift_fn(num_client_instances: int, num_training_rounds: int, drift_specs: D
                  is_synchronous=drift_specs['is_synchronous'],
                  async_drift_specs=drift_specs['async_drift_specs'],
                  drift_mode=drift_specs['drift_mode'],
+                 drift_start_round=drift_start_round,
+                 drift_end_round=drift_end_round,
                  drift_step_rounds=[math.ceil(i * num_training_rounds) for i in drift_specs['drift_step_rounds']],
                  drifted_client_indices=get_clients_with_drift(num_client_instances, drift_specs['clients_fraction'],
                                                                drift_specs['drift_localization_factor'],
@@ -536,6 +552,7 @@ def apply_drift(clients: List[Client], drift: Drift) -> List[Client]:
     if drift.drift_mode == constants.DriftMode.LABEL_SWAP_ONCE:
         # For label swapping, application of drift once in the simulation is sufficient & speeds up the simulation
         if not drift.is_already_applied:
+            print("labels swapped once")
             drift.is_already_applied = True
             class_pair_to_swap = drift.class_pairs_to_swap[0]  # There is only single pair to swap
             return drift.swap_labels(clients, class_pair_to_swap)
