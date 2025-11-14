@@ -16,12 +16,13 @@ from scipy.ndimage import rotate
 import torchvision.transforms as transforms
 
 import constants
+from data.utils import get_num_classes_from_dataset
 from federated_network.client import Client
 
 
 class Drift:
-    def __init__(self, num_drifted_clients, drift_localization_factor, is_synchronous, async_drift_specs, drift_pattern,
-                 drift_method, drift_step_rounds, drift_start_round, drift_end_round, drifted_client_indices, max_rotation,
+    def __init__(self, num_drifted_clients, drift_localization_factor, is_synchronous, async_drift_specs, drift_mode,
+                 drift_start_round, drift_end_round, drift_step_rounds, drifted_client_indices, max_rotation,
                  class_pairs_to_swap, label_swap_percentage_steps, current_drift_step):
         # Number of clients to be applied with drifted data
         self.num_drifted_clients = num_drifted_clients
@@ -36,11 +37,18 @@ class Drift:
         # Drift specifications for asynchronous drift
         self.async_drift_specs = async_drift_specs
 
-        # Drift pattern, i.e., abrupt, gradual, incremental, reoccurring, incr-abrupt-reoc, incr-reoc, out-of-control.
-        self.drift_pattern = drift_pattern
-
-        # Label-swapping, rotations
-        self.drift_method = drift_method
+        # Drift modes
+        # 1. label_swap_one_time -> two classes are swapped on time
+        # 2. label_swap_incremental_steps -> two classes are swapped during the first step (e.g., in MNIST: 1,2), and
+        # 3. label_swap_incremental_steps -> four classes are swapped during the next step (e.g., in MNIST: 3,4 and 5,6)
+        # 4. rotation_gradual -> rotation angles are gradually increased over time. (samples that are rotated are fixed)
+        # 5. rotation_gradual_incremental -> rotation angles are gradually increased over time. Also, the number of
+        # 6. rotation_gradual_incremental -> samples to be rotated is gradually increased
+        # 7. rotation_random_incremental -> rotation angles are randomly changed over time. Also, the number of samples
+        # to be rotated is gradually increased
+        # 8. rotation_step_incremental -> rotation angles are changed abruptly for a given set of samples in a class
+        # (e.g., rotation of the images by  +90 degrees). The number of samples to be rotated is gradually increased
+        self.drift_mode = drift_mode
 
         # Defines the training rounds which drift starts appearing in clients as steps
         self.drift_step_rounds = drift_step_rounds
@@ -77,10 +85,77 @@ class Drift:
         # Current drift step (used internally during simulation)
         self.current_drift_step = current_drift_step
 
-    def rotate_images(self, clients: List[Client]) -> List[Client]:
+    def rotate_images_gradually_incrementally(self, clients: List[Client]) -> List[Client]:
         """
-        Apply rotation drift to the images of the client dataset. Both the rotation angle and the number of images to
-        rotate increase linearly with the number of federated training rounds.
+        Apply rotation drift (gradually) to the images of the client dataset. Both the rotation angle and the number of
+        images to rotate increase linearly with the number of federated training rounds (incremental).
+        :param clients: List of Client objects
+        :return: List of Client objects with the rotated images in their datasets
+        """
+
+        def apply_rotation(dataset, _rotation_angle: float, _fraction_rotated: float, seed: int = 42):
+            """
+            Apply rotation drift to a fraction of the images.
+            :param dataset: Dataset to process
+            :param _rotation_angle: Angle of rotation
+            :param _fraction_rotated: Fraction of images to rotate
+            :param seed: Random seed for reproducibility
+            :return: Drifted images and original labels
+            """
+            _images = dataset.data  # Access dataset images
+            _drifted_images = _images.clone()
+            _labels = dataset.targets  # Access dataset labels
+            num_images = len(_images)
+            num_images_to_rotate = int(_fraction_rotated * num_images)
+
+            # pick random subset of indices to rotate
+            rng = np.random.default_rng(seed)
+            rotate_indices = rng.choice(num_images, size=num_images_to_rotate, replace=False)
+
+            # apply rotation only to those indices
+            for _idx in rotate_indices:
+                rotated = rotate(_images[_idx].numpy(), _rotation_angle, reshape=False)
+                _images[_idx] = torch.tensor(rotated, dtype=_images.dtype)
+
+            return _drifted_images, _labels
+
+        # Calculate rotation parameters
+        transition_progress = ((self.current_round + 1) - self.drift_start_round) / (
+                self.drift_end_round - self.drift_start_round)
+        rotation_angle = transition_progress * self.max_rotation
+        # rotation_angle = self.max_rotation
+        total_rounds = self.drift_end_round - self.drift_start_round + 1
+        fraction_rotated = (self.current_round - self.drift_start_round + 1) / total_rounds
+
+        # Check if there are drifted clients
+        if self.drifted_client_indices:
+            # Identify the first drifted client to process the dataset and duplicate a copy (not the reference)
+            first_drifted_client = copy.deepcopy(clients[self.drifted_client_indices[0]])
+
+            # Process training dataset
+            train_images, train_labels = apply_rotation(first_drifted_client.local_trainset.dataset, rotation_angle,
+                                                        fraction_rotated)
+            first_drifted_client.local_trainset.dataset.data = train_images
+            first_drifted_client.local_trainset.dataset.targets = train_labels
+
+            # Process testing dataset
+            test_images, test_labels = apply_rotation(first_drifted_client.testset.dataset, rotation_angle,
+                                                      fraction_rotated)
+            first_drifted_client.testset.dataset.data = test_images
+            first_drifted_client.testset.dataset.targets = test_labels
+
+            # Assign the updated datasets to all drifted clients, since they share the same data
+            for idx in self.drifted_client_indices:
+                clients[idx].local_trainset.dataset = first_drifted_client.local_trainset.dataset
+                clients[idx].testset.dataset = first_drifted_client.testset.dataset
+
+        return clients
+
+    def rotate_images_gradually(self, clients: List[Client]) -> List[Client]:
+        """
+        Apply rotation drift to the images of the client dataset. The rotation is applied to all the samples (images) of
+         the drifted clients consistantly
+        constant with the number of federated training rounds.
         :param clients: List of Client objects
         :return: List of Client objects with the rotated images in their datasets
         """
@@ -94,7 +169,6 @@ class Drift:
             """
             _images = dataset.data  # Access dataset images
             _labels = dataset.targets  # Access dataset labels
-            # num_images_to_rotate = int(_fraction_rotated * len(_images))
             _drifted_images = _images.clone()
 
             for i in range(len(_images)):
@@ -107,9 +181,6 @@ class Drift:
         transition_progress = ((self.current_round + 1) - self.drift_start_round) / (
                 self.drift_end_round - self.drift_start_round)
         rotation_angle = transition_progress * self.max_rotation
-        # rotation_angle = self.max_rotation
-        total_rounds = self.drift_end_round - self.drift_start_round + 1
-        fraction_rotated = (self.current_round - self.drift_start_round + 1) / total_rounds
 
         # Check if there are drifted clients
         if self.drifted_client_indices:
@@ -133,80 +204,66 @@ class Drift:
 
         return clients
 
-    def swap_labels(self, clients: List[Client], percentage_to_swap: float=None) -> List[Client]:
+    def swap_labels(self, clients: List[Client], class_pair_to_swap: list[tuple[int, int]], verbose: bool = False) -> \
+            List[Client]:
         """
         Swap the labels of the specified classes in the training and testing sets for drifted clients.
         :param clients: List of Client objects
-        :param percentage_to_swap: Percentage of data samples that needs to be swapped in a selected class
+        :param class_pair_to_swap: Tuple of the pair of classes whose labels should be swapped
+        :param verbose: Flag to enable verbose logging
         :return: Updated list of Client objects with swapped labels in their datasets
         """
 
-        def swap_labels_in_dataset(dataset, _percentage_to_swap: float):
+        # no_grad decorator to avoid tracking in autograd, thereby saving memory and computations
+        @torch.no_grad()
+        def swap_labels_in_dataset(_dataset, _class_pair_to_swap: list[tuple[int, int]]):
             """
             Swap labels in a dataset based on the class pairs to swap.
-            :param dataset: Dataset to process
-            :param _percentage_to_swap: percentage of samples to execute label swapping
+            :param _dataset: Dataset to process
+            :param _class_pair_to_swap: Tuple of the pair of classes whose labels should be swapped
             :return: Updated images and labels tensors
             """
-            images = dataset.data  # Access dataset images
-            labels = dataset.targets  # Access dataset labels
+            images = _dataset.data  # Access dataset images
+            labels = _dataset.targets  # Access dataset labels
 
-            for class_a, class_b in self.class_pairs_to_swap:
+            for class_a, class_b in _class_pair_to_swap:
                 indices_a = (labels == class_a).nonzero(as_tuple=True)[0]
                 indices_b = (labels == class_b).nonzero(as_tuple=True)[0]
 
-                # TODO: remove after testing
+                # Swap the labels
                 labels[indices_a] = class_b
                 labels[indices_b] = class_a
-
-                # # Swap the labels
-                # if _percentage_to_swap >= 1.0:
-                #     # old behavior (swap all)
-                #     labels[indices_a] = class_b
-                #     labels[indices_b] = class_a
-                # elif _percentage_to_swap <= 0.0:
-                #     # do nothing
-                #     continue
-                # else:
-                #     # gets the total count of the elements belonging to the classes that needs to be swapped
-                #     total_samples_count_a = indices_a.numel()
-                #     total_samples_count_b = indices_b.numel()
-                #
-                #     # calculates the count of the samples whose labels need to be swapped
-                #     swapped_sample_count_a = int(round(_percentage_to_swap * total_samples_count_a))
-                #     swapped_sample_count_b = int(round(_percentage_to_swap * total_samples_count_b))
-                #
-                #     # randomly select 'swapped_sample_count_a' samples from class_a and relabel them to class_b
-                #     if swapped_sample_count_a > 0 and total_samples_count_a > 0:
-                #         indices_to_swap_a = indices_a[torch.randperm(total_samples_count_a)[:swapped_sample_count_a]]
-                #         labels[indices_to_swap_a] = class_b
-                #     # randomly select 'swapped_sample_count_a' samples from class_a and relabel them to class_b
-                #     if swapped_sample_count_b > 0 and total_samples_count_b > 0:
-                #         indices_to_swap_b = indices_b[torch.randperm(total_samples_count_b)[:swapped_sample_count_b]]
-                #         labels[indices_to_swap_b] = class_a
 
             return images, labels
 
         # Check if there are drifted clients
         if self.drifted_client_indices:
-            # Identify the first drifted client to process the dataset and duplicate a copy (not the reference)
-            first_drifted_client = copy.deepcopy(clients[self.drifted_client_indices[0]])
-
-            # Process training dataset
-            train_images, train_labels = swap_labels_in_dataset(first_drifted_client.local_trainset.dataset,
-                                                                percentage_to_swap)
-            first_drifted_client.local_trainset.dataset.data = train_images
-            first_drifted_client.local_trainset.dataset.targets = train_labels
-
-            # Process testing dataset
-            test_images, test_labels = swap_labels_in_dataset(first_drifted_client.testset.dataset, percentage_to_swap)
-            first_drifted_client.testset.dataset.data = test_images
-            first_drifted_client.testset.dataset.targets = test_labels
-
             # Assign the updated datasets to all drifted clients, since they share the same data
             for idx in self.drifted_client_indices:
+                # Identify the first drifted client to process the dataset and duplicate a copy (not the reference)
+                first_drifted_client = copy.deepcopy(clients[idx])
+
+                # Process training dataset
+                train_images, train_labels = swap_labels_in_dataset(first_drifted_client.local_trainset.dataset,
+                                                                    class_pair_to_swap)
+                first_drifted_client.local_trainset.dataset.data = train_images
+                first_drifted_client.local_trainset.dataset.targets = train_labels
+
+                # Process testing dataset
+                test_images, test_labels = swap_labels_in_dataset(first_drifted_client.testset.dataset,
+                                                                  class_pair_to_swap)
+                first_drifted_client.testset.dataset.data = test_images
+                first_drifted_client.testset.dataset.targets = test_labels
+
                 clients[idx].local_trainset.dataset = first_drifted_client.local_trainset.dataset
                 clients[idx].testset.dataset = first_drifted_client.testset.dataset
+
+                if verbose:
+                    print(f"client {idx} train_dataset_id: {id(clients[idx].local_trainset.dataset)}")
+
+        if verbose:
+            for i, c in enumerate(clients):
+                print(f"client {i} train_dataset_id: {id(c.local_trainset.dataset)}")
 
         return clients
 
@@ -471,8 +528,7 @@ def drift_fn(num_client_instances: int, num_training_rounds: int, drift_specs: D
                  drift_localization_factor=drift_specs['drift_localization_factor'],
                  is_synchronous=drift_specs['is_synchronous'],
                  async_drift_specs=drift_specs['async_drift_specs'],
-                 drift_pattern=drift_specs['drift_pattern'],
-                 drift_method=drift_specs['drift_method'],
+                 drift_mode=drift_specs['drift_mode'],
                  drift_start_round=drift_start_round,
                  drift_end_round=drift_end_round,
                  drift_step_rounds=[math.ceil(i * num_training_rounds) for i in drift_specs['drift_step_rounds']],
@@ -493,14 +549,28 @@ def apply_drift(clients: List[Client], drift: Drift) -> List[Client]:
     :param drift: Drift object
     :return: List of Client objects with drifted data (dataloaders)
     """
-    if drift.drift_method == constants.DriftCreationMethods.LABEL_SWAPPING:
+    if drift.drift_mode == constants.DriftMode.LABEL_SWAP_ONCE:
         # For label swapping, application of drift once in the simulation is sufficient & speeds up the simulation
         if not drift.is_already_applied:
+            print("labels swapped once")
             drift.is_already_applied = True
-            return drift.swap_labels(clients, drift.label_swap_percentage_steps[drift.current_drift_step])
+            class_pair_to_swap = drift.class_pairs_to_swap[0]  # There is only single pair to swap
+            return drift.swap_labels(clients, class_pair_to_swap)
         else:
             return clients
-    elif drift.drift_method == constants.DriftCreationMethods.ROTATION:
+    elif drift.drift_mode == constants.DriftMode.LABEL_SWAP_INCREMENTAL_STEPS:
+        # for idx in range(len(drift.class_pairs_to_swap)):   # There are multiple sets of pairs to swap, at different steps
+        #     class_pair_to_swap = drift.class_pairs_to_swap[idx]
+        #     drift.swap_labels(clients, class_pair_to_swap)
+
+        if not drift.is_already_applied:
+            drift.is_already_applied = True
+            class_pair_to_swap = drift.class_pairs_to_swap[drift.current_drift_step]
+            drift.swap_labels(clients, class_pair_to_swap)
+
+        return clients
+
+    elif drift.drift_mode == constants.DriftCreationMethods.ROTATION:
         # Since rotation is continuously applied, it is speed-wise optimum to apply drift for sampled data in each round
         for client in clients:
             # Each client samples data for local training from their mutually own (exclusively partitioned) datasets

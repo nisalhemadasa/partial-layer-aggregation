@@ -176,3 +176,27 @@ def get_unique_labels_per_subset(dataset, subsets: List[Subset]) -> List[np.ndar
         unique_labels_list.append(unique_labels)
 
     return unique_labels_list
+
+
+def get_num_classes_from_dataset(dataset) -> int:
+    """
+    Returns the number of classes in a given dataset.
+    :param dataset: The dataset object (e.g., torchvision dataset)
+    :return: Number of classes in the dataset
+    """
+    # Case 1: torchvision datasets with `.classes`
+    if hasattr(dataset, "classes") and dataset.classes is not None:
+        return len(dataset.classes)
+
+    # Case 2: labels already cached
+    if hasattr(dataset, "_original_targets"):
+        return int(dataset._original_targets.max().item() + 1)
+
+    # Case 3: dataset.targets exists
+    if hasattr(dataset, "targets"):
+        if isinstance(dataset.targets, torch.Tensor):
+            return int(dataset.targets.max().item() + 1)
+        else:
+            return max(dataset.targets) + 1
+
+    raise ValueError("Dataset does not contain label information.")

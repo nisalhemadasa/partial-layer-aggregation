@@ -9,13 +9,14 @@ from typing import List, OrderedDict, Dict
 
 import torch
 
+import constants
 from distance_metrics.distance_metrics import compute_euclidean_distance_weights
 from models.model import CNNModel, set_parameters
 
 
 class FedAvg:
-    def __init__(self):
-        pass
+    def __init__(self, strategy_name: str):
+        self.strategy_name = strategy_name
 
     def aggregate_models(self, server_model: CNNModel,
                          client_model_params_dict: Dict[str, OrderedDict],
@@ -44,5 +45,5 @@ class FedAvg:
 
 def aggregator_fn():
     """ Returns an instance of the FedAvg aggregation strategy """
-    _strategy = FedAvg()
+    _strategy = FedAvg(strategy_name=constants.RecoveryAlgorithm.FEDAVG)
     return _strategy

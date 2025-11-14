@@ -121,6 +121,10 @@ def train_client_models(all_clients, sampled_client_ids, servers: List[Server], 
         # # TODO: remove this after testing
         # all_clients_copy = copy.deepcopy(all_clients)
         # all_clients = apply_drift(all_clients_copy, drift)
+
+        # # TODO: the following needs to add the sampling refresh after drift
+        # for client in all_clients:
+        #     client.sample_data()  # refresh loaders from drifted datasets
     else:
         for client in all_clients:
             # Sample data from the original datasets
@@ -186,14 +190,8 @@ def handle_drift_for_round(round_idx: int, drift: Drift, server_hierarchy: List[
     :param clients: List of client instances
     :return: None
     """
-    # drift_start = drift.drift_step_rounds[0]
-    # drift_end = drift.drift_step_rounds[-1]
-    # TODO: remove after testing
-    drift_start = 10
-    drift_end = 15
-
     # Outside the global drift window
-    if round_idx < drift_start or round_idx >= drift_end:
+    if round_idx < drift.drift_start_round or round_idx >= drift.drift_end_round:
         if drift.is_drift:  # execute only once: after the drift period ends
             # Change the aggregation strategy back to FedAvg outside the drift window
             change_server_aggregation_strategy(server_hierarchy, constants.RecoveryAlgorithm.FEDAVG, drift)
@@ -211,21 +209,26 @@ def handle_drift_for_round(round_idx: int, drift: Drift, server_hierarchy: List[
             drift.is_drift = False
 
         # Mark the end of the drift (in contrast to the before the drift starts), only once
-        if round_idx >= drift_end and not drift.is_drift_end:
+        if round_idx >= drift.drift_end_round and not drift.is_drift_end:
             drift.is_drift_end = True
         return
 
-    next_drift_step_round = drift.drift_step_rounds[drift.current_drift_step + 1]
-    if round_idx >= next_drift_step_round:
-        if not drift.is_drift:  # execute only once: at the beginning of the drift step
-            # The server aggregation strategy needs to change for the FedAU's case, at the start of the drift step.
-            change_server_aggregation_strategy(server_hierarchy, drift_recovery_parameters['recovery_method'], drift)
+    else:
+        next_drift_step_round = drift.drift_step_rounds[drift.current_drift_step + 1]
+        if round_idx >= next_drift_step_round:
+            if not drift.is_drift:  # execute only once: at the beginning of the drift step
+                # The server aggregation strategy needs to change for the FedAU's case, at the start of the drift step.
+                change_server_aggregation_strategy(server_hierarchy, drift_recovery_parameters['recovery_method'], drift)
 
-            # Change the clients' (all of them) drift recovery method
-            change_client_drift_recovery_method(clients, drift_recovery_parameters['recovery_method'],
-                                                drift.drifted_client_indices)
+                # Change the clients' (all of them) drift recovery method
+                change_client_drift_recovery_method(clients, drift_recovery_parameters['recovery_method'],
+                                                    drift.drifted_client_indices)
 
-            drift.is_drift = True  # Drift occurs in the current step
-        # TODO: remove after testing
-        # drift.current_drift_step += 1  # Move to the next drift step
+                drift.is_drift = True  # Drift occurs in the current step
+
+            drift.current_drift_step += 1  # Move to the next drift step
+
+            # should not happen in LABEL_SWAP_ONCE's case, because apply_drift() is called once in that case
+            if not drift.drift_mode == constants.DriftMode.LABEL_SWAP_ONCE:
+                drift.is_already_applied = False  # Reset the flag to apply drift again in the next step
 
