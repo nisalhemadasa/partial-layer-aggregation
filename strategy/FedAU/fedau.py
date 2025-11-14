@@ -10,13 +10,15 @@ from typing import OrderedDict, Dict, List
 
 import torch
 
+import constants
 from models.model import CNNModel, split_to_extractor_and_classifier, set_parameters
 from strategy.FedAvg import fedavg
 
 
 class FedAU:
-    def __init__(self):
-        pass
+    def __init__(self, strategy_name: str):
+        self.strategy_name = strategy_name
+
 
     def aggregate_models(self, server_model: CNNModel, client_model_params_dict: Dict[str, OrderedDict],
                          auxiliary_classifier_params_dict: Dict[str, OrderedDict], ema_weight: float) -> None:
@@ -102,5 +104,5 @@ def average_model_parameters(model_params_list: List[OrderedDict]) -> OrderedDic
 
 def aggregator_fn():
     """ Returns an instance of the FedAvg aggregation strategy """
-    _strategy = FedAU()
+    _strategy = FedAU(strategy_name=constants.RecoveryAlgorithm.FEDAU)
     return _strategy

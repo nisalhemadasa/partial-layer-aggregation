@@ -72,7 +72,6 @@ class Client:
             if _is_drift_end and drift_recovery_method == constants.RecoveryAlgorithm.FLUID:   # after drift ends
                 # Rapid retraining (2nd order) + reinitialization of client parameters from the global model from scratch
                 rapid_train(self.model, self.trainloader, _epochs=self.epochs, _batch_size=self.mini_batch_size)
-                print("RRT")
             else:   # before drift begins
                 # Train the client model using new data and server parameters
                 train(self.model, self.trainloader, self.epochs)
@@ -84,7 +83,6 @@ class Client:
             elif drift_recovery_method == constants.RecoveryAlgorithm.RRT:
                 # Rapid retraining (2nd order) + reinitialization of client parameters from the global model from scratch
                 rapid_train(self.model, self.trainloader, _epochs=self.epochs, _batch_size=self.mini_batch_size)
-                print("RRT")
             elif drift_recovery_method == constants.RecoveryAlgorithm.FEDAU or drift_recovery_method == constants.RecoveryAlgorithm.FLUID:
                 # FedAU client side operations
                 self.auxiliary_classifier_parameters = fedau_clientside_train(self.model, self.trainloader,
@@ -92,7 +90,6 @@ class Client:
                                                                               _drifted_client_indices, _client_id,
                                                                               _epochs=self.epochs,
                                                                               _mini_batch_size=self.mini_batch_size)
-                print("FedAU")
 
     def evaluate(self):
         """ Evaluate the client model on the validation data and return the loss and accuracy """

@@ -48,7 +48,7 @@ class Server:
             # FedAvg: For internal servers or when there are no drifted clients
             self.strategy.aggregate_models(self.model, client_model_parameters)
 
-    def evaluate(self, _test_set: DataLoader) -> Tuple[float, float]:
+    def model_evaluate(self, _test_set: DataLoader) -> Tuple[float, float]:
         """
         Evaluate the server model using the validation data.
         :param _test_set: test data
@@ -101,8 +101,7 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
                 # TODO: beware that FedAU depicted behavior of performance compromise, that this code section may cause
                 # Get auxiliary classifier parameters from drifted clients only
                 if drift.is_drift:
-                    if server.strategy == constants.RecoveryAlgorithm.FEDAU or server.strategy == constants.RecoveryAlgorithm.FLUID:
-                        print('inside!!!')
+                    if server.strategy.strategy_name == constants.RecoveryAlgorithm.FEDAU or server.strategy.strategy_name == constants.RecoveryAlgorithm.FLUID:
                         drifted_client_ids = set(drift.drifted_client_indices or [])
                         if drift.is_drift and drifted_client_ids:
                             # Collect the parameters to a dictionary (client_id: aux_classifier_parameters)
@@ -134,7 +133,7 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
 
             # Evaluate the server model
             if is_evaluate_server_model:
-                loss, accuracy = server.evaluate(server_test_set)
+                loss, accuracy = server.model_evaluate(server_test_set)
                 loss_and_accuracy_at_level.append((loss, accuracy))
 
         if is_evaluate_server_model:
@@ -160,7 +159,7 @@ def model_distribution(server_hierarchy: List[List[Server]], server_test_set: Da
 
     # Evaluate the accuracy of the root server model
     global_server = server_hierarchy[0][0]
-    loss, accuracy = global_server.evaluate(server_test_set)
+    loss, accuracy = global_server.model_evaluate(server_test_set)
 
     # Store the loss and accuracy of the global server model
     server_loss_and_accuracy.append([(loss, accuracy)])
@@ -179,7 +178,7 @@ def model_distribution(server_hierarchy: List[List[Server]], server_test_set: Da
             server.train(server_parameters, None, None)
 
             # Evaluate the edge server model
-            loss, accuracy = server.evaluate(server_test_set)
+            loss, accuracy = server.model_evaluate(server_test_set)
             loss_and_accuracy_at_level.append((loss, accuracy))
 
         server_loss_and_accuracy.append(loss_and_accuracy_at_level)
