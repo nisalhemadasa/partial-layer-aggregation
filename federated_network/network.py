@@ -29,8 +29,7 @@ from plots.plotting import plot_client_performance_vs_rounds, plot_server_perfor
 class FederatedNetwork:
     def __init__(self, num_iid_client_instances, num_noniid_client_instances, server_tree_layout, num_training_rounds,
                  dataset_name, drift_specs, simulation_parameters, drift_recovery_parameters,
-                 client_select_fraction=0.5,
-                 minibatch_size=32, num_local_epochs=4):
+                 client_select_fraction=0.5, minibatch_size=128, num_local_epochs=3):
         # Dataset name
         self.dataset_name = dataset_name
 
@@ -165,11 +164,6 @@ class FederatedNetwork:
                                    self.clients)
 
             # Clients sampled for a single round. In this simulation, all clients are sampled, in order (not randomly)
-            # if _round > self.drift.drift_step_rounds[0] + 1 and _round >= self.drift.drift_step_rounds[-1]:
-            #     # TODO: remove after testing
-            #     sampled_clients = [client for client in self.clients if
-            #                           client.client_id not in self.drift.drifted_client_indices]
-            # else:
             sampled_clients = self.clients
 
             # Extract the sampled client IDs and store them
@@ -240,15 +234,40 @@ class FederatedNetwork:
         client_averages = compute_client_average_metrics(clients_loss_and_accuracy)
 
         # ==========LOGGING FUNCTION CALLS==============
+        # Split the client performance to drifted and non-drifted clients
+        if self.drift.is_synchronous:
+            non_drifted_clients_loss_and_accuracy, drifted_clients_loss_and_accuracy = split_clients_loss_and_accuracy(
+                clients_loss_and_accuracy, self.drift.drifted_client_indices, None)
+        else:
+            non_drifted_clients_loss_and_accuracy, drifted_clients_loss_and_accuracy = split_clients_loss_and_accuracy(
+                clients_loss_and_accuracy, self.drift.drifted_client_indices,
+                self.drift.async_drift_specs['drift_groups'])
+
+        # Get average performance of the clients
+        non_drifted_client_averages = compute_client_average_metrics(non_drifted_clients_loss_and_accuracy)
+        if self.drift.is_synchronous:
+            drifted_client_averages = compute_client_average_metrics(drifted_clients_loss_and_accuracy)
+        else:
+            drifted_client_averages = []
+            for drited_groups in drifted_clients_loss_and_accuracy:
+                drifted_client_averages.append(compute_client_average_metrics(drited_groups))
+
         if log_save_path is None:
             log_save_path = constants.Paths.LOG_SAVE_PATH
 
         # Log the performance of the clients
         write_logs(clients_loss_and_accuracy, file_name=log_save_path + constants.Logs.CLIENT_LOG)
         # Log the performance of the clients separated by drifted and non-drifted
-        write_logs(clients_loss_and_accuracy, file_name=log_save_path + constants.Logs.CLIENT_LOG)
+        write_logs(non_drifted_clients_loss_and_accuracy,
+                   file_name=log_save_path + constants.Logs.NON_DRIFTED_CLIENT_LOG)
+        write_logs(drifted_clients_loss_and_accuracy,
+                   file_name=log_save_path + constants.Logs.DRIFTED_CLIENT_LOG)
         # Average performance of the clients
-        write_logs(client_averages, file_name=log_save_path + constants.Logs.CLIENT_AVG_LOG)
+        write_logs(non_drifted_client_averages,
+                   file_name=log_save_path + constants.Logs.NON_DRIFTED_CLIENT_AVG_LOG)
+        write_logs(drifted_client_averages,
+                   file_name=log_save_path + constants.Logs.DRIFTED_CLIENT_AVG_LOG)
+        # write_logs(client_averages, file_name=log_save_path + constants.Logs.CLIENT_AVG_LOG)
 
         # Get average performance of the servers
         server_level_averages, server_overall_averages = compute_server_average_metrics(server_loss_and_accuracy)

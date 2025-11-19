@@ -165,8 +165,12 @@ class DriftMode:
 class Logs:
     CLIENT_LOG = 'client_log'
     SERVER_LOG = 'server_log'
-    CLIENT_LOG = 'non_drifted_client_log'
-    CLIENT_AVG_LOG = 'client_avg_log'
+    NON_DRIFTED_CLIENT_LOG = 'non_drifted_client_log'
+    DRIFTED_CLIENT_LOG = 'drifted_client_log'
+    NON_DRIFTED_CLIENT_AVG_LOG = 'non_drifted_client_avg_log'
+    DRIFTED_CLIENT_AVG_LOG = 'drifted_client_avg_log'
+    # CLIENT_LOG = 'non_drifted_client_log'
+    # CLIENT_AVG_LOG = 'client_avg_log'
     SERVER_LVL_AVG_LOG = 'server_level_avg_log'
     SERVER_OVERALL_AVG_LOG = 'server_overall_avg_log'
 
