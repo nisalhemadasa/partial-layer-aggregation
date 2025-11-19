@@ -39,78 +39,78 @@ class SimpleModel(nn.Module):
         return x
 
 
-class CNNModel(nn.Module):
-    def __init__(self):
-        """Defined for both MNIST and F_MNIST datasets"""
-        super(CNNModel, self).__init__()
-
-        self.pool = nn.MaxPool2d(2, 2, 1, 2)
-
-        self.conv1 = nn.Conv2d(1, 6, 5, 1, 2)
-        self.conv2 = nn.Conv2d(6, 16, 5, 1, 2)
-        self.conv3 = nn.Conv2d(16, 32, 3, 1, 2)
-        self.conv4 = nn.Conv2d(32, 64, 3, 1, 2)
-
-        self.fc1 = nn.Linear(64 * 4 * 4, 120)
-        self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, 10)
-
-        self.bn1 = nn.BatchNorm2d(6)
-        self.bn2 = nn.BatchNorm2d(16)
-        self.bn3 = nn.BatchNorm2d(32)
-        self.bn4 = nn.BatchNorm2d(64)
-        self.bn5 = nn.BatchNorm1d(120)
-        self.bn6 = nn.BatchNorm1d(84)
-
-    def forward(self, x):
-        # print("Input shape:", x.shape)
-        x = self.pool(F.relu(self.bn1(self.conv1(x))))
-        # print("After conv1 and pool:", x.shape)
-        x = self.pool(F.relu(self.bn2(self.conv2(x))))
-        # print("After conv2 and pool:", x.shape)
-        x = self.pool(F.relu(self.bn3(self.conv3(x))))
-        # print("After conv3 and pool:", x.shape)
-        x = self.pool(F.relu(self.bn4(self.conv4(x))))
-        # print("After conv4 and pool:", x.shape)
-        x = x.view(-1, 64 * 4 * 4)
-        # print("After view:", x.shape)
-        x = F.relu(self.bn5(self.fc1(x)))
-        # print("After fc1:", x.shape)
-        x = F.relu(self.bn6(self.fc2(x)))
-        # print("After fc2:", x.shape)
-        x = self.fc3(x)  # classifier in the case of FedAU
-        # print("Output shape:", x.shape)
-        return x
-
-# # for MNIST and F_MNIST dataset (28 x 28 dimensional images)
 # class CNNModel(nn.Module):
 #     def __init__(self):
-#         """Defines the architecture of the network"""
+#         """Defined for both MNIST and F_MNIST datasets"""
 #         super(CNNModel, self).__init__()
-#         self.conv1 = nn.Conv2d(in_channels=1, out_channels=32, kernel_size=3)
-#         self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3)
-#         self.fc1 = nn.Linear(in_features=64 * 5 * 5, out_features=128)
-#         self.fc2 = nn.Linear(in_features=128, out_features=10)
-#         self.dropout = nn.Dropout(p=0.5)
+#
+#         self.pool = nn.MaxPool2d(2, 2, 1, 2)
+#
+#         self.conv1 = nn.Conv2d(1, 6, 5, 1, 2)
+#         self.conv2 = nn.Conv2d(6, 16, 5, 1, 2)
+#         self.conv3 = nn.Conv2d(16, 32, 3, 1, 2)
+#         self.conv4 = nn.Conv2d(32, 64, 3, 1, 2)
+#
+#         self.fc1 = nn.Linear(64 * 4 * 4, 120)
+#         self.fc2 = nn.Linear(120, 84)
+#         self.fc3 = nn.Linear(84, 10)
+#
+#         self.bn1 = nn.BatchNorm2d(6)
+#         self.bn2 = nn.BatchNorm2d(16)
+#         self.bn3 = nn.BatchNorm2d(32)
+#         self.bn4 = nn.BatchNorm2d(64)
+#         self.bn5 = nn.BatchNorm1d(120)
+#         self.bn6 = nn.BatchNorm1d(84)
 #
 #     def forward(self, x):
-#         """Describes how input data flows through the network"""
-#         x = torch.relu(self.conv1(x))
-#         x = torch.max_pool2d(x, kernel_size=2, stride=2)
-#         x = torch.relu(self.conv2(x))
-#         x = torch.max_pool2d(x, kernel_size=2, stride=2)
-#         x = x.view(-1, 64 * 5 * 5)
-#         x = torch.relu(self.fc1(x))
-#         x = self.dropout(x)
-#         x = self.fc2(x)
-#         # return x
-#         return torch.log_softmax(x, dim=1)
+#         # print("Input shape:", x.shape)
+#         x = self.pool(F.relu(self.bn1(self.conv1(x))))
+#         # print("After conv1 and pool:", x.shape)
+#         x = self.pool(F.relu(self.bn2(self.conv2(x))))
+#         # print("After conv2 and pool:", x.shape)
+#         x = self.pool(F.relu(self.bn3(self.conv3(x))))
+#         # print("After conv3 and pool:", x.shape)
+#         x = self.pool(F.relu(self.bn4(self.conv4(x))))
+#         # print("After conv4 and pool:", x.shape)
+#         x = x.view(-1, 64 * 4 * 4)
+#         # print("After view:", x.shape)
+#         x = F.relu(self.bn5(self.fc1(x)))
+#         # print("After fc1:", x.shape)
+#         x = F.relu(self.bn6(self.fc2(x)))
+#         # print("After fc2:", x.shape)
+#         x = self.fc3(x)  # classifier in the case of FedAU
+#         # print("Output shape:", x.shape)
+#         return x
+
+# for MNIST and F_MNIST dataset (28 x 28 dimensional images)
+class CNNModel(nn.Module):
+    def __init__(self):
+        """Defines the architecture of the network"""
+        super(CNNModel, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels=1, out_channels=32, kernel_size=3)
+        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3)
+        self.fc1 = nn.Linear(in_features=64 * 5 * 5, out_features=128)
+        self.fc2 = nn.Linear(in_features=128, out_features=10)
+        self.dropout = nn.Dropout(p=0.5)
+
+    def forward(self, x):
+        """Describes how input data flows through the network"""
+        x = torch.relu(self.conv1(x))
+        x = torch.max_pool2d(x, kernel_size=2, stride=2)
+        x = torch.relu(self.conv2(x))
+        x = torch.max_pool2d(x, kernel_size=2, stride=2)
+        x = x.view(-1, 64 * 5 * 5)
+        x = torch.relu(self.fc1(x))
+        x = self.dropout(x)
+        x = self.fc2(x)
+        # return x
+        return torch.log_softmax(x, dim=1)
 
 
 def split_to_extractor_and_classifier(_model: nn.Module, _model_params: OrderedDict) -> tuple[OrderedDict, OrderedDict]:
     """
     Split the model/model parameters into feature extractor and classifier parts. The feature extractor includes all layers except the
-    final fully connected layer (fc3), while the classifier includes only the final fully connected layer.
+    final fully connected layer (fc2), while the classifier includes only the final fully connected layer.
     :param _model: The model to split
     :param _model_params: The model parameters to split
     :return: A tuple containing two OrderedDicts: (parameters of the feature extractor, parameters of the classifier)
@@ -118,11 +118,11 @@ def split_to_extractor_and_classifier(_model: nn.Module, _model_params: OrderedD
     if _model is not None:
         _model_params = _model.state_dict()
 
-    # get the extractor parameters (all except fc3 layer)
-    extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if not k.startswith("fc3."))
+    # get the extractor parameters (all except fc2 layer)
+    extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if not k.startswith("fc2."))
 
-    # get the classifier parameters (fc3 layer)
-    classifier_params = OrderedDict((k, v) for k, v in _model_params.items() if k.startswith("fc3."))
+    # get the classifier parameters (fc2 layer)
+    classifier_params = OrderedDict((k, v) for k, v in _model_params.items() if k.startswith("fc2."))
 
     return extractor_params, classifier_params
 
@@ -192,10 +192,10 @@ def auxiliary_model_train(_model: nn.Module, _dataset: DataLoader, _server_model
     aux_model = CNNModel().to(DEVICE)  # initialize using a fresh base model, similar to learning module architecture
     set_parameters(aux_model, _server_model_params) # load server parameters to auxiliary model
 
-    # Replace fc3 layer with a new nn.Linear of the same shape
-    aux_model.fc3 = nn.Linear(aux_model.fc3.in_features, aux_model.fc3.out_features)
+    # Replace fc2 layer with a new nn.Linear of the same shape
+    aux_model.fc2 = nn.Linear(aux_model.fc2.in_features, aux_model.fc2.out_features)
 
-    # Train the auxiliary model using data with new patterns
+    # Train the auxiliary model using data, whose drifted samples are re-labeled using random labels
     # TODO: create trainloader for drifted local_trainset and non-drifted local_trainset
     # drifted_dataset =
     # non - drifted_dataset =
