@@ -8,6 +8,7 @@ Version: 1.0
 from __future__ import annotations
 
 import os
+import random
 
 import numpy as np
 import torch
@@ -178,7 +179,7 @@ def get_unique_labels_per_subset(dataset, subsets: List[Subset]) -> List[np.ndar
     return unique_labels_list
 
 
-def get_num_classes_from_dataset(dataset) -> int:
+def get_num_classes_from_dataset(dataset: Dataset) -> int:
     """
     Returns the number of classes in a given dataset.
     :param dataset: The dataset object (e.g., torchvision dataset)
@@ -200,3 +201,18 @@ def get_num_classes_from_dataset(dataset) -> int:
             return max(dataset.targets) + 1
 
     raise ValueError("Dataset does not contain label information.")
+
+
+def get_random_label(labels: Tensor):
+    """
+    Returns a random label from all available class labels in the dataset.
+    Works with torchvision datasets like MNIST, CIFAR, Fashion-MNIST, etc.
+    :param labels: The labels tensor from the dataset
+    :return: A random label from the dataset
+    """
+    # Convert to a Python list for safe indexing
+    if not isinstance(labels, list):
+        labels = labels.tolist()
+
+    # Pick and return a random label
+    return random.choice(labels)

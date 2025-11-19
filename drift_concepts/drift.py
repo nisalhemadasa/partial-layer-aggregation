@@ -16,7 +16,7 @@ from scipy.ndimage import rotate
 import torchvision.transforms as transforms
 
 import constants
-from data.utils import get_num_classes_from_dataset
+from data.utils import get_num_classes_from_dataset, get_random_label
 from federated_network.client import Client
 
 
@@ -236,6 +236,26 @@ class Drift:
 
             return images, labels
 
+        def create_auxiliary_dataset(_dataset, _class_pair_to_swap: list[tuple[int, int]]):
+            """
+            Create an auxiliary dataset with swapped samples assigned to random labels for training the auxiliary model.
+            :param _dataset: Training dataset to process
+            :param _class_pair_to_swap: Tuple of the pair of classes whose labels should be swapped
+            :return: Auxiliary images and labels tensors
+            """
+            aux_images = _dataset.data  # Access dataset images
+            aux_labels = _dataset.targets  # Access dataset labels
+
+            for class_a, class_b in _class_pair_to_swap:
+                indices_a = (aux_labels == class_a).nonzero(as_tuple=True)[0]
+                indices_b = (aux_labels == class_b).nonzero(as_tuple=True)[0]
+
+                # Swap the labels
+                aux_labels[indices_a] = get_random_label(aux_labels)
+                aux_labels[indices_b] = get_random_label(aux_labels)
+
+            return aux_images, aux_labels
+
         # Check if there are drifted clients
         if self.drifted_client_indices:
             # Assign the updated datasets to all drifted clients, since they share the same data
@@ -257,6 +277,10 @@ class Drift:
 
                 clients[idx].local_trainset.dataset = first_drifted_client.local_trainset.dataset
                 clients[idx].testset.dataset = first_drifted_client.testset.dataset
+
+                # FedAU: create dataset with the swapped samples assigning random labels for training the auxiliary model
+                if clients[idx].drift_recovery_method == constants.RecoveryAlgorithm.FEDAU:
+                    aux_train_images, aux_train_labels= create_auxiliary_dataset(first_drifted_client.local_trainset, class_pair_to_swap)
 
                 if verbose:
                     print(f"client {idx} train_dataset_id: {id(clients[idx].local_trainset.dataset)}")
