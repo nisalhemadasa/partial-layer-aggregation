@@ -16,7 +16,7 @@ from scipy.ndimage import rotate
 import torchvision.transforms as transforms
 
 import constants
-from data.utils import get_num_classes_from_dataset, get_random_label
+from data.utils import get_num_classes_from_dataset, get_random_labels, convert_dataset_to_loader
 from federated_network.client import Client
 
 
@@ -243,18 +243,25 @@ class Drift:
             :param _class_pair_to_swap: Tuple of the pair of classes whose labels should be swapped
             :return: Auxiliary images and labels tensors
             """
+            # Clone the original labels and store it in a new attribute
+            _dataset.aux_data = _dataset.data.clone()
+            _dataset.aux_labels = _dataset.targets.clone()
+
             aux_images = _dataset.data  # Access dataset images
             aux_labels = _dataset.targets  # Access dataset labels
+            unique_labels = list(np.unique(aux_labels))  # get the list of unique labels in the dataset
 
             for class_a, class_b in _class_pair_to_swap:
                 indices_a = (aux_labels == class_a).nonzero(as_tuple=True)[0]
                 indices_b = (aux_labels == class_b).nonzero(as_tuple=True)[0]
 
-                # Swap the labels
-                aux_labels[indices_a] = get_random_label(aux_labels)
-                aux_labels[indices_b] = get_random_label(aux_labels)
+                # Swap the labels-to-swap with random labels
+                aux_labels[indices_a] = get_random_labels(unique_labels, num_elements=indices_a.size()[0])
+                aux_labels[indices_b] = get_random_labels(unique_labels, num_elements=indices_b.size()[0])
 
-            return aux_images, aux_labels
+            _dataset.aux_data = aux_images
+            _dataset.aux_labels = aux_labels
+            return _dataset
 
         # Check if there are drifted clients
         if self.drifted_client_indices:
@@ -262,6 +269,12 @@ class Drift:
             for idx in self.drifted_client_indices:
                 # Identify the first drifted client to process the dataset and duplicate a copy (not the reference)
                 first_drifted_client = copy.deepcopy(clients[idx])
+
+                # FedAU: create dataset with the swapped samples assigning random labels for training the auxiliary model
+                if clients[idx].drift_recovery_method == constants.RecoveryAlgorithm.FEDAU:
+                    aux_dataset = create_auxiliary_dataset(first_drifted_client.local_trainset.dataset,
+                                                           class_pair_to_swap)
+                    clients[idx].aux_dataloader = convert_dataset_to_loader(aux_dataset, clients[idx].mini_batch_size)
 
                 # Process training dataset
                 train_images, train_labels = swap_labels_in_dataset(first_drifted_client.local_trainset.dataset,
@@ -277,10 +290,6 @@ class Drift:
 
                 clients[idx].local_trainset.dataset = first_drifted_client.local_trainset.dataset
                 clients[idx].testset.dataset = first_drifted_client.testset.dataset
-
-                # FedAU: create dataset with the swapped samples assigning random labels for training the auxiliary model
-                if clients[idx].drift_recovery_method == constants.RecoveryAlgorithm.FEDAU:
-                    aux_train_images, aux_train_labels= create_auxiliary_dataset(first_drifted_client.local_trainset, class_pair_to_swap)
 
                 if verbose:
                     print(f"client {idx} train_dataset_id: {id(clients[idx].local_trainset.dataset)}")

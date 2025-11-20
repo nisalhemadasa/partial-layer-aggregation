@@ -127,9 +127,9 @@ def split_to_extractor_and_classifier(_model: nn.Module, _model_params: OrderedD
     return extractor_params, classifier_params
 
 
-def fedau_clientside_train(_model: nn.Module, _dataset: DataLoader, _server_model_params: OrderedDict,
-                           _drifted_client_indices: List[int], _client_id, _epochs: int,
-                           _mini_batch_size: int) -> OrderedDict:
+def fedau_clientside_train(_model: nn.Module, _dataset: DataLoader, _aux_dataset: DataLoader,
+                           _server_model_params: OrderedDict, _drifted_client_indices: List[int], _client_id,
+                           _epochs: int, _mini_batch_size: int) -> OrderedDict:
     """
     Performs clients dei training operations of the FedAU algorithm, following [2]. 
     This includes training the (1) learning module and (2) auxiliary module
@@ -139,6 +139,7 @@ def fedau_clientside_train(_model: nn.Module, _dataset: DataLoader, _server_mode
     Proceedings of the 33rd International Joint Conference on Artificial Intelligence (IJCAI-24)
     :param _model: Core learning model
     :param _dataset: The dataloader containing training dataset
+    :param _aux_dataset: The dataloader containing auxiliary training dataset
     :param _server_model_params: The server model parameters (weights and biases from the server)
     :param _client_id: ID of the given client
     :param _drifted_client_indices: List of ID's of the drifted clients
@@ -151,7 +152,7 @@ def fedau_clientside_train(_model: nn.Module, _dataset: DataLoader, _server_mode
 
     # FedAU: Auxiliary module training, only for drifted clients #TODO: implement: drift detection/trusted clients
     if _client_id in _drifted_client_indices:
-        return auxiliary_model_train(_model, _dataset, _server_model_params, _epochs=_epochs,
+        return auxiliary_model_train(_model, _aux_dataset, _server_model_params, _epochs=_epochs,
                                      _batch_size=_mini_batch_size)
 
     return None
@@ -174,14 +175,14 @@ def learning_model_train(_model: nn.Module, _dataset: DataLoader, _server_model_
     train(_model, _dataset, _epochs)  # regular training step for learning module
 
 
-def auxiliary_model_train(_model: nn.Module, _dataset: DataLoader, _server_model_params: OrderedDict, _epochs: int,
+def auxiliary_model_train(_model: nn.Module, _aux_dataset: DataLoader, _server_model_params: OrderedDict, _epochs: int,
                           _batch_size: int, _verbose: bool = False) -> OrderedDict:
     """
     Trains the auxiliary model (client side), following [2].
     Then the classifier parameters of the auxiliary model are extracted and assigned to the
     _auxiliary_classifier_parameters attribute of the given client.
     :param _model: Core learning model
-    :param _dataset: The dataloader containing training dataset
+    :param _aux_dataset: The dataloader containing auxiliary training dataset
     :param _server_model_params: The server model parameters (weights and biases from the server)
     :param _epochs: The number of epochs to train
     :param _batch_size: The batch size to use during training
@@ -190,17 +191,13 @@ def auxiliary_model_train(_model: nn.Module, _dataset: DataLoader, _server_model
     """
     # Initialize the auxiliary model
     aux_model = CNNModel().to(DEVICE)  # initialize using a fresh base model, similar to learning module architecture
-    set_parameters(aux_model, _server_model_params) # load server parameters to auxiliary model
+    set_parameters(aux_model, _server_model_params)  # load server parameters to auxiliary model
 
     # Replace fc2 layer with a new nn.Linear of the same shape
     aux_model.fc2 = nn.Linear(aux_model.fc2.in_features, aux_model.fc2.out_features)
 
-    # Train the auxiliary model using data, whose drifted samples are re-labeled using random labels
-    # TODO: create trainloader for drifted local_trainset and non-drifted local_trainset
-    # drifted_dataset =
-    # non - drifted_dataset =
-
-    train(aux_model, _dataset, _epochs=_epochs, verbose=_verbose)
+    # Train the auxiliary model using auxiliary data; drifted samples are re-labeled using random labels
+    train(aux_model, _aux_dataset, _epochs=_epochs, verbose=_verbose)
 
     # get the classifier of the auxiliary module
     _, _auxiliary_classifier_params = split_to_extractor_and_classifier(aux_model, None)
@@ -451,7 +448,7 @@ def set_parameters(_model: nn.Module, parameters: OrderedDict) -> None:
     _model.load_state_dict(parameters, strict=True)
 
 
-def get_parameters_as_np_array(_model:  nn.Module) -> List[np.ndarray]:
+def get_parameters_as_np_array(_model: nn.Module) -> List[np.ndarray]:
     """
     Set the model weights and biases
     :param _model: The model to get parameters from

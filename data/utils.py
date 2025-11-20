@@ -203,16 +203,15 @@ def get_num_classes_from_dataset(dataset: Dataset) -> int:
     raise ValueError("Dataset does not contain label information.")
 
 
-def get_random_label(labels: Tensor):
+def get_random_labels(labels: List[int], num_elements: int) -> Tensor:
     """
-    Returns a random label from all available class labels in the dataset.
-    Works with torchvision datasets like MNIST, CIFAR, Fashion-MNIST, etc.
-    :param labels: The labels tensor from the dataset
-    :return: A random label from the dataset
+    Returns a list random labels of size num_elements (belonging to all available class labels in the dataset).
+    Works with torchvision datasets like MNIST, CIFAR-10, Fashion-MNIST, etc.
+    :param labels: Unique labels from the dataset
+    :param num_elements: Size of the list of random labels to return
+    :return: A tensor of random labels
     """
-    # Convert to a Python list for safe indexing
-    if not isinstance(labels, list):
-        labels = labels.tolist()
-
-    # Pick and return a random label
-    return random.choice(labels)
+    # Generate a list of random labels
+    random_labels = random.choices(labels, k=num_elements)
+    # return as a tensor
+    return torch.tensor(random_labels, dtype=torch.long)
