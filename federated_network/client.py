@@ -10,7 +10,7 @@ from collections import OrderedDict
 from typing import List
 
 import torch
-from torch.utils.data import Dataset, Subset
+from torch.utils.data import Dataset, Subset, DataLoader
 
 import constants
 from data.utils import convert_dataset_to_loader
@@ -37,6 +37,7 @@ class Client:
         self.testloader = None  # initialized only when sample_data() is called
         self.parent_server_id = None  # server ID in the server hierarchy to which the client is connected
         self.auxiliary_classifier_parameters = None  # distance of the client from the server in the server hierarchy
+        self.aux_trainloader = None  # dateset with random labels for training the auxiliary classifier in FedAU
 
     def get_model_weights(self):
         """ Get the model weights and biases """
@@ -69,10 +70,10 @@ class Client:
         :return: None
         """
         if not _is_drift:
-            if _is_drift_end and drift_recovery_method == constants.RecoveryAlgorithm.FLUID:   # after drift ends
+            if _is_drift_end and drift_recovery_method == constants.RecoveryAlgorithm.FLUID:  # after drift ends
                 # Rapid retraining (2nd order) + reinitialization of client parameters from the global model from scratch
                 rapid_train(self.model, self.trainloader, _epochs=self.epochs, _batch_size=self.mini_batch_size)
-            else:   # before drift begins
+            else:  # before drift begins
                 # Train the client model using new data and server parameters
                 train(self.model, self.trainloader, self.epochs)
         else:
@@ -86,6 +87,7 @@ class Client:
             elif drift_recovery_method == constants.RecoveryAlgorithm.FEDAU or drift_recovery_method == constants.RecoveryAlgorithm.FLUID:
                 # FedAU client side operations
                 self.auxiliary_classifier_parameters = fedau_clientside_train(self.model, self.trainloader,
+                                                                              self.aux_trainloader,
                                                                               server_model_parameters,
                                                                               _drifted_client_indices, _client_id,
                                                                               _epochs=self.epochs,

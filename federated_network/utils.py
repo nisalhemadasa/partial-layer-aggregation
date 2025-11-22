@@ -118,13 +118,9 @@ def train_client_models(all_clients, sampled_client_ids, servers: List[Server], 
         # Sample data from the drift applied datasets
         _ = apply_drift(all_clients, drift)
 
-        # # TODO: remove this after testing
-        # all_clients_copy = copy.deepcopy(all_clients)
-        # all_clients = apply_drift(all_clients_copy, drift)
-
         # # TODO: the following needs to add the sampling refresh after drift
-        # for client in all_clients:
-        #     client.sample_data()  # refresh loaders from drifted datasets
+        for client in all_clients:
+            client.sample_data()  # refresh loaders from drifted datasets
     else:
         for client in all_clients:
             # Sample data from the original datasets

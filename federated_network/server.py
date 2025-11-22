@@ -98,7 +98,6 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
                 client_model_parameters = {client_id: sampled_clients[client_id].model.state_dict()
                                            for client_id in server.client_ids}
 
-                # TODO: beware that FedAU depicted behavior of performance compromise, that this code section may cause
                 # Get auxiliary classifier parameters from drifted clients only
                 if drift.is_drift:
                     if server.strategy.strategy_name == constants.RecoveryAlgorithm.FEDAU or server.strategy.strategy_name == constants.RecoveryAlgorithm.FLUID:

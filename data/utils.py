@@ -8,6 +8,7 @@ Version: 1.0
 from __future__ import annotations
 
 import os
+import random
 
 import numpy as np
 import torch
@@ -45,7 +46,7 @@ class CustomDataset(Dataset):
         return image, label
 
 
-def convert_dataset_to_loader(_dataset: data, _batch_size: int, _is_shuffle: bool = True) -> DataLoader:
+def convert_dataset_to_loader(_dataset: Dataset, _batch_size: int, _is_shuffle: bool = True) -> DataLoader:
     """
     Converts the Dataset object to DataLoader object.
     :param _dataset: Dataset (torch.utils.data objects) object that needs to be converted to DataLoader object.
@@ -178,7 +179,7 @@ def get_unique_labels_per_subset(dataset, subsets: List[Subset]) -> List[np.ndar
     return unique_labels_list
 
 
-def get_num_classes_from_dataset(dataset) -> int:
+def get_num_classes_from_dataset(dataset: Dataset) -> int:
     """
     Returns the number of classes in a given dataset.
     :param dataset: The dataset object (e.g., torchvision dataset)
@@ -200,3 +201,17 @@ def get_num_classes_from_dataset(dataset) -> int:
             return max(dataset.targets) + 1
 
     raise ValueError("Dataset does not contain label information.")
+
+
+def get_random_labels(labels: List[int], num_elements: int) -> Tensor:
+    """
+    Returns a list random labels of size num_elements (belonging to all available class labels in the dataset).
+    Works with torchvision datasets like MNIST, CIFAR-10, Fashion-MNIST, etc.
+    :param labels: Unique labels from the dataset
+    :param num_elements: Size of the list of random labels to return
+    :return: A tensor of random labels
+    """
+    # Generate a list of random labels
+    random_labels = random.choices(labels, k=num_elements)
+    # return as a tensor
+    return torch.tensor(random_labels, dtype=torch.long)
