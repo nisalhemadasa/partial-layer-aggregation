@@ -126,9 +126,15 @@ def change_client_drift_recovery_method(clients: List[Client], drift_recovery_me
     :param drift_recovery_method: New drift recovery method to be set
     :param drifted_client_indices: List of client indices that have experienced drift
     """
-    for client in clients:
-        if client.client_id in drifted_client_indices:
-            client.drift_recovery_method = drift_recovery_method
+    # TODO: here for the FedEx, it has to change for all 3 situations
+    if not drift_recovery_method == constants.RecoveryAlgorithm.FEDEX:
+        for client in clients:
+            if client.client_id in drifted_client_indices:
+                client.drift_recovery_method = drift_recovery_method
+    else:   # for FedEx
+        for client in clients:  # FedEx variant 1
+            if client.client_id in drifted_client_indices:
+                client.drift_recovery_method = drift_recovery_method
 
 
 def client_fn(client_id: int, if_iid: bool, num_local_epochs: int, mini_batch_size: int,

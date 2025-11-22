@@ -174,7 +174,7 @@ class FederatedNetwork:
             # parameters to the global model (returns the round_server_loss_and_accuracy, global_avg_loss_and_accuracy
             # after aggregating upwards, before the distribution stage)
             _ = model_aggregation(self.server_hierarchy, server_test_set, sampled_clients, self.drift,
-                                  self.drift_recovery_parameters['fedau_alpha'])
+                                  self.drift_recovery_parameters)
 
             # Updating (downwards) & evaluation: update the edge models using the global model parameters. (returns the
             # round_server_loss_and_accuracy, global_avg_loss_and_accuracy after both aggregating upwards and
