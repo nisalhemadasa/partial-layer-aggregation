@@ -46,7 +46,7 @@ class CustomDataset(Dataset):
         return image, label
 
 
-def convert_dataset_to_loader(_dataset: data, _batch_size: int, _is_shuffle: bool = True) -> DataLoader:
+def convert_dataset_to_loader(_dataset: Dataset, _batch_size: int, _is_shuffle: bool = True) -> DataLoader:
     """
     Converts the Dataset object to DataLoader object.
     :param _dataset: Dataset (torch.utils.data objects) object that needs to be converted to DataLoader object.

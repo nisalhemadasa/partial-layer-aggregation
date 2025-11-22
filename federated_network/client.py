@@ -37,7 +37,7 @@ class Client:
         self.testloader = None  # initialized only when sample_data() is called
         self.parent_server_id = None  # server ID in the server hierarchy to which the client is connected
         self.auxiliary_classifier_parameters = None  # distance of the client from the server in the server hierarchy
-        self.aux_dataloader = None  # dateset with random labels for training the auxiliary classifier in FedAU
+        self.aux_trainloader = None  # dateset with random labels for training the auxiliary classifier in FedAU
 
     def get_model_weights(self):
         """ Get the model weights and biases """
@@ -87,7 +87,7 @@ class Client:
             elif drift_recovery_method == constants.RecoveryAlgorithm.FEDAU or drift_recovery_method == constants.RecoveryAlgorithm.FLUID:
                 # FedAU client side operations
                 self.auxiliary_classifier_parameters = fedau_clientside_train(self.model, self.trainloader,
-                                                                              self.aux_dataloader,
+                                                                              self.aux_trainloader,
                                                                               server_model_parameters,
                                                                               _drifted_client_indices, _client_id,
                                                                               _epochs=self.epochs,
