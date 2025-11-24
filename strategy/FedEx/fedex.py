@@ -7,6 +7,7 @@ Version: 1.0
 """
 from typing import OrderedDict, Dict, List
 
+import numpy as np
 import torch
 from torch import nn
 
@@ -29,23 +30,13 @@ class FedEx:
 
         for client_id, client_model_params in client_model_params_dict.items():
             # To all clients: split learning model to extractor and classifier parameters
-            extractor_params, _learning_classifier_params = split_to_extractor_and_classifier(None,
-                                                                                              client_model_params_dict[
-                                                                                                  client_id])
+            extractor_params, _ = split_to_extractor_and_classifier(None,client_model_params_dict[client_id])
             extractors_params_list.append(extractor_params)
 
         # Perform FedAvg on extractors (E) of all clients
         fedavg_extractor_params = average_model_parameters(extractors_params_list)
 
-        # TODO: testing
-        # Replace fc2 (last) layer with a new nn.Linear of the same shape
-        server_model.fc2 = nn.Linear(server_model.fc2.in_features, server_model.fc2.out_features)
-
-        # Append the unlearning_model to extractor ({E, W_hat})
-        unlearning_composite_params = OrderedDict(
-            list(fedavg_extractor_params.items()) + list(server_model.fc2.items()))
-
-        set_parameters(server_model, unlearning_composite_params)
+        set_parameters(server_model, fedavg_extractor_params, False)
 
 
 def average_model_parameters(model_params_list: List[OrderedDict]) -> OrderedDict:

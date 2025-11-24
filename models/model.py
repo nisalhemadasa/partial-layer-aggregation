@@ -438,14 +438,15 @@ def test(_model: nn.Module, _dataset: DataLoader) -> tuple[float, float]:
     return loss, accuracy
 
 
-def set_parameters(_model: nn.Module, parameters: OrderedDict) -> None:
+def set_parameters(_model: nn.Module, parameters: OrderedDict, _strict=True) -> None:
     """
     Set the model weights and biases
     :param _model: The model to set parameters for
     :param parameters: The parameters to set
+    :param _strict: Whether to strictly enforce that the keys in state_dict match the keys returned by the model's
     :return: None
     """
-    _model.load_state_dict(parameters, strict=True)
+    missing, unexpected = _model.load_state_dict(parameters, strict=_strict)
 
 
 def get_parameters_as_np_array(_model: nn.Module) -> List[np.ndarray]:

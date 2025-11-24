@@ -78,7 +78,7 @@ class Client:
                 train(self.model, self.trainloader, self.epochs)
         else:
             # Train the client model using new data and server parameters
-            if drift_recovery_method == constants.RecoveryAlgorithm.FEDAVG:
+            if drift_recovery_method == constants.RecoveryAlgorithm.FEDAVG or drift_recovery_method == constants.RecoveryAlgorithm.FEDEX:
                 # Adam-based recovery (1st order) + reinitialization of client parameters from the global model from scratch
                 train(self.model, self.trainloader, _epochs=self.epochs)
             elif drift_recovery_method == constants.RecoveryAlgorithm.RRT:

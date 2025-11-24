@@ -14,7 +14,7 @@ from data.dataset_loader import load_datasets
 from data.utils import convert_dataset_to_loader, split_iid_dataset, split_noniid_dataset, get_unique_labels_per_subset
 from drift_concepts.drift import drift_fn
 from federated_network.client import client_fn, Client, client_initial_training
-from federated_network.server import server_fn, model_aggregation, model_distribution
+from federated_network.server import server_fn, model_aggregation, model_distribution, model_distribution_fedex
 from federated_network.utils import update_progress, link_server_hierarchy, train_client_models, \
     link_clients_to_servers, handle_drift_for_round
 from logs.analysis_functions import compute_client_average_metrics, compute_server_average_metrics, \
@@ -179,9 +179,20 @@ class FederatedNetwork:
             # Updating (downwards) & evaluation: update the edge models using the global model parameters. (returns the
             # round_server_loss_and_accuracy, global_avg_loss_and_accuracy after both aggregating upwards and
             # distribution stage)
-            round_server_loss_and_accuracy = model_distribution(self.server_hierarchy, server_test_set)
+            round_server_loss_and_accuracy = model_distribution(self.server_hierarchy, server_test_set,
+                                                                self.drift_recovery_parameters['recovery_method'])
 
-            server_loss_and_accuracy.append(round_server_loss_and_accuracy)
+            # If the clients download the model from the leaf servers of the hierarchy
+            server_depth = len(self.server_hierarchy) - 1
+
+            global_server = self.server_hierarchy[0][0]  # TODO: in a hierarchy of server, this condition needs to change to check if all/some of the servers have teh FedEx aggregations strategy
+            if not global_server.strategy.strategy_name == constants.RecoveryAlgorithm.FEDEX:
+                server_loss_and_accuracy.append(round_server_loss_and_accuracy)
+            else:
+                round_server_loss_and_accuracy = model_distribution_fedex(self.server_hierarchy[server_depth],
+                                                                          self.clients)
+                # the value are brought to the format: List[List[List[Tuple[float, float]]]], for type consistence
+                server_loss_and_accuracy.append([[round_server_loss_and_accuracy]])
 
             # Update the progress of the simulation
             update_progress(_round=_round, num_training_rounds=self.num_training_rounds)
@@ -195,15 +206,13 @@ class FederatedNetwork:
             if _round == self.num_training_rounds:
                 break
 
-            # If the clients download the model from the leaf servers of the hierarchy
-            server_depth = len(self.server_hierarchy) - 1
-
             # Client local training and evaluation
             round_client_loss_and_accuracy = train_client_models(self.clients,
                                                                  sampled_client_ids,
                                                                  self.server_hierarchy[server_depth],
                                                                  self.drift,
-                                                                 self.simulation_parameters)
+                                                                 self.simulation_parameters,
+                                                                 self.drift_recovery_parameters['recovery_method'])
             clients_loss_and_accuracy.append(round_client_loss_and_accuracy)
 
         # Stop the timer
