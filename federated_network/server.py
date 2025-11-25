@@ -252,7 +252,7 @@ def server_hierarchy_evaluate(server_hierarchy: List[List[Server]], server_test_
     # Store the loss and accuracy of the global server model
     server_loss_and_accuracy.append([(loss, accuracy)])
 
-    # Aggregate the global server to the edge server down the hierarchy starting from the leaf nodes
+    # Evaluate the edge servers down the hierarchy starting upto the leaf servers
     for depth_level in range(len(server_hierarchy) - 1):
         loss_and_accuracy_at_level = []
 
