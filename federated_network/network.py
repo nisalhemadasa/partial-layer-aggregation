@@ -14,7 +14,8 @@ from data.dataset_loader import load_datasets
 from data.utils import convert_dataset_to_loader, split_iid_dataset, split_noniid_dataset, get_unique_labels_per_subset
 from drift_concepts.drift import drift_fn
 from federated_network.client import client_fn, Client, client_initial_training
-from federated_network.server import server_fn, model_aggregation, model_distribution, model_distribution_fedex
+from federated_network.server import server_fn, model_aggregation, model_distribution, model_distribution_fedex, \
+    server_hierarchy_evaluate
 from federated_network.utils import update_progress, link_server_hierarchy, train_client_models, \
     link_clients_to_servers, handle_drift_for_round
 from logs.analysis_functions import compute_client_average_metrics, compute_server_average_metrics, \
@@ -176,23 +177,23 @@ class FederatedNetwork:
             _ = model_aggregation(self.server_hierarchy, server_test_set, sampled_clients, self.drift,
                                   self.drift_recovery_parameters, self.simulation_parameters['servers_have_test_data'])
 
-            # Updating (downwards) & evaluation: update the edge models using the global model parameters. (returns the
-            # round_server_loss_and_accuracy, global_avg_loss_and_accuracy after both aggregating upwards and
-            # distribution stage)
-            round_server_loss_and_accuracy = model_distribution(self.server_hierarchy, server_test_set,
-                                                                self.drift_recovery_parameters['recovery_method'])
-
             # If the clients download the model from the leaf servers of the hierarchy
             server_depth = len(self.server_hierarchy) - 1
 
-            global_server = self.server_hierarchy[0][0]  # TODO: in a hierarchy of server, this condition needs to change to check if all/some of the servers have teh FedEx aggregations strategy
-            if not global_server.strategy.strategy_name == constants.RecoveryAlgorithm.FEDEX:
-                server_loss_and_accuracy.append(round_server_loss_and_accuracy)
+            # Updating (downwards) & evaluation: update the edge models using the global model parameters. (returns the
+            # round_server_loss_and_accuracy, global_avg_loss_and_accuracy after both aggregating upwards and
+            # distribution stage)
+            global_server = self.server_hierarchy[0][0] # TODO: needs to change in case of a hierarchical server structure
+            if global_server.strategy.strategy_name == constants.RecoveryAlgorithm.FEDEX:
+                model_distribution_fedex(self.server_hierarchy[server_depth], self.clients)
             else:
-                round_server_loss_and_accuracy = model_distribution_fedex(self.server_hierarchy[server_depth],
-                                                                          self.clients)
-                # the value are brought to the format: List[List[List[Tuple[float, float]]]], for type consistence
-                server_loss_and_accuracy.append([[round_server_loss_and_accuracy]])
+                model_distribution(self.server_hierarchy)
+
+            # Evaluate server loss and accuracy after aggregation and distribution
+            round_server_loss_and_accuracy = server_hierarchy_evaluate(self.server_hierarchy, server_test_set, self.clients,
+                                                                       self.simulation_parameters[
+                                                                           'servers_have_test_data'])
+            server_loss_and_accuracy.append(round_server_loss_and_accuracy)
 
             # Update the progress of the simulation
             update_progress(_round=_round, num_training_rounds=self.num_training_rounds)

@@ -162,32 +162,15 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
     return server_loss_and_accuracy
 
 
-def model_distribution(server_hierarchy: List[List[Server]], server_test_set: DataLoader,
-                       drift_recovery_method: str) -> List:
+def model_distribution(server_hierarchy: List[List[Server]]) -> None:
     """
     The aggregated models are distributed down the hierarchy. I.e., the edge models are updated by the global model and
-    client models are updated by the edge models.
+    leaf-server models are updated by the edge models.
     :param server_hierarchy: List of servers in the hierarchy
-    :param server_test_set: List of test data for server model evaluation, once the aggregation is done
-    :param drift_recovery_method: Drift recovery method
     :return: None
     """
-    # Store the loss and accuracy at each level of the server model hierarchy
-    server_loss_and_accuracy = []
-    global_avg_loss_and_accuracy = None
-
-    # Evaluate the accuracy of the root server model
-    global_server = server_hierarchy[0][0]
-    if not global_server.strategy.strategy_name == constants.RecoveryAlgorithm.FEDEX:
-        loss, accuracy = global_server.model_evaluate(server_test_set)
-
-        # Store the loss and accuracy of the global server model
-        server_loss_and_accuracy.append([(loss, accuracy)])
-
     # Aggregate the global server to the edge server down the hierarchy starting from the leaf nodes
     for depth_level in range(len(server_hierarchy) - 1):
-        loss_and_accuracy_at_level = []
-
         # Update the edge server model with the global server model
         for server in server_hierarchy[depth_level + 1]:
             # Get global server parameters and update the edge server model
@@ -197,22 +180,13 @@ def model_distribution(server_hierarchy: List[List[Server]], server_test_set: Da
             # Update edge server models
             server.train(server_parameters, None, None)
 
-            if not server.strategy.strategy_name == constants.RecoveryAlgorithm.FEDEX:
-                # Evaluate the edge server model
-                loss, accuracy = server.model_evaluate(server_test_set)
-                loss_and_accuracy_at_level.append((loss, accuracy))
 
-        server_loss_and_accuracy.append(loss_and_accuracy_at_level)
-
-    return server_loss_and_accuracy
-
-
-def model_distribution_fedex(servers: List[Server], all_clients: List[Client]) -> tuple:
+def model_distribution_fedex(servers: List[Server], all_clients: List[Client]) -> None:
     """
     Distribute the server model to (1)drifted clients (2)all clients.
+    TODO: implementation has to be expanded in the case of a hierarchical server structure
     :param servers: The aggregated server models (to be distributed)
     :param all_clients: List of all clients
-    :param drift: Drift instance
     """
     round_server_loss_and_accuracy = []
 
