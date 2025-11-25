@@ -184,4 +184,5 @@ class RecoveryAlgorithm:
     # Both client-side and server-side algorithms
     FEDAU = 'fedau'
     FLUID = 'fluid'
+    FEDEX = 'fedex'
 

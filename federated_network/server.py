@@ -7,6 +7,7 @@ Version: 1.0
 """
 from typing import List, OrderedDict, Tuple, Dict, Any
 
+import numpy as np
 from torch import Tensor
 from torch.utils.data import DataLoader
 
@@ -15,7 +16,7 @@ import strategy
 from distance_metrics.distance_metrics import compute_euclidean_distance_weights
 from drift_concepts.drift import Drift
 from federated_network.client import DEVICE, Client
-from models.model import SimpleModel, CNNModel, test
+from models.model import SimpleModel, CNNModel, test, split_to_extractor_and_classifier, set_parameters
 
 
 class Server:
@@ -29,21 +30,32 @@ class Server:
         self.parent_server_id = None  # Parent server ID in the server hierarchy
 
     def train(self, client_model_parameters: Dict[str, OrderedDict],
-              aux_classifier_parameters: Dict[str, OrderedDict] = None, ema_weight: float = None) -> None:
+              aux_classifier_parameters: Dict[str, OrderedDict] = None,
+              drift_recovery_parameters: Dict[str, any] = None,
+              is_drift: bool = False) -> None:
         """
         Train the server model using the client model parameters.
         :param client_model_parameters: List of client model parameters
         :param aux_classifier_parameters: List of auxiliary classifier parameters from drifted clients
-        :param ema_weight: EMA weight parameter for FedAU algorithm
+        :param drift_recovery_parameters: Drift recovery algorithm parameter
+        :param is_drift: Boolean flag to indicate whether there is a concept drift or not
         :return: None
         """
-        if aux_classifier_parameters:
-            # check if all the elements in the aux_classifier_parameters are None
-            if all(param is None for param in aux_classifier_parameters.values()):
-                return
-            # FedAU: For servers with clients with auxiliary classifiers (i.e., leaf servers, having drifted nodes)
-            self.strategy.aggregate_models(self.model, client_model_parameters, aux_classifier_parameters,
-                                           ema_weight)
+        if self.strategy.strategy_name == constants.RecoveryAlgorithm.FEDAU:  # TODO: can be changed to starategy name
+            if aux_classifier_parameters:
+                # check if all the elements in the aux_classifier_parameters are None
+                if all(param is None for param in aux_classifier_parameters.values()):
+                    return
+
+                # EMA weight parameter for FedAU algorithm
+                ema_weight = drift_recovery_parameters['fedau_alpha']
+
+                # FedAU: For servers with clients with auxiliary classifiers (i.e., leaf servers, having drifted nodes)
+                self.strategy.aggregate_models(self.model, client_model_parameters, aux_classifier_parameters,
+                                               ema_weight)
+        # TODO: remove is_drift to use from the beginning
+        elif self.strategy.strategy_name == constants.RecoveryAlgorithm.FEDEX:
+            self.strategy.aggregate_models(self.model, client_model_parameters)
         else:
             # FedAvg: For internal servers or when there are no drifted clients
             self.strategy.aggregate_models(self.model, client_model_parameters)
@@ -59,15 +71,18 @@ class Server:
 
 
 def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: DataLoader, sampled_clients: List[Client],
-                      drift: Drift, fedau_alpha: float, is_evaluate_server_model=False, verbose=False) -> List:
+                      drift: Drift, drift_recovery_parameters: Dict[str, any], _is_server_has_test_data: bool,
+                      verbose=False) -> List:
     """
     Aggregate the models of the clients to the server model.
     :param server_hierarchy: List of servers in the hierarchy
     :param server_test_set: List of test data for server model evaluation, once the aggregation is done
     :param sampled_clients: List of sampled clients
     :param drift: Drift instance
-    :param fedau_alpha: EMA weight (alpha) parameter for the FedAU algorithm
-    :param is_evaluate_server_model: Boolean flag to indicate whether to evaluate the server model during aggregation
+    :param drift_recovery_parameters: Drift recovery algorithm parameters
+    :param _is_server_has_test_data: Boolean flag to indicate whether server possesses test data to do in-server
+    evaluations after client model aggregation. Else, the average of client evaluation results will be used as server
+    evaluation performance.
     :param verbose: Whether to print detailed logs or not
     :return: List of loss and accuracy at each level of the server hierarchy; outer list: server hierarchy levels,
     inner list: loss and accuracy Tuple at each level (loss, accuracy)
@@ -81,7 +96,8 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
 
     # Evaluate server model on the upward traversal aggregation  only if the hierarchy has more than one level. Else,
     # this evaluation will be redundant as it is already done during the server model distribution phase.
-    if len(server_hierarchy) > 1:
+    is_evaluate_server_model = False
+    if _is_server_has_test_data and len(server_hierarchy) > 1:
         is_evaluate_server_model = True
 
     if verbose:
@@ -112,13 +128,14 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
                                                                 for client_id in
                                                                 server.client_ids}  # connected to this server
 
-                            ema_weight = fedau_alpha
+                            ema_weight = drift_recovery_parameters['fedau_alpha']
 
                 if verbose:
                     print('server:' + str(server.server_id) + ' -> ' + 'clients:' + str(server.client_ids))
 
                 # Aggregate client models
-                server.train(client_model_parameters, client_aux_classifier_parameters, ema_weight)
+                server.train(client_model_parameters, client_aux_classifier_parameters, drift_recovery_parameters,
+                             drift.is_drift)
             else:
                 # Internal nodes: Aggregate models from child servers
                 # Collect the parameters to a dictionary (server_id: server_model_parameters)
@@ -130,26 +147,29 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
                 # since they are not connected to clients which train auxiliary modules
                 server.train(child_server_model_parameters, None, ema_weight)
 
-            # Evaluate the server model
-            if is_evaluate_server_model:
+            # TODO: testing
+            # Evaluate the server model (not for FedEx)
+            if is_evaluate_server_model and not server.strategy.strategy_name == constants.RecoveryAlgorithm.FEDEX:
                 loss, accuracy = server.model_evaluate(server_test_set)
                 loss_and_accuracy_at_level.append((loss, accuracy))
 
-        if is_evaluate_server_model:
+        if is_evaluate_server_model and not server.strategy.strategy_name == constants.RecoveryAlgorithm.FEDEX:
             server_loss_and_accuracy.append(loss_and_accuracy_at_level)
 
-    if is_evaluate_server_model:
+    if is_evaluate_server_model and not server.strategy.strategy_name == constants.RecoveryAlgorithm.FEDEX:
         server_loss_and_accuracy.reverse()  # Reverse the list to get the root first, to be consistent throughout the code
 
     return server_loss_and_accuracy
 
 
-def model_distribution(server_hierarchy: List[List[Server]], server_test_set: DataLoader) -> List:
+def model_distribution(server_hierarchy: List[List[Server]], server_test_set: DataLoader,
+                       drift_recovery_method: str) -> List:
     """
     The aggregated models are distributed down the hierarchy. I.e., the edge models are updated by the global model and
     client models are updated by the edge models.
     :param server_hierarchy: List of servers in the hierarchy
     :param server_test_set: List of test data for server model evaluation, once the aggregation is done
+    :param drift_recovery_method: Drift recovery method
     :return: None
     """
     # Store the loss and accuracy at each level of the server model hierarchy
@@ -158,10 +178,11 @@ def model_distribution(server_hierarchy: List[List[Server]], server_test_set: Da
 
     # Evaluate the accuracy of the root server model
     global_server = server_hierarchy[0][0]
-    loss, accuracy = global_server.model_evaluate(server_test_set)
+    if not global_server.strategy.strategy_name == constants.RecoveryAlgorithm.FEDEX:
+        loss, accuracy = global_server.model_evaluate(server_test_set)
 
-    # Store the loss and accuracy of the global server model
-    server_loss_and_accuracy.append([(loss, accuracy)])
+        # Store the loss and accuracy of the global server model
+        server_loss_and_accuracy.append([(loss, accuracy)])
 
     # Aggregate the global server to the edge server down the hierarchy starting from the leaf nodes
     for depth_level in range(len(server_hierarchy) - 1):
@@ -176,13 +197,39 @@ def model_distribution(server_hierarchy: List[List[Server]], server_test_set: Da
             # Update edge server models
             server.train(server_parameters, None, None)
 
-            # Evaluate the edge server model
-            loss, accuracy = server.model_evaluate(server_test_set)
-            loss_and_accuracy_at_level.append((loss, accuracy))
+            if not server.strategy.strategy_name == constants.RecoveryAlgorithm.FEDEX:
+                # Evaluate the edge server model
+                loss, accuracy = server.model_evaluate(server_test_set)
+                loss_and_accuracy_at_level.append((loss, accuracy))
 
         server_loss_and_accuracy.append(loss_and_accuracy_at_level)
 
     return server_loss_and_accuracy
+
+
+def model_distribution_fedex(servers: List[Server], all_clients: List[Client]) -> tuple:
+    """
+    Distribute the server model to (1)drifted clients (2)all clients.
+    :param servers: The aggregated server models (to be distributed)
+    :param all_clients: List of all clients
+    :param drift: Drift instance
+    """
+    round_server_loss_and_accuracy = []
+
+    for client in all_clients:  # TODO: here fedex is done to all cleints and not only drifted clients
+        # Get the server to which the client is connected
+        server = servers[client.parent_server_id]
+        # get the extractor of the server model
+        server_extractor, _ = split_to_extractor_and_classifier(server.model, None)
+
+        # Load the composite unlearning model ({E, W_hat}) to the server model
+        set_parameters(client.model, server_extractor, False)
+
+        round_server_loss_and_accuracy.append(client.evaluate())
+
+    # Position-wise average server loss and accuracy. i.e., take the average loss of all clients (likewise in accuracy)
+    arr = np.array(round_server_loss_and_accuracy)  # shape (N, 2)
+    return tuple(arr.mean(axis=0))
 
 
 def change_server_aggregation_strategy(server_hierarchy: List[Any], drift_recovery_method: str, drift: Drift) -> None:
@@ -193,12 +240,20 @@ def change_server_aggregation_strategy(server_hierarchy: List[Any], drift_recove
     :param drift: Drift instance
     :return: None
     """
-    if drift_recovery_method == constants.RecoveryAlgorithm.FEDAU or drift_recovery_method == constants.RecoveryAlgorithm.FLUID:
+    if (drift_recovery_method == constants.RecoveryAlgorithm.FEDAU or
+            drift_recovery_method == constants.RecoveryAlgorithm.FLUID):
         for server in server_hierarchy[-1]:  # applied only to leaf servers
             # change the strategy only in the servers where drifted clients are connected
             drifted = set(drift.drifted_client_indices or [])  # makes sure it's at least an empty set and not None
             if set(server.client_ids) & drifted:  # checks if there is any intersection
                 server.strategy = strategy.FedAU.aggregator_fn()
+    elif drift_recovery_method == constants.RecoveryAlgorithm.FEDEX:
+        # TODO: implement for (1) drifted clients + during drift, (2) all clients + during drift (3) all clients +all times
+        for server in server_hierarchy[-1]:  # applied only to leaf servers
+            # change the strategy only in the servers where drifted clients are connected
+            drifted = set(drift.drifted_client_indices or [])  # makes sure it's at least an empty set and not None
+            if set(server.client_ids) & drifted:  # checks if there is any intersection
+                server.strategy = strategy.FedEx.aggregator_fn()
     else:
         # if the drift is ended, change the strategy back to FedAvg
         for server in server_hierarchy[-1]:

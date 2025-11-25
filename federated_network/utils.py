@@ -96,7 +96,7 @@ def link_clients_to_servers(leaf_servers: List[Server], clients: List[List[Clien
 
 
 def train_client_models(all_clients, sampled_client_ids, servers: List[Server], drift: Drift,
-                        simulation_parameters: Dict, verbose: bool = False) -> List:
+                        simulation_parameters: Dict, drift_recovery_method: str, verbose: bool = False) -> List:
     """
     Train the client models in the network while applying drift if necessary.
     :param all_clients: List of all client instances
@@ -104,6 +104,7 @@ def train_client_models(all_clients, sampled_client_ids, servers: List[Server], 
     :param servers: List of Server instance at a given depth level
     :param drift: Drift instance
     :param simulation_parameters: Parameters specifying the simulation scenarios
+    :param drift_recovery_method: Drift recovery method to be used by the clients
     :param verbose: Flag to enable verbose logging
     :return: List of loss and accuracy of each client after training
     """
@@ -131,8 +132,9 @@ def train_client_models(all_clients, sampled_client_ids, servers: List[Server], 
         server = servers[client.parent_server_id]
 
         if client.client_id in sampled_client_ids:
-            # Download the server model parameters to the client
-            set_parameters(client.model, server.model.state_dict())
+            if not server.strategy.strategy_name == constants.RecoveryAlgorithm.FEDEX:
+                # Download the server model parameters to the client
+                set_parameters(client.model, server.model.state_dict())
 
             if verbose:
                 print('server:' + str(server.server_id) + ' -> ' + 'client:' + str(client.client_id))

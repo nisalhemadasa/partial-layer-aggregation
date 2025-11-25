@@ -2,3 +2,4 @@
 
 from .FedAvg import fedavg
 from .FedAU import fedau
+from .FedEx import fedex
