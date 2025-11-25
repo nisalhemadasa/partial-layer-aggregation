@@ -595,6 +595,7 @@ def apply_drift(clients: List[Client], drift: Drift) -> List[Client]:
             return drift.swap_labels(clients, class_pair_to_swap)
         else:
             return clients
+        
     elif drift.drift_mode == constants.DriftMode.LABEL_SWAP_INCREMENTAL_STEPS:
         # for idx in range(len(drift.class_pairs_to_swap)):   # There are multiple sets of pairs to swap, at different steps
         #     class_pair_to_swap = drift.class_pairs_to_swap[idx]
