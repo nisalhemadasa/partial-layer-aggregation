@@ -608,13 +608,10 @@ def apply_drift(clients: List[Client], drift: Drift) -> List[Client]:
 
         return clients
 
-    elif drift.drift_mode == constants.DriftCreationMethods.ROTATION:
-        # Since rotation is continuously applied, it is speed-wise optimum to apply drift for sampled data in each round
-        for client in clients:
-            # Each client samples data for local training from their mutually own (exclusively partitioned) datasets
-            client.sample_data()
-
-        return drift.rotate_images(clients)
+    elif drift.drift_mode == constants.DriftMode.ROTATION_GRADUAL_INCREMENTAL:
+        return drift.rotate_images_gradually_incrementally(clients)
+    elif drift.drift_mode == constants.DriftMode.ROTATION_GRADUAL:
+        return drift.rotate_images_gradually(clients)
     else:
         print("Drift method not recognized. No drift applied.")
         return clients
