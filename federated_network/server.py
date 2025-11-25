@@ -71,7 +71,7 @@ class Server:
 
 
 def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: DataLoader, sampled_clients: List[Client],
-                      drift: Drift, drift_recovery_parameters: Dict[str, any], is_evaluate_server_model=False,
+                      drift: Drift, drift_recovery_parameters: Dict[str, any], _is_server_has_test_data: bool,
                       verbose=False) -> List:
     """
     Aggregate the models of the clients to the server model.
@@ -80,7 +80,9 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
     :param sampled_clients: List of sampled clients
     :param drift: Drift instance
     :param drift_recovery_parameters: Drift recovery algorithm parameters
-    :param is_evaluate_server_model: Boolean flag to indicate whether to evaluate the server model during aggregation
+    :param _is_server_has_test_data: Boolean flag to indicate whether server possesses test data to do in-server
+    evaluations after client model aggregation. Else, the average of client evaluation results will be used as server
+    evaluation performance.
     :param verbose: Whether to print detailed logs or not
     :return: List of loss and accuracy at each level of the server hierarchy; outer list: server hierarchy levels,
     inner list: loss and accuracy Tuple at each level (loss, accuracy)
@@ -94,7 +96,8 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
 
     # Evaluate server model on the upward traversal aggregation  only if the hierarchy has more than one level. Else,
     # this evaluation will be redundant as it is already done during the server model distribution phase.
-    if len(server_hierarchy) > 1:
+    is_evaluate_server_model = False
+    if _is_server_has_test_data and len(server_hierarchy) > 1:
         is_evaluate_server_model = True
 
     if verbose:

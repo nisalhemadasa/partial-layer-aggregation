@@ -93,32 +93,33 @@ def main():
     simulation_parameters = dict(
         is_server_adaptability=False,  # Evaluate the adaptability of servers/clients to the data/drift distribution
         is_plot_client_data_distributions=False, # Whether to plot the client data distributions
-        client_ids_to_plot_data_distributions = [0, 1]  # Client IDs whose internal data distributions to be plotted.
+        client_ids_to_plot_data_distributions = [0, 1],  # Client IDs whose internal data distributions to be plotted.
+        servers_have_test_data=False # Whether servers have test data for evaluation or the server accuracy/loss is got by averaging the client test accuracy/losses
     )
 
-    # # Create a federated network
-    # fed_net = FederatedNetwork(
-    #     num_iid_client_instances=10,  # Number of IID clients in the federated network
-    #     # num_iid_client_instances=100,  # Suggested at FLTA
-    #     num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
-    #     server_tree_layout=[1],
-    #     # Number of servers at each level of the server tree of depth n = [n, n-1,..., 1]
-    #     # num_training_rounds=100,  # In literature, over 50 rounds are trained. FLUID trains 100 rounds
-    #     num_training_rounds=5,  # Number of training rounds (in literature, over 50 rounds are trained.)
-    #     dataset_name=constants.DatasetNames.MNIST,  # Name of the dataset
-    #     drift_specs=drift_specifications,  # Drift specifications
-    #     simulation_parameters=simulation_parameters,  # Parameters specifying the simulation scenarios
-    #     client_select_fraction=1,  # Fraction of clients to be selected for each round
-    #     drift_recovery_parameters=drift_recovery_parameters, # Drift recovery algorithm related parameters
-    # )
-    #
-    # # Running the simulation
-    # fed_net.run_simulation(
-    #     file_save_path='./plots/saved_plots_3/',
-    #     log_save_path='./logs/saved_logs_3/')
+    # Create a federated network
+    fed_net = FederatedNetwork(
+        num_iid_client_instances=5,  # Number of IID clients in the federated network
+        # num_iid_client_instances=100,  # Suggested at FLTA
+        num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
+        server_tree_layout=[1],
+        # Number of servers at each level of the server tree of depth n = [n, n-1,..., 1]
+        # num_training_rounds=100,  # In literature, over 50 rounds are trained. FLUID trains 100 rounds
+        num_training_rounds=5,  # Number of training rounds (in literature, over 50 rounds are trained.)
+        dataset_name=constants.DatasetNames.MNIST,  # Name of the dataset
+        drift_specs=drift_specifications,  # Drift specifications
+        simulation_parameters=simulation_parameters,  # Parameters specifying the simulation scenarios
+        client_select_fraction=1,  # Fraction of clients to be selected for each round
+        drift_recovery_parameters=drift_recovery_parameters, # Drift recovery algorithm related parameters
+    )
+
+    # Running the simulation
+    fed_net.run_simulation(
+        file_save_path='./plots/saved_plots_7_1/',
+        log_save_path='./logs/saved_logs_7_1/')
 
 
-    # # ###############################################################################################
+    # 000000000000000000000000000000000000000000000
     # # Define drift recovery algorithm related parameters
     # drift_recovery_parameters = dict(
     #     recovery_method=constants.RecoveryAlgorithm.FEDEX,  # Aggregation method used during the drift period
@@ -178,30 +179,30 @@ def main():
     #     file_save_path='./plots/saved_plots_7_6/',
     #     log_save_path='./logs/saved_logs_7_6/')
     #
-    #0000000000000000000000000000000000000
-    # Define drift recovery algorithm related parameters
-    drift_recovery_parameters = dict(
-        recovery_method=constants.RecoveryAlgorithm.FEDAU,  # Aggregation method used during the drift period
-        base_aggregation_method=constants.RecoveryAlgorithm.FEDAVG,  # Aggregation algorithm used outside the drift period
-        fedau_alpha=0.99 # EMA weight (alpha) parameter for the FedAU algorithm
-    )
-
-
-    # Create a federated network
-    fed_net = FederatedNetwork(
-        num_iid_client_instances=10,  # Number of IID clients in the federated network
-        # num_iid_client_instances=100,  # Suggested at FLTA
-        num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
-        server_tree_layout=[1],
-        # Number of servers at each level of the server tree of depth n = [n, n-1,..., 1]
-        # num_training_rounds=100,  # In literature, over 50 rounds are trained. FLUID trains 100 rounds
-        num_training_rounds=20,  # Number of training rounds (in literature, over 50 rounds are trained.)
-        dataset_name=constants.DatasetNames.MNIST,  # Name of the dataset
-        drift_specs=drift_specifications,  # Drift specifications
-        simulation_parameters=simulation_parameters,  # Parameters specifying the simulation scenarios
-        client_select_fraction=1,  # Fraction of clients to be selected for each round
-        drift_recovery_parameters=drift_recovery_parameters, # Drift recovery algorithm related parameters
-    )
+    # #0000000000000000000000000000000000000
+    # # Define drift recovery algorithm related parameters
+    # drift_recovery_parameters = dict(
+    #     recovery_method=constants.RecoveryAlgorithm.FEDAU,  # Aggregation method used during the drift period
+    #     base_aggregation_method=constants.RecoveryAlgorithm.FEDAVG,  # Aggregation algorithm used outside the drift period
+    #     fedau_alpha=0.99 # EMA weight (alpha) parameter for the FedAU algorithm
+    # )
+    #
+    #
+    # # Create a federated network
+    # fed_net = FederatedNetwork(
+    #     num_iid_client_instances=10,  # Number of IID clients in the federated network
+    #     # num_iid_client_instances=100,  # Suggested at FLTA
+    #     num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
+    #     server_tree_layout=[1],
+    #     # Number of servers at each level of the server tree of depth n = [n, n-1,..., 1]
+    #     # num_training_rounds=100,  # In literature, over 50 rounds are trained. FLUID trains 100 rounds
+    #     num_training_rounds=20,  # Number of training rounds (in literature, over 50 rounds are trained.)
+    #     dataset_name=constants.DatasetNames.MNIST,  # Name of the dataset
+    #     drift_specs=drift_specifications,  # Drift specifications
+    #     simulation_parameters=simulation_parameters,  # Parameters specifying the simulation scenarios
+    #     client_select_fraction=1,  # Fraction of clients to be selected for each round
+    #     drift_recovery_parameters=drift_recovery_parameters, # Drift recovery algorithm related parameters
+    # )
 
     # # Running the simulation
     # fed_net.run_simulation(
@@ -209,35 +210,35 @@ def main():
     #     log_save_path='./logs/saved_logs_fedau/')
 
 
-    ############################################################################################################
-    # Define drift recovery algorithm related parameters
-    drift_recovery_parameters = dict(
-        recovery_method=constants.RecoveryAlgorithm.RRT,  # Aggregation method used during the drift period
-        base_aggregation_method=constants.RecoveryAlgorithm.FEDAVG,
-        # Aggregation algorithm used outside the drift period
-        fedau_alpha=0.9  # EMA weight (alpha) parameter for the FedAU algorithm
-    )
-
-    # Create a federated network
-    fed_net = FederatedNetwork(
-        num_iid_client_instances=10,  # Number of IID clients in the federated network
-        # num_iid_client_instances=100,  # Suggested at FLTA
-        num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
-        server_tree_layout=[1],
-        # Number of servers at each level of the server tree of depth n = [n, n-1,..., 1]
-        # num_training_rounds=100,  # In literature, over 50 rounds are trained. FLUID trains 100 rounds
-        num_training_rounds=20,  # Number of training rounds (in literature, over 50 rounds are trained.)
-        dataset_name=constants.DatasetNames.MNIST,  # Name of the dataset
-        drift_specs=drift_specifications,  # Drift specifications
-        simulation_parameters=simulation_parameters,  # Parameters specifying the simulation scenarios
-        client_select_fraction=1,  # Fraction of clients to be selected for each round
-        drift_recovery_parameters=drift_recovery_parameters,  # Drift recovery algorithm related parameters
-    )
-
-    # Running the simulation
-    fed_net.run_simulation(
-        file_save_path='./plots/saved_plots_rrt/',
-        log_save_path='./logs/saved_logs_rrt/')
+    # ############################################################################################################
+    # # Define drift recovery algorithm related parameters
+    # drift_recovery_parameters = dict(
+    #     recovery_method=constants.RecoveryAlgorithm.RRT,  # Aggregation method used during the drift period
+    #     base_aggregation_method=constants.RecoveryAlgorithm.FEDAVG,
+    #     # Aggregation algorithm used outside the drift period
+    #     fedau_alpha=0.9  # EMA weight (alpha) parameter for the FedAU algorithm
+    # )
+    #
+    # # Create a federated network
+    # fed_net = FederatedNetwork(
+    #     num_iid_client_instances=10,  # Number of IID clients in the federated network
+    #     # num_iid_client_instances=100,  # Suggested at FLTA
+    #     num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
+    #     server_tree_layout=[1],
+    #     # Number of servers at each level of the server tree of depth n = [n, n-1,..., 1]
+    #     # num_training_rounds=100,  # In literature, over 50 rounds are trained. FLUID trains 100 rounds
+    #     num_training_rounds=20,  # Number of training rounds (in literature, over 50 rounds are trained.)
+    #     dataset_name=constants.DatasetNames.MNIST,  # Name of the dataset
+    #     drift_specs=drift_specifications,  # Drift specifications
+    #     simulation_parameters=simulation_parameters,  # Parameters specifying the simulation scenarios
+    #     client_select_fraction=1,  # Fraction of clients to be selected for each round
+    #     drift_recovery_parameters=drift_recovery_parameters,  # Drift recovery algorithm related parameters
+    # )
+    #
+    # # Running the simulation
+    # fed_net.run_simulation(
+    #     file_save_path='./plots/saved_plots_rrt/',
+    #     log_save_path='./logs/saved_logs_rrt/')
 
 
 if __name__ == "__main__":
