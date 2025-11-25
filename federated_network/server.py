@@ -69,6 +69,24 @@ class Server:
         loss, accuracy = test(self.model, _test_set)
         return float(loss), float(accuracy)
 
+    def average_client_evaluation_results(self, all_clients: List[Client]) -> tuple:
+        """
+        Get the average evaluation performance (accuracy and loss) of the connected clients.
+        :param all_clients: List of all clients
+        :return: average loss and accuracy of the connected clients to this server
+        """
+        round_server_loss_and_accuracy = []
+
+        # Get the clients connected to this server
+        connected_clients = [client for client in all_clients if client.client_id in self.client_ids]
+
+        for client in connected_clients:
+            round_server_loss_and_accuracy.append(client.evaluate())
+
+        # Position-wise average server loss and accuracy. i.e., take the average loss of all clients (likewise in accuracy)
+        arr = np.array(round_server_loss_and_accuracy)  # shape (N, 2)
+        return tuple(arr.mean(axis=0))
+
 
 def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: DataLoader, sampled_clients: List[Client],
                       drift: Drift, drift_recovery_parameters: Dict[str, any], _is_server_has_test_data: bool,
@@ -199,11 +217,58 @@ def model_distribution_fedex(servers: List[Server], all_clients: List[Client]) -
         # Load the composite unlearning model ({E, W_hat}) to the server model
         set_parameters(client.model, server_extractor, False)
 
-        round_server_loss_and_accuracy.append(client.evaluate())
+        # round_server_loss_and_accuracy.append(client.evaluate())
 
-    # Position-wise average server loss and accuracy. i.e., take the average loss of all clients (likewise in accuracy)
-    arr = np.array(round_server_loss_and_accuracy)  # shape (N, 2)
-    return tuple(arr.mean(axis=0))
+    # # Position-wise average server loss and accuracy. i.e., take the average loss of all clients (likewise in accuracy)
+    # arr = np.array(round_server_loss_and_accuracy)  # shape (N, 2)
+    # return tuple(arr.mean(axis=0))
+
+
+def server_hierarchy_evaluate(server_hierarchy: List[List[Server]], server_test_set: DataLoader,
+                              all_clients: List[Client],
+                              _is_server_has_test_data: bool) -> List:
+    """
+    The aggregated models are distributed down the hierarchy. I.e., the edge models are updated by the global model and
+    client models are updated by the edge models.
+    :param server_hierarchy: List of servers in the hierarchy
+    :param server_test_set: List of test data for server model evaluation, once the aggregation is done
+    :param all_clients: List of all clients
+    :param _is_server_has_test_data: Boolean flag to indicate whether server possesses test data to do in-server
+    evaluations after client model aggregation. Else, the average of client evaluation results will be used as server
+    evaluation performance.
+    :return: None
+    """
+    # Store the loss and accuracy at each level of the server model hierarchy
+    server_loss_and_accuracy = []
+    global_avg_loss_and_accuracy = None
+
+    # Evaluate the accuracy of the root server model
+    global_server = server_hierarchy[0][0]
+    if _is_server_has_test_data:
+        loss, accuracy = global_server.model_evaluate(server_test_set)
+    else:
+        loss, accuracy = global_server.average_client_evaluation_results(all_clients)
+
+    # Store the loss and accuracy of the global server model
+    server_loss_and_accuracy.append([(loss, accuracy)])
+
+    # Aggregate the global server to the edge server down the hierarchy starting from the leaf nodes
+    for depth_level in range(len(server_hierarchy) - 1):
+        loss_and_accuracy_at_level = []
+
+        # Update the edge server model with the global server model
+        for server in server_hierarchy[depth_level + 1]:
+            # Evaluate the edge server model
+            if _is_server_has_test_data:
+                loss, accuracy = server.model_evaluate(server_test_set)
+            else:
+                loss, accuracy = server.average_client_evaluation_results(all_clients)
+
+            loss_and_accuracy_at_level.append((loss, accuracy))
+
+        server_loss_and_accuracy.append(loss_and_accuracy_at_level)
+
+    return server_loss_and_accuracy
 
 
 def change_server_aggregation_strategy(server_hierarchy: List[Any], drift_recovery_method: str, drift: Drift) -> None:
