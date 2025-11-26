@@ -85,9 +85,16 @@ def main():
         # #--------------------------------------------------------------------------------
         # drift_mode=constants.DriftMode.LABEL_SWAP_INCREMENTAL_STEPS, # Drift creation method
         # drift_step_rounds=[0.2, 0.6, 1],  # Rounds at which the drift steps occurs. Also indicates the start and end of drift period.
-        #--------------------------------------------------------------------------------
+        # #--------------------------------------------------------------------------------
+        # drift_mode=constants.DriftMode.ROTATION_GRADUAL,  # Drift creation method
+        # drift_step_rounds=[0.2, 0.6, 1],    # In Rotation gradual case, this indicates only the start and end of drift period.
+        # # # --------------------------------------------------------------------------------
+        # drift_mode=constants.DriftMode.ROTATION_GRADUAL_INCREMENTAL,  # Drift creation method
+        # drift_step_rounds=[0.2, 0.6, 1],    # In Rotation gradual case, this indicates only the start and end of drift period.
+        # # --------------------------------------------------------------------------------
+        drift_mode=constants.DriftMode.ROTATION_STEP_INCREMENTAL,  # Drift creation method
+        drift_step_rounds=[0.2, 0.6, 1], # Rounds at which the drift steps occurs. Also indicates the start and end of drift period.
         # --------------------------------------------------------------------------------
-        drift_mode=constants.DriftMode.ROTATION_GRADUAL,  # Drift creation method
         # Therefore, it must have at least two entries (start and end of drift).
         max_rotation=45,  # Maximum rotation angle for the drift created by rotations
         class_pairs_to_swap=[[(1, 2), (3, 4)], [(5, 7)]],
