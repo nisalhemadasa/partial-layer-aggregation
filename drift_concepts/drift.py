@@ -104,8 +104,9 @@ class Drift:
             :return: Drifted images and original labels
             """
             _images = dataset.data  # Access dataset images
-            _drifted_images = _images.clone()
             _labels = dataset.targets  # Access dataset labels
+            _drifted_images = _images.clone()
+
             num_images = len(_images)
             num_images_to_rotate = int(_fraction_rotated * num_images)
 
@@ -116,7 +117,7 @@ class Drift:
             # apply rotation only to those indices
             for _idx in rotate_indices:
                 rotated = rotate(_images[_idx].numpy(), _rotation_angle, reshape=False)
-                _images[_idx] = torch.tensor(rotated, dtype=_images.dtype)
+                _drifted_images[_idx] = torch.tensor(rotated, dtype=_images.dtype)
 
             return _drifted_images, _labels
 
@@ -172,9 +173,9 @@ class Drift:
             _labels = dataset.targets  # Access dataset labels
             _drifted_images = _images.clone()
 
-            for i in range(len(_images)):
-                rotated_image = rotate(_images[i].numpy(), _rotation_angle, reshape=False)
-                _drifted_images[i] = torch.tensor(rotated_image)
+            for idx in range(len(_images)):
+                rotated_image = rotate(_images[idx].numpy(), _rotation_angle, reshape=False)
+                _drifted_images[idx] = torch.tensor(rotated_image)
 
             return _drifted_images, _labels
 
@@ -595,7 +596,7 @@ def apply_drift(clients: List[Client], drift: Drift) -> List[Client]:
             return drift.swap_labels(clients, class_pair_to_swap)
         else:
             return clients
-        
+
     elif drift.drift_mode == constants.DriftMode.LABEL_SWAP_INCREMENTAL_STEPS:
         # for idx in range(len(drift.class_pairs_to_swap)):   # There are multiple sets of pairs to swap, at different steps
         #     class_pair_to_swap = drift.class_pairs_to_swap[idx]
@@ -609,9 +610,18 @@ def apply_drift(clients: List[Client], drift: Drift) -> List[Client]:
         return clients
 
     elif drift.drift_mode == constants.DriftMode.ROTATION_GRADUAL_INCREMENTAL:
+        # Incremental (angle & samples) drift happens at every round
         return drift.rotate_images_gradually_incrementally(clients)
     elif drift.drift_mode == constants.DriftMode.ROTATION_GRADUAL:
+        # Gradual (angle) drift happens at every round
         return drift.rotate_images_gradually(clients)
+    elif drift.drift_mode == constants.DriftMode.ROTATION_STEP_INCREMENTAL:
+        # Incremental (angle & samples) drift happens at the defined drift steps
+        if not drift.is_already_applied:
+            drift.is_already_applied = True
+            return drift.rotate_images_gradually_incrementally(clients)
+
+        return clients
     else:
         print("Drift method not recognized. No drift applied.")
         return clients

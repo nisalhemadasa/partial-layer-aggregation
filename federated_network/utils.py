@@ -119,7 +119,7 @@ def train_client_models(all_clients, sampled_client_ids, servers: List[Server], 
         # Sample data from the drift applied datasets
         _ = apply_drift(all_clients, drift)
 
-        # # TODO: the following needs to add the sampling refresh after drift
+        # TODO: the following needs to add the sampling refresh after drift
         for client in all_clients:
             client.sample_data()  # refresh loaders from drifted datasets
     else:
@@ -188,6 +188,8 @@ def handle_drift_for_round(round_idx: int, drift: Drift, server_hierarchy: List[
     :param clients: List of client instances
     :return: None
     """
+    drift.current_round = round_idx
+
     # Outside the global drift window
     if round_idx < drift.drift_start_round or round_idx >= drift.drift_end_round:
         if drift.is_drift:  # execute only once: after the drift period ends
