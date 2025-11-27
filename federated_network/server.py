@@ -41,7 +41,8 @@ class Server:
         :param is_drift: Boolean flag to indicate whether there is a concept drift or not
         :return: None
         """
-        if self.strategy.strategy_name == constants.RecoveryAlgorithm.FEDAU:  # TODO: can be changed to starategy name
+        if (self.strategy.strategy_name == constants.RecoveryAlgorithm.FEDAU or
+                self.strategy.strategy_name == constants.RecoveryAlgorithm.FLUID):  # TODO: can be changed to strategy name
             if aux_classifier_parameters:
                 # check if all the elements in the aux_classifier_parameters are None
                 if all(param is None for param in aux_classifier_parameters.values()):

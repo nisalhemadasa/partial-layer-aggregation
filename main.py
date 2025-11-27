@@ -80,8 +80,8 @@ def main():
         is_synchronous=True,  # If the drift is synchronous or asynchronous
         async_drift_specs=async_drift_specs,  # Specifications for the asynchronous case
         #--------------------------------------------------------------------------------
-        # drift_mode=constants.DriftMode.LABEL_SWAP_ONCE,  # Drift creation method
-        # drift_step_rounds=[0.2, 0.8], # Rounds at which the drift steps occurs. Also indicates the start and end of drift period.
+        drift_mode=constants.DriftMode.LABEL_SWAP_ONCE,  # Drift creation method
+        drift_step_rounds=[0.2, 0.8], # Rounds at which the drift steps occurs. Also indicates the start and end of drift period.
         # #--------------------------------------------------------------------------------
         # drift_mode=constants.DriftMode.LABEL_SWAP_INCREMENTAL_STEPS, # Drift creation method
         # drift_step_rounds=[0.2, 0.6, 1],  # Rounds at which the drift steps occurs. Also indicates the start and end of drift period.
@@ -92,8 +92,8 @@ def main():
         # drift_mode=constants.DriftMode.ROTATION_GRADUAL_INCREMENTAL,  # Drift creation method
         # drift_step_rounds=[0.2, 0.6, 1],    # In Rotation gradual case, this indicates only the start and end of drift period.
         # # --------------------------------------------------------------------------------
-        drift_mode=constants.DriftMode.ROTATION_STEP_INCREMENTAL,  # Drift creation method
-        drift_step_rounds=[0.2, 0.6, 1], # Rounds at which the drift steps occurs. Also indicates the start and end of drift period.
+        # drift_mode=constants.DriftMode.ROTATION_STEP_INCREMENTAL,  # Drift creation method
+        # drift_step_rounds=[0.2, 0.6, 1], # Rounds at which the drift steps occurs. Also indicates the start and end of drift period.
         # --------------------------------------------------------------------------------
         # Therefore, it must have at least two entries (start and end of drift).
         max_rotation=45,  # Maximum rotation angle for the drift created by rotations
@@ -138,7 +138,7 @@ def main():
     # 000000000000000000000000000000000000000000000
     # Define drift recovery algorithm related parameters
     drift_recovery_parameters = dict(
-        recovery_method=constants.RecoveryAlgorithm.FEDAVG,  # Aggregation method used during the drift period
+        recovery_method=constants.RecoveryAlgorithm.FLUID,  # Aggregation method used during the drift period
         base_aggregation_method=constants.RecoveryAlgorithm.FEDAVG,  # Aggregation algorithm used outside the drift period
         fedau_alpha=0.9 # EMA weight (alpha) parameter for the FedAU algorithm
     )
@@ -162,8 +162,8 @@ def main():
 
     # Running the simulation
     fed_net.run_simulation(
-        file_save_path='./plots/saved_plots_fedavg_step_swap/',
-        log_save_path='./logs/saved_logs_fedavg_step_swap/')
+        file_save_path='./plots/saved_plots_fluid/',
+        log_save_path='./logs/saved_logs_fluid/')
 
     #0000000000000000000000000000000000000
     # # Define drift recovery algorithm related parameters
