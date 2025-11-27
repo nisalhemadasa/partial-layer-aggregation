@@ -275,8 +275,9 @@ class Drift:
                 first_drifted_client = copy.deepcopy(clients[idx])
                 # first_drifted_client_1 = copy.deepcopy(clients[idx])
 
-                # FedAU: create dataset with the swapped samples assigning random labels for training the auxiliary model
-                if clients[idx].drift_recovery_method == constants.RecoveryAlgorithm.FEDAU:
+                # FedAU & FLUID: create dataset with the swapped samples assigning random labels for training the auxiliary model
+                if (clients[idx].drift_recovery_method == constants.RecoveryAlgorithm.FEDAU or
+                        clients[idx].drift_recovery_method == constants.RecoveryAlgorithm.FLUID):
                     aux_dataset = create_auxiliary_dataset(first_drifted_client.local_trainset.dataset,
                                                            class_pair_to_swap)
                     clients[idx].aux_trainloader = convert_dataset_to_loader(aux_dataset, clients[idx].mini_batch_size)
