@@ -35,6 +35,8 @@ class DatasetNames:
     MNIST = 'MNIST'
     F_MNIST = 'FashionMNIST'
     CIFAR_10 = 'cifar-10-batches-py'
+    CIFAR_100 = 'cifar-100-python'
+    TINY_IMAGENET_200 = 'tiny-imagenet-200'
 
 
 class DatasetFileNames:
