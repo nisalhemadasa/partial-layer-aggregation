@@ -249,8 +249,8 @@ class Drift:
             _aux_dataset = copy.copy(_dataset)
 
             # Make completely independent copies of the original images and labels and store it in new attributes
-            _aux_dataset.data = _dataset.data.clone()
-            _aux_dataset.targets = _dataset.targets.clone()
+            _aux_dataset.data = copy.copy(_dataset.data)    # compatible with both Tensor and NumPy formats
+            _aux_dataset.targets = _dataset.targets.clone() # performance optimum for tensor format
 
             # aux_images = _dataset.aux_data  # Access dataset images
             aux_labels = _aux_dataset.targets  # Access dataset labels

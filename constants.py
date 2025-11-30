@@ -194,5 +194,6 @@ class RecoveryAlgorithm:
 class ModelTypes:
     SIMPLE_MODEL = 'SimpleModel'
     CNN_MODEL = 'CNNModel'
-    CNN_CIFAR = 'CNNCIFAR'
+    CNN_CIFAR_10 = 'CNNCIFAR10'
+    CNN_CIFAR_100 = 'CNNCIFAR100'
     CNN_TINY_IMAGENET = 'CNNTinyImageNet'

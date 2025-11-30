@@ -16,8 +16,8 @@ import strategy
 from distance_metrics.distance_metrics import compute_euclidean_distance_weights
 from drift_concepts.drift import Drift
 from federated_network.client import DEVICE, Client
-from models.model import SimpleModel, CNNModel, test, split_to_extractor_and_classifier, set_parameters, CNNCIFAR, \
-    CNNTinyImageNet
+from models.model import SimpleModel, CNNModel, test, split_to_extractor_and_classifier, set_parameters, \
+    CNNTinyImageNet, CNNCIFAR10, CNNCIFAR100
 
 
 class Server:
@@ -314,10 +314,9 @@ def server_fn(server_id: int, dataset_name: str, server_abs_id: int) -> Server:
     if dataset_name == constants.DatasetNames.MNIST or dataset_name == constants.DatasetNames.F_MNIST:
         model = CNNModel().to(DEVICE)
     elif dataset_name == constants.DatasetNames.CIFAR_10:
-        # MNIST
-        model = CNNCIFAR().to(DEVICE)
+        model = CNNCIFAR10().to(DEVICE)
     elif dataset_name == constants.DatasetNames.CIFAR_100:
-        model = CNNCIFAR(num_classes=100).to(DEVICE)
+        model = CNNCIFAR100().to(DEVICE)
     elif dataset_name == constants.DatasetNames.TINY_IMAGENET_200:
         model = CNNTinyImageNet().to(DEVICE)
     else:
