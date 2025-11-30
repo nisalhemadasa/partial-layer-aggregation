@@ -8,17 +8,18 @@ Version: 1.0
 from typing import List, OrderedDict, Dict
 
 import torch
+from torch import nn
 
 import constants
 from distance_metrics.distance_metrics import compute_euclidean_distance_weights
-from models.model import CNNModel, set_parameters
+from models.model import set_parameters
 
 
 class FedAvg:
     def __init__(self, strategy_name: str):
         self.strategy_name = strategy_name
 
-    def aggregate_models(self, server_model: CNNModel,
+    def aggregate_models(self, server_model: nn.Module,
                          client_model_params_dict: Dict[str, OrderedDict],
                          client_model_params_list: List[OrderedDict] = None) -> None:
         """

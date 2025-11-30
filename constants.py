@@ -163,6 +163,7 @@ class DriftMode:
     # +90 degrees). The number of samples to be rotated is gradually increased
     ROTATION_STEP_INCREMENTAL = 'rotation_step_incremental'
 
+
 # file names related to logging
 class Logs:
     CLIENT_LOG = 'client_log'
@@ -188,3 +189,10 @@ class RecoveryAlgorithm:
     FLUID = 'fluid'
     FEDEX = 'fedex'
 
+
+# Types of models used in the project
+class ModelTypes:
+    SIMPLE_MODEL = 'SimpleModel'
+    CNN_MODEL = 'CNNModel'
+    CNN_CIFAR = 'CNNCIFAR'
+    CNN_TINY_IMAGENET = 'CNNTinyImageNet'

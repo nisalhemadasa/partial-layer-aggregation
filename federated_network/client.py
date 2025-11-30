@@ -14,7 +14,8 @@ from torch.utils.data import Dataset, Subset, DataLoader
 
 import constants
 from data.utils import convert_dataset_to_loader
-from models.model import train, test, CNNModel, rapid_train, fedau_clientside_train, set_parameters
+from models.model import train, test, CNNModel, rapid_train, fedau_clientside_train, set_parameters, CNNCIFAR, \
+    CNNTinyImageNet
 
 DEVICE = torch.device("cpu")  # Try "cuda" to train on GPU
 print(
@@ -138,7 +139,7 @@ def change_client_drift_recovery_method(clients: List[Client], drift_recovery_me
 
 
 def client_fn(client_id: int, if_iid: bool, num_local_epochs: int, mini_batch_size: int,
-              _dataset: List[Dataset], drift_recovery_method: str) -> Client:
+              _dataset: List[Dataset], drift_recovery_method: str, dataset_name: str ) -> Client:
     """
     Create a client instances on demand for the optimal use of resources.
     :param client_id: client id
@@ -147,10 +148,20 @@ def client_fn(client_id: int, if_iid: bool, num_local_epochs: int, mini_batch_si
     :param mini_batch_size: size of the batches for the clients to train on
     :param _dataset: train and test datasets
     :param drift_recovery_method: Drift recovery method to be used by the client
+    :param dataset_name: name of the dataset
     :returns Client: A Client instance.
     """
     # Load model
-    _model = CNNModel()
+    if dataset_name == constants.DatasetNames.MNIST or dataset_name == constants.DatasetNames.F_MNIST:
+        _model = CNNModel()
+    elif dataset_name == constants.DatasetNames.CIFAR_10:
+        _model = CNNCIFAR()
+    elif dataset_name == constants.DatasetNames.CIFAR_100:
+        _model = CNNCIFAR(num_classes=100)
+    elif dataset_name == constants.DatasetNames.TINY_IMAGENET_200:
+        _model = CNNTinyImageNet()
+    else:
+        raise ValueError("Unsupported dataset name")
 
     # Unpacking _dataset (which contains a subset of the complete training set (e.g., MNIST) and the global test set)
     local_trainset, testset = _dataset

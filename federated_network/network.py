@@ -91,7 +91,8 @@ class FederatedNetwork:
                 self.num_local_epochs,
                 self.minibatch_size,
                 [partitioned_noniid_trainsets[i], partitioned_noniid_testsets[i]],
-                self.drift_recovery_parameters['base_aggregation_method']
+                self.drift_recovery_parameters['base_aggregation_method'],
+                dataset_name
             )
             for i in range(num_noniid_client_instances)
         ]
@@ -103,7 +104,8 @@ class FederatedNetwork:
                 self.num_local_epochs,
                 self.minibatch_size,
                 [partitioned_iid_trainsets[i], partitioned_iid_testsets[i]],
-                self.drift_recovery_parameters['base_aggregation_method']
+                self.drift_recovery_parameters['base_aggregation_method'],
+                dataset_name
             )
             for i in range(num_iid_client_instances)
         ]

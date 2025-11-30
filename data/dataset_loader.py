@@ -12,14 +12,16 @@ import zipfile
 from typing import List
 
 from urllib.request import urlretrieve
-from torch.utils.data import Dataset
+
+import torch
+from torch.utils.data import Dataset, DataLoader
 from torchvision import datasets, transforms
 from torchvision.datasets import ImageFolder
 
 import constants
 
 
-def load_datasets(_dataset_name: str, verbose:bool = False) -> list[Dataset]:
+def load_datasets(_dataset_name: str, verbose: bool = False) -> list[Dataset]:
     """
     Loads the dataset either by reading or downloading if the dataset does not exist.
     :param _dataset_name: Name of the dataset that needs to be downloaded.
@@ -103,10 +105,10 @@ def load_datasets(_dataset_name: str, verbose:bool = False) -> list[Dataset]:
 
         if files_exist:
             trainset = datasets.CIFAR100(constants.Paths.DATASET, download=False, train=True,
-                                        transform=transform_cifar)
+                                         transform=transform_cifar)
 
             testset = datasets.CIFAR100(constants.Paths.DATASET, download=False, train=False,
-                                       transform=transform_cifar)
+                                        transform=transform_cifar)
         else:
             # Download the dataset and load it
             trainset = datasets.CIFAR100(constants.Paths.DATASET, download=True, train=True, transform=transform_cifar)
@@ -165,10 +167,54 @@ def load_datasets(_dataset_name: str, verbose:bool = False) -> list[Dataset]:
         trainset = ImageFolder(train_dir, transform=transform_tiny_imagenet)
         testset = ImageFolder(val_dir, transform=transform_tiny_imagenet)
 
+        # --------- FAST bulk conversion to .data and .targets using DataLoader ----------
+        # ---------- tainset -------------
+        if verbose:
+            print("Converting Tiny ImageNet trainset to tensors (data, targets)...")
+
+        num_workers = min(8, os.cpu_count() or 1)
+
+        train_loader = DataLoader(trainset, batch_size=512, shuffle=False, num_workers=num_workers, pin_memory=True)
+
+        train_images = []
+        train_labels = []
+        for imgs, labels in train_loader:
+            train_images.append(imgs)
+            train_labels.append(labels)
+
+        trainset.data = torch.cat(train_images, dim=0)          # [N_train, 3, 64, 64]
+        trainset.targets = torch.cat(train_labels, dim=0)
+
+        # ---------- testset -------------
+        if verbose:
+            print("Converting Tiny ImageNet testset to tensors (data, targets)...")
+
+        test_loader = DataLoader(
+            testset,
+            batch_size=512,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=True,
+        )
+
+        test_images = []
+        test_labels = []
+        for imgs, labels in test_loader:
+            test_images.append(imgs)
+            test_labels.append(labels)
+
+        testset.data = torch.cat(test_images, dim=0)  # [N_test, 3, 64, 64]
+        testset.targets = torch.cat(test_labels, dim=0)  # [N_test]
+
     # =====================================================================
     else:
         print("Invalid dataset name. Please enter a valid dataset name.")
         sys.exit()
+
+    # Convert targets of CIFAR 10/100 and Tiny-ImageNet to tensors for consistency
+    if _dataset_name in [constants.DatasetNames.CIFAR_10, constants.DatasetNames.CIFAR_100, constants.DatasetNames.TINY_IMAGENET_200]:
+        trainset.targets = torch.Tensor(trainset.targets).to(torch.int64)
+        testset.targets = torch.Tensor(testset.targets).to(torch.int64)
 
     return [trainset, testset]
 
