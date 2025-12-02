@@ -80,8 +80,8 @@ def main():
         is_synchronous=True,  # If the drift is synchronous or asynchronous
         async_drift_specs=async_drift_specs,  # Specifications for the asynchronous case
         #--------------------------------------------------------------------------------
-        drift_mode=constants.DriftMode.LABEL_SWAP_ONCE,  # Drift creation method
-        drift_step_rounds=[0.2, 0.8], # Rounds at which the drift steps occurs. Also indicates the start and end of drift period.
+        # drift_mode=constants.DriftMode.LABEL_SWAP_ONCE,  # Drift creation method
+        # drift_step_rounds=[0.2, 0.8], # Rounds at which the drift steps occurs. Also indicates the start and end of drift period.
         # #--------------------------------------------------------------------------------
         # drift_mode=constants.DriftMode.LABEL_SWAP_INCREMENTAL_STEPS, # Drift creation method
         # drift_step_rounds=[0.2, 0.6, 1],  # Rounds at which the drift steps occurs. Also indicates the start and end of drift period.
@@ -92,15 +92,17 @@ def main():
         # drift_mode=constants.DriftMode.ROTATION_GRADUAL_INCREMENTAL,  # Drift creation method
         # drift_step_rounds=[0.2, 0.6, 1],    # In Rotation gradual case, this indicates only the start and end of drift period.
         # # --------------------------------------------------------------------------------
-        # drift_mode=constants.DriftMode.ROTATION_STEP_INCREMENTAL,  # Drift creation method
-        # drift_step_rounds=[0.2, 0.6, 1], # Rounds at which the drift steps occurs. Also indicates the start and end of drift period.
+        drift_mode=constants.DriftMode.ROTATION_STEP_INCREMENTAL,  # Drift creation method
+        drift_step_rounds=[0.2, 0.6, 1], # Rounds at which the drift steps occurs. Also indicates the start and end of drift period.
         # --------------------------------------------------------------------------------
         # Therefore, it must have at least two entries (start and end of drift).
         max_rotation=45,  # Maximum rotation angle for the drift created by rotations
-        class_pairs_to_swap=[[(1, 2), (3, 4)], [(5, 7)]],
+        class_pairs_to_swap=[[(1, 2), (3, 4)], [(5, 7)]],   # label indices (not the class names)
         # Classes to be swapped in the label-swapping drift method
         # class_pairs_to_swap=[[(1, 2), (5, 7)], [(1, 2), (5, 7)]],  # Classes to be swapped in the label-swapping drift method
-        # class_pairs_to_swap=[('T-shirt/top', 'Pullover'), ('Sandal', 'Sneaker')],  # Classes to be swapped in F_MNIST
+        # class_pairs_to_swap=[[('T-shirt/top', 'Pullover'), ('Sandal', 'Sneaker')]],  # Classes to be swapped in F_MNIST
+        # class_pairs_to_swap=[[('airplane', 'automobile'), ('bird', 'cat'), ('frog', 'horse')]],  # Classes to be swapped in CIFAR-10
+        # class_pairs_to_swap=[[('bicycle', 'bus'), ('camel', 'fox'), ('dolphin', 'roses'), ('clock', 'bed'), ('bridge', 'cloud'), ('rocket', 'oak'), ('snake','crab')]],  # Classes to be swapped in CIFAR-100
         label_swap_percentage_steps=[1,  1],  # Percentages to swap per step (label-swapping)
         current_drift_step=-1  # Current drift step (used internally during simulation. -1 represents no drift yet)
     )
@@ -138,7 +140,7 @@ def main():
     # 000000000000000000000000000000000000000000000
     # Define drift recovery algorithm related parameters
     drift_recovery_parameters = dict(
-        recovery_method=constants.RecoveryAlgorithm.FLUID,  # Aggregation method used during the drift period
+        recovery_method=constants.RecoveryAlgorithm.FEDAVG,  # Aggregation method used during the drift period
         base_aggregation_method=constants.RecoveryAlgorithm.FEDAVG,  # Aggregation algorithm used outside the drift period
         fedau_alpha=0.9 # EMA weight (alpha) parameter for the FedAU algorithm
     )
@@ -146,14 +148,14 @@ def main():
 
     # Create a federated network
     fed_net = FederatedNetwork(
-        num_iid_client_instances=10,  # Number of IID clients in the federated network
+        num_iid_client_instances=5,  # Number of IID clients in the federated network
         # num_iid_client_instances=100,  # Suggested at FLTA
         num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
         server_tree_layout=[1],
         # Number of servers at each level of the server tree of depth n = [n, n-1,..., 1]
         # num_training_rounds=100,  # In literature, over 50 rounds are trained. FLUID trains 100 rounds
-        num_training_rounds=20,  # Number of training rounds (in literature, over 50 rounds are trained.)
-        dataset_name=constants.DatasetNames.MNIST,  # Name of the dataset
+        num_training_rounds=5,  # Number of training rounds (in literature, over 50 rounds are trained.)
+        dataset_name=constants.DatasetNames.TINY_IMAGENET_200,  # Name of the dataset
         drift_specs=drift_specifications,  # Drift specifications
         simulation_parameters=simulation_parameters,  # Parameters specifying the simulation scenarios
         client_select_fraction=1,  # Fraction of clients to be selected for each round
@@ -162,8 +164,8 @@ def main():
 
     # Running the simulation
     fed_net.run_simulation(
-        file_save_path='./plots/saved_plots_fluid/',
-        log_save_path='./logs/saved_logs_fluid/')
+        file_save_path='./plots/saved_plots_fedavg_1/',
+        log_save_path='./logs/saved_logs_fedavg_1/')
 
     #0000000000000000000000000000000000000
     # # Define drift recovery algorithm related parameters

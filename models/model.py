@@ -5,6 +5,7 @@ Author: Nisal Hemadasa
 Date: 04-04-2025
 Version: 2.0
 """
+from abc import ABC, abstractmethod
 from typing import Tuple, OrderedDict, List
 
 import numpy as np
@@ -12,6 +13,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+
+import constants
 
 DEVICE = torch.device("cpu")  # Try "cuda" to train on GPU
 print(
@@ -38,49 +41,10 @@ class SimpleModel(nn.Module):
         # x = self.sigmoid(x)
         return x
 
+    def get_model_type(self) -> str:
+        """Return the model type as a string."""
+        return constants.ModelTypes.SIMPLE_MODEL
 
-# class CNNModel(nn.Module):
-#     def __init__(self):
-#         """Defined for both MNIST and F_MNIST datasets"""
-#         super(CNNModel, self).__init__()
-#
-#         self.pool = nn.MaxPool2d(2, 2, 1, 2)
-#
-#         self.conv1 = nn.Conv2d(1, 6, 5, 1, 2)
-#         self.conv2 = nn.Conv2d(6, 16, 5, 1, 2)
-#         self.conv3 = nn.Conv2d(16, 32, 3, 1, 2)
-#         self.conv4 = nn.Conv2d(32, 64, 3, 1, 2)
-#
-#         self.fc1 = nn.Linear(64 * 4 * 4, 120)
-#         self.fc2 = nn.Linear(120, 84)
-#         self.fc3 = nn.Linear(84, 10)
-#
-#         self.bn1 = nn.BatchNorm2d(6)
-#         self.bn2 = nn.BatchNorm2d(16)
-#         self.bn3 = nn.BatchNorm2d(32)
-#         self.bn4 = nn.BatchNorm2d(64)
-#         self.bn5 = nn.BatchNorm1d(120)
-#         self.bn6 = nn.BatchNorm1d(84)
-#
-#     def forward(self, x):
-#         # print("Input shape:", x.shape)
-#         x = self.pool(F.relu(self.bn1(self.conv1(x))))
-#         # print("After conv1 and pool:", x.shape)
-#         x = self.pool(F.relu(self.bn2(self.conv2(x))))
-#         # print("After conv2 and pool:", x.shape)
-#         x = self.pool(F.relu(self.bn3(self.conv3(x))))
-#         # print("After conv3 and pool:", x.shape)
-#         x = self.pool(F.relu(self.bn4(self.conv4(x))))
-#         # print("After conv4 and pool:", x.shape)
-#         x = x.view(-1, 64 * 4 * 4)
-#         # print("After view:", x.shape)
-#         x = F.relu(self.bn5(self.fc1(x)))
-#         # print("After fc1:", x.shape)
-#         x = F.relu(self.bn6(self.fc2(x)))
-#         # print("After fc2:", x.shape)
-#         x = self.fc3(x)  # classifier in the case of FedAU
-#         # print("Output shape:", x.shape)
-#         return x
 
 # for MNIST and F_MNIST dataset (28 x 28 dimensional images)
 class CNNModel(nn.Module):
@@ -105,6 +69,253 @@ class CNNModel(nn.Module):
         x = self.fc2(x)
         # return x
         return torch.log_softmax(x, dim=1)
+
+    def get_model_type(self) -> str:
+        """Return the model type as a string."""
+        return constants.ModelTypes.CNN_MODEL
+
+
+# for CIFAR 10/CIFAR 100 dataset (32 x 32 dimensional images) in 3 channels
+class CNNCIFAR10(nn.Module):
+    """
+    A Convolutional Neural Network for CIFAR-10 dataset.
+    Input: 32x32 RGB images (3 channels)
+    Output: 10-class(CIFAR-10) classification
+    """
+
+    def __init__(self, num_classes=10):
+        super(CNNCIFAR10, self).__init__()
+
+        # CIFAR has 3 channels
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=32, kernel_size=3)
+        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3)
+
+        # CIFAR feature-map output size calculation:
+        # Input: 32x32
+        # After conv1 (no padding):   30x30
+        # After maxpool:              15x15
+        # After conv2:                13x13
+        # After maxpool:               6x6
+        # Feature size = 64 * 6 * 6
+
+        self.fc1 = nn.Linear(64 * 6 * 6, 128)
+        self.fc2 = nn.Linear(128, num_classes)
+        self.dropout = nn.Dropout(p=0.5)
+
+    def forward(self, x):
+        x = torch.relu(self.conv1(x))
+        x = torch.max_pool2d(x, kernel_size=2, stride=2)
+        x = torch.relu(self.conv2(x))
+        x = torch.max_pool2d(x, kernel_size=2, stride=2)
+
+        x = x.view(x.size(0), -1)  # flatten
+        x = torch.relu(self.fc1(x))
+        x = self.dropout(x)
+        x = self.fc2(x)
+
+        return torch.log_softmax(x, dim=1)
+
+    def get_model_type(self) -> str:
+        """Return the model type as a string."""
+        return constants.ModelTypes.CNN_CIFAR_10
+
+# for CIFAR 10/CIFAR 100 dataset (32 x 32 dimensional images) in 3 channels
+class CNNCIFAR100(nn.Module):
+    """
+    A Convolutional Neural Network for CIFAR-100 dataset.
+    Input: 32x32 RGB images (3 channels)
+    Output: 100-class(CIFAR-100) classification
+    """
+
+    def __init__(self, num_classes=100):
+        super(CNNCIFAR100, self).__init__()
+
+        # CIFAR has 3 channels
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=32, kernel_size=3)
+        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3)
+
+        # CIFAR feature-map output size calculation:
+        # Input: 32x32
+        # After conv1 (no padding):   30x30
+        # After maxpool:              15x15
+        # After conv2:                13x13
+        # After maxpool:               6x6
+        # Feature size = 64 * 6 * 6
+
+        self.fc1 = nn.Linear(64 * 6 * 6, 128)
+        self.fc2 = nn.Linear(128, num_classes)
+        self.dropout = nn.Dropout(p=0.5)
+
+    def forward(self, x):
+        x = torch.relu(self.conv1(x))
+        x = torch.max_pool2d(x, kernel_size=2, stride=2)
+        x = torch.relu(self.conv2(x))
+        x = torch.max_pool2d(x, kernel_size=2, stride=2)
+
+        x = x.view(x.size(0), -1)  # flatten
+        x = torch.relu(self.fc1(x))
+        x = self.dropout(x)
+        x = self.fc2(x)
+
+        return torch.log_softmax(x, dim=1)
+
+    def get_model_type(self) -> str:
+        """Return the model type as a string."""
+        return constants.ModelTypes.CNN_CIFAR_100
+
+
+# class CNNTinyImageNet(nn.Module):
+#     """
+#     A Convolutional Neural Network for Tiny ImageNet-200.
+#
+#     Input:  64x64 RGB images (3 channels)
+#     Output: 200-class classification (Tiny ImageNet-200)
+#     """
+#
+#     def __init__(self, num_classes: int = 200):
+#         super(CNNTinyImageNet, self).__init__()
+#
+#         # Tiny ImageNet / CIFAR-style backbone
+#         self.conv1 = nn.Conv2d(in_channels=3, out_channels=32, kernel_size=3)  # 64x64 -> 62x62
+#         self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3)  # 31x31 -> 29x29
+#
+#         # For 64x64 input:
+#         #  conv1: 64x64 -> 62x62
+#         #  pool:  62x62 -> 31x31
+#         #  conv2: 31x31 -> 29x29
+#         #  pool:  29x29 -> 14x14
+#         # So flattened feature size = 64 * 14 * 14 = 12544
+#         self.fc1 = nn.Linear(64 * 14 * 14, 128)
+#         self.fc2 = nn.Linear(128, num_classes)
+#
+#         self.dropout = nn.Dropout(p=0.5)
+#
+#     def forward(self, x: torch.Tensor) -> torch.Tensor:
+#         # x: [batch, 3, 64, 64]
+#         x = F.relu(self.conv1(x))  # -> [B, 32, 62, 62]
+#         x = F.max_pool2d(x, kernel_size=2, stride=2)  # -> [B, 32, 31, 31]
+#
+#         x = F.relu(self.conv2(x))  # -> [B, 64, 29, 29]
+#         x = F.max_pool2d(x, kernel_size=2, stride=2)  # -> [B, 64, 14, 14]
+#
+#         x = x.view(x.size(0), -1)  # -> [B, 64*14*14 = 12544]
+#
+#         x = F.relu(self.fc1(x))  # -> [B, 128]
+#         x = self.dropout(x)
+#         x = self.fc2(x)  # -> [B, num_classes]
+#
+#         return F.log_softmax(x, dim=1)
+#
+#     def get_model_type(self) -> str:
+#         """Return the model type as a string."""
+#         return constants.ModelTypes.CNN_TINY_IMAGENET
+class ResidualBlock(nn.Module):
+    """Small ResNet-like block used in a lightweight Tiny ImageNet CNN."""
+    def __init__(self, in_channels, out_channels, stride=1):
+        super().__init__()
+
+        self.conv1 = nn.Conv2d(
+            in_channels, out_channels, kernel_size=3,
+            stride=stride, padding=1, bias=False
+        )
+        self.bn1 = nn.BatchNorm2d(out_channels)
+
+        self.conv2 = nn.Conv2d(
+            out_channels, out_channels, kernel_size=3,
+            stride=1, padding=1, bias=False
+        )
+        self.bn2 = nn.BatchNorm2d(out_channels)
+
+        # Optional 1x1 conv to match shape for the skip connection
+        if stride != 1 or in_channels != out_channels:
+            self.downsample = nn.Sequential(
+                nn.Conv2d(
+                    in_channels, out_channels,
+                    kernel_size=1, stride=stride, bias=False
+                ),
+                nn.BatchNorm2d(out_channels),
+            )
+        else:
+            self.downsample = None
+
+    def forward(self, x):
+        identity = x
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = F.relu(out, inplace=True)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+
+        if self.downsample is not None:
+            identity = self.downsample(x)
+
+        out += identity
+        out = F.relu(out, inplace=True)
+        return out
+
+
+class CNNTinyImageNet(nn.Module):
+    """
+    Lightweight ResNet-style CNN for Tiny ImageNet-200.
+
+    Input:  [B, 3, 64, 64]
+    Output: [B, num_classes] (logits, not log_softmax)
+    """
+
+    def __init__(self, num_classes: int = 200):
+        super().__init__()
+
+        # Stem: keep it small
+        self.stem = nn.Sequential(
+            nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=1, bias=False),  # 64x64
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+        )
+
+        # Stage 1: 32 channels, spatial 64x64 -> 32x32
+        self.block1 = ResidualBlock(32, 32, stride=1)
+        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)  # 64x64 -> 32x32
+
+        # Stage 2: 32 -> 64 channels, 32x32 -> 16x16
+        self.block2 = ResidualBlock(32, 64, stride=1)
+        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)  # 32x32 -> 16x16
+
+        # Stage 3: 64 -> 128 channels, 16x16 -> 8x8
+        self.block3 = ResidualBlock(64, 128, stride=1)
+        self.pool3 = nn.MaxPool2d(kernel_size=2, stride=2)  # 16x16 -> 8x8
+
+        # Global average pooling instead of a huge FC
+        self.dropout = nn.Dropout(p=0.5)
+        self.fc = nn.Linear(128, num_classes)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Input: [B, 3, 64, 64]
+        x = self.stem(x)            # [B, 32, 64, 64]
+
+        x = self.block1(x)          # [B, 32, 64, 64]
+        x = self.pool1(x)           # [B, 32, 32, 32]
+
+        x = self.block2(x)          # [B, 64, 32, 32]
+        x = self.pool2(x)           # [B, 64, 16, 16]
+
+        x = self.block3(x)          # [B, 128, 16, 16]
+        x = self.pool3(x)           # [B, 128, 8, 8]
+
+        # Global average pooling to [B, 128]
+        x = F.adaptive_avg_pool2d(x, output_size=1)  # [B, 128, 1, 1]
+        x = torch.flatten(x, 1)                      # [B, 128]
+
+        x = self.dropout(x)
+        x = self.fc(x)                               # [B, num_classes]
+
+        # For CrossEntropyLoss, logits are preferred (no log_softmax here)
+        return x
+
+    def get_model_type(self) -> str:
+        """Return the model type as a string."""
+        return constants.ModelTypes.CNN_TINY_IMAGENET
 
 
 def split_to_extractor_and_classifier(_model: nn.Module, _model_params: OrderedDict) -> tuple[OrderedDict, OrderedDict]:
@@ -189,9 +400,21 @@ def auxiliary_model_train(_model: nn.Module, _aux_dataset: DataLoader, _server_m
     :param _verbose: Whether to print training progress
     :return: None
     """
-    # Initialize the auxiliary model
-    aux_model = CNNModel().to(DEVICE)  # initialize using a fresh base model, similar to learning module architecture
-    set_parameters(aux_model, _server_model_params)  # load server parameters to auxiliary model
+    # Initialize the auxiliary model (similar to learning module architecture)
+    model_type = _model.get_model_type()
+    if model_type == constants.ModelTypes.CNN_MODEL:
+        aux_model = CNNModel().to(DEVICE)
+    elif model_type == constants.ModelTypes.CNN_CIFAR_10:
+        aux_model = CNNCIFAR10().to(DEVICE)
+    elif model_type == constants.ModelTypes.CNN_CIFAR_100:
+        aux_model = CNNCIFAR100().to(DEVICE)
+    elif model_type == constants.ModelTypes.CNN_TINY_IMAGENET:
+        aux_model = CNNTinyImageNet().to(DEVICE)
+    else:
+        raise ValueError(f"Unsupported model type for auxiliary model training: {model_type}")
+
+    # load server parameters to auxiliary model
+    set_parameters(aux_model, _server_model_params)
 
     # Replace fc2 layer with a new nn.Linear of the same shape
     aux_model.fc2 = nn.Linear(aux_model.fc2.in_features, aux_model.fc2.out_features)

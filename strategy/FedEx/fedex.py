@@ -12,14 +12,14 @@ import torch
 from torch import nn
 
 import constants
-from models.model import CNNModel, split_to_extractor_and_classifier, set_parameters
+from models.model import split_to_extractor_and_classifier, set_parameters
 
 
 class FedEx:
     def __init__(self, strategy_name: str):
         self.strategy_name = strategy_name
 
-    def aggregate_models(self, server_model: CNNModel, client_model_params_dict: Dict[str, OrderedDict]) -> OrderedDict:
+    def aggregate_models(self, server_model: nn.Module, client_model_params_dict: Dict[str, OrderedDict]) -> OrderedDict:
         """
         Aggregate the client models to the global model using adaptive weights and returns the new aggregated model.
         :param server_model: The server (edge or global) model

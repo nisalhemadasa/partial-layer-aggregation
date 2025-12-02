@@ -28,6 +28,9 @@ TestResults.xml
 #data sets
 *data/MNIST
 *data/FashionMNIST
+*data/cifar-10-batches-py
+*data/cifar-100-python
+*data/tiny-imagenet-200
 #pycache
 *__pycache__
 #Logs

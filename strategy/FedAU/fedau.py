@@ -9,18 +9,17 @@ import copy
 from typing import OrderedDict, Dict, List
 
 import torch
+from torch import nn
 
 import constants
-from models.model import CNNModel, split_to_extractor_and_classifier, set_parameters
-from strategy.FedAvg import fedavg
+from models.model import split_to_extractor_and_classifier, set_parameters
 
 
 class FedAU:
     def __init__(self, strategy_name: str):
         self.strategy_name = strategy_name
 
-
-    def aggregate_models(self, server_model: CNNModel, client_model_params_dict: Dict[str, OrderedDict],
+    def aggregate_models(self, server_model: nn.Module, client_model_params_dict: Dict[str, OrderedDict],
                          auxiliary_classifier_params_dict: Dict[str, OrderedDict], ema_weight: float) -> None:
         """
         Aggregate the client models to the global model using adaptive weights and returns the new aggregated model.

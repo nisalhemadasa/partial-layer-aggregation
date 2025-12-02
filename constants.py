@@ -35,6 +35,8 @@ class DatasetNames:
     MNIST = 'MNIST'
     F_MNIST = 'FashionMNIST'
     CIFAR_10 = 'cifar-10-batches-py'
+    CIFAR_100 = 'cifar-100-python'
+    TINY_IMAGENET_200 = 'tiny-imagenet-200'
 
 
 class DatasetFileNames:
@@ -161,6 +163,7 @@ class DriftMode:
     # +90 degrees). The number of samples to be rotated is gradually increased
     ROTATION_STEP_INCREMENTAL = 'rotation_step_incremental'
 
+
 # file names related to logging
 class Logs:
     CLIENT_LOG = 'client_log'
@@ -186,3 +189,11 @@ class RecoveryAlgorithm:
     FLUID = 'fluid'
     FEDEX = 'fedex'
 
+
+# Types of models used in the project
+class ModelTypes:
+    SIMPLE_MODEL = 'SimpleModel'
+    CNN_MODEL = 'CNNModel'
+    CNN_CIFAR_10 = 'CNNCIFAR10'
+    CNN_CIFAR_100 = 'CNNCIFAR100'
+    CNN_TINY_IMAGENET = 'CNNTinyImageNet'

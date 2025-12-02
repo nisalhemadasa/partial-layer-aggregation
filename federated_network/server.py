@@ -16,7 +16,8 @@ import strategy
 from distance_metrics.distance_metrics import compute_euclidean_distance_weights
 from drift_concepts.drift import Drift
 from federated_network.client import DEVICE, Client
-from models.model import SimpleModel, CNNModel, test, split_to_extractor_and_classifier, set_parameters
+from models.model import SimpleModel, CNNModel, test, split_to_extractor_and_classifier, set_parameters, \
+    CNNTinyImageNet, CNNCIFAR10, CNNCIFAR100
 
 
 class Server:
@@ -310,10 +311,15 @@ def server_fn(server_id: int, dataset_name: str, server_abs_id: int) -> Server:
     """
     aggregator_strategy = strategy.FedAvg.aggregator_fn()
     # model = SimpleModel().to(DEVICE)
-    if dataset_name == constants.DatasetNames.CIFAR_10:
+    if dataset_name == constants.DatasetNames.MNIST or dataset_name == constants.DatasetNames.F_MNIST:
         model = CNNModel().to(DEVICE)
+    elif dataset_name == constants.DatasetNames.CIFAR_10:
+        model = CNNCIFAR10().to(DEVICE)
+    elif dataset_name == constants.DatasetNames.CIFAR_100:
+        model = CNNCIFAR100().to(DEVICE)
+    elif dataset_name == constants.DatasetNames.TINY_IMAGENET_200:
+        model = CNNTinyImageNet().to(DEVICE)
     else:
-        # MNIST
-        model = CNNModel().to(DEVICE)
+        raise ValueError("Unsupported dataset name")
 
     return Server(_server_id=server_id, _abs_id=server_abs_id, _strategy=aggregator_strategy, _model=model)
