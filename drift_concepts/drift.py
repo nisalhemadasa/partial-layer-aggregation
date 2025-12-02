@@ -105,7 +105,7 @@ class Drift:
             """
             _images = dataset.data  # Access dataset images
             _labels = dataset.targets  # Access dataset labels
-            _drifted_images = _images.clone()
+            _drifted_images = copy.copy(_images)
 
             num_images = len(_images)
             num_images_to_rotate = int(_fraction_rotated * num_images)
@@ -116,8 +116,14 @@ class Drift:
 
             # apply rotation only to those indices
             for _idx in rotate_indices:
-                rotated = rotate(_images[_idx].numpy(), _rotation_angle, reshape=False)
-                _drifted_images[_idx] = torch.tensor(rotated, dtype=_images.dtype)
+                # If tensor, convert to NumPy (For MNIST, FashionMNIST)
+                if isinstance(_images[_idx], torch.Tensor):
+                    img_np = _images[_idx].numpy()
+                else:
+                    img_np = _images[_idx]  # already NumPy (For CIFAR-10, CIFAR-100)
+
+                rotated_image = rotate(img_np, _rotation_angle, reshape=False)
+                _drifted_images[_idx] = torch.tensor(rotated_image)
 
             return _drifted_images, _labels
 
@@ -171,11 +177,17 @@ class Drift:
             """
             _images = dataset.data  # Access dataset images
             _labels = dataset.targets  # Access dataset labels
-            _drifted_images = _images.clone()
+            _drifted_images = copy.copy(_images)
 
-            for idx in range(len(_images)):
-                rotated_image = rotate(_images[idx].numpy(), _rotation_angle, reshape=False)
-                _drifted_images[idx] = torch.tensor(rotated_image)
+            for _idx in range(len(_images)):
+                # If tensor, convert to NumPy (For MNIST, FashionMNIST)
+                if isinstance(_images[_idx], torch.Tensor):
+                    img_np = _images[_idx].numpy()
+                else:
+                    img_np = _images[_idx]  # already NumPy (For CIFAR-10, CIFAR-100)
+
+                rotated_image = rotate(img_np, _rotation_angle, reshape=False)
+                _drifted_images[_idx] = torch.tensor(rotated_image)
 
             return _drifted_images, _labels
 
@@ -248,9 +260,9 @@ class Drift:
             # Shallow copy: cheap, copies only the object shell, not the tensors
             _aux_dataset = copy.copy(_dataset)
 
-            # Make completely independent copies of the original images and labels and store it in new attributes
-            _aux_dataset.data = copy.copy(_dataset.data)    # compatible with both Tensor and NumPy formats
-            _aux_dataset.targets = _dataset.targets.clone() # performance optimum for tensor format
+            # # Make completely independent copies of the original images and labels and store it in new attributes
+            # _aux_dataset.data = copy.copy(_dataset.data)    # compatible with both Tensor and NumPy formats
+            # _aux_dataset.targets = _dataset.targets.clone() # performance optimum for tensor format
 
             # aux_images = _dataset.aux_data  # Access dataset images
             aux_labels = _aux_dataset.targets  # Access dataset labels
