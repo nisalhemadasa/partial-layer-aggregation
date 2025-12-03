@@ -644,6 +644,9 @@ def test(_model: nn.Module, _dataset: DataLoader) -> tuple[float, float]:
             inputs = _x
             labels = _y
 
+            inputs = inputs.to(DEVICE)  # move inputs to device
+            labels = labels.to(DEVICE)  # move labels to device
+
             # forward pass
             outputs = _model(inputs)
 

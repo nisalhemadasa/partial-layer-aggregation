@@ -182,6 +182,22 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
     return server_loss_and_accuracy
 
 
+def model_aggregation_fedrc(server_models: List[Server], sampled_clients: List[Client],
+                      drift: Drift, drift_recovery_parameters: Dict[str, any], _is_server_has_test_data: bool=True,
+                      verbose=False):
+    """
+    Aggregate the models of the clients to the server model for FedRC algorithm.
+    :param server_models: List of servers, dedicated for each drift type.
+    :param sampled_clients: List of sampled clients
+    :param drift: Drift instance
+    :param drift_recovery_parameters: Drift recovery algorithm parameters
+    :param _is_server_has_test_data: Boolean flag to indicate whether server possesses test data
+    :param verbose: Whether to print detailed logs or not
+    :return: None
+    """
+    pass
+
+
 def model_distribution(server_hierarchy: List[List[Server]]) -> None:
     """
     The aggregated models are distributed down the hierarchy. I.e., the edge models are updated by the global model and
@@ -208,8 +224,6 @@ def model_distribution_fedex(servers: List[Server], all_clients: List[Client]) -
     :param servers: The aggregated server models (to be distributed)
     :param all_clients: List of all clients
     """
-    round_server_loss_and_accuracy = []
-
     for client in all_clients:  # TODO: here fedex is done to all cleints and not only drifted clients
         # Get the server to which the client is connected
         server = servers[client.parent_server_id]
@@ -219,11 +233,11 @@ def model_distribution_fedex(servers: List[Server], all_clients: List[Client]) -
         # Load the composite unlearning model ({E, W_hat}) to the server model
         set_parameters(client.model, server_extractor, False)
 
-        # round_server_loss_and_accuracy.append(client.evaluate())
+def model_distribution_fedrc(servers: List[Server], all_clients: List[Client]) -> None:
+    """
+    Distribute the server model to all clients for FedRC algorithm.
+    """
 
-    # # Position-wise average server loss and accuracy. i.e., take the average loss of all clients (likewise in accuracy)
-    # arr = np.array(round_server_loss_and_accuracy)  # shape (N, 2)
-    # return tuple(arr.mean(axis=0))
 
 
 def server_hierarchy_evaluate(server_hierarchy: List[List[Server]], server_test_set: DataLoader,

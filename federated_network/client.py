@@ -93,6 +93,12 @@ class Client:
                                                                               _drifted_client_indices, _client_id,
                                                                               _epochs=self.epochs,
                                                                               _mini_batch_size=self.mini_batch_size)
+            elif drift_recovery_method == constants.RecoveryAlgorithm.FEDRC:
+                # TODO: implement FedRC client side operations
+                # TODO: for Fedrc clients should have several models
+                for model in self.fedrc_models:
+                    train(model, self.trainloader, _epochs=self.epochs)
+                pass
 
     def evaluate(self):
         """ Evaluate the client model on the validation data and return the loss and accuracy """

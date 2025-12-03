@@ -188,6 +188,7 @@ class RecoveryAlgorithm:
     FEDAU = 'fedau'
     FLUID = 'fluid'
     FEDEX = 'fedex'
+    FEDRC = 'fedrc'
 
 
 # Types of models used in the project

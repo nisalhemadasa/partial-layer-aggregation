@@ -25,6 +25,7 @@ from plots.plotting import plot_client_performance_vs_rounds, plot_server_perfor
     plot_server_lvl_avg_performance_vs_rounds, plot_server_overall_avg_performance_vs_rounds, \
     plot_client_layer_distance_vs_rounds, plot_client_distance_vs_rounds, plot_dataset_distribution, \
     plot_client_avg_performance_vs_rounds
+from strategy.FedRC.FedRC import compute_responsibilities, compute_fedrc_metrics
 
 
 class FederatedNetwork:
@@ -113,6 +114,10 @@ class FederatedNetwork:
         # Create instances for servers at each level of the server tree
         server_hierarchy = []
         absolute_index = 0
+
+        # Assign the number of clusters (K) for the FedRC algorithm
+        if self.drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.FEDRC:
+            server_tree_layout[0] = self.drift_recovery_parameters['num_clusters']
 
         for depth_level in range(len(server_tree_layout)):
             # For each level in the tree, create a list of server instances, by passing the absolute index
@@ -217,6 +222,11 @@ class FederatedNetwork:
                                                                  self.simulation_parameters,
                                                                  self.drift_recovery_parameters['recovery_method'])
             clients_loss_and_accuracy.append(round_client_loss_and_accuracy)
+
+            # Calculate the FedRC parameters for the clients participated in the training round
+            if self.drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.FEDRC:
+                compute_fedrc_metrics(round_client_loss_and_accuracy[0], sampled_clients)
+
 
         # Stop the timer
         end_time = time.time()
