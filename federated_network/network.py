@@ -14,8 +14,8 @@ from data.dataset_loader import load_datasets
 from data.utils import convert_dataset_to_loader, split_iid_dataset, split_noniid_dataset, get_unique_labels_per_subset
 from drift_concepts.drift import drift_fn
 from federated_network.client import client_fn, Client, client_initial_training
-from federated_network.server import server_fn, model_aggregation, model_distribution, model_distribution_fedex, \
-    server_hierarchy_evaluate
+from federated_network.server import server_fn, model_aggregation, model_distribution_fedex, \
+    server_hierarchy_evaluate, model_distribution_fedrc
 from federated_network.utils import update_progress, link_server_hierarchy, train_client_models, \
     link_clients_to_servers, handle_drift_for_round
 from logs.analysis_functions import compute_client_average_metrics, compute_server_average_metrics, \
@@ -25,7 +25,7 @@ from plots.plotting import plot_client_performance_vs_rounds, plot_server_perfor
     plot_server_lvl_avg_performance_vs_rounds, plot_server_overall_avg_performance_vs_rounds, \
     plot_client_layer_distance_vs_rounds, plot_client_distance_vs_rounds, plot_dataset_distribution, \
     plot_client_avg_performance_vs_rounds
-from strategy.FedRC.FedRC import compute_responsibilities, compute_fedrc_metrics
+from strategy.FedRC.fedrc import compute_fedrc_metrics
 
 
 class FederatedNetwork:
@@ -92,7 +92,8 @@ class FederatedNetwork:
                 self.num_local_epochs,
                 self.minibatch_size,
                 [partitioned_noniid_trainsets[i], partitioned_noniid_testsets[i]],
-                self.drift_recovery_parameters['base_aggregation_method'],
+                self.drift_recovery_parameters['recovery_method'],
+                self.drift_recovery_parameters['fedrc_cluster_count'],
                 dataset_name
             )
             for i in range(num_noniid_client_instances)
@@ -105,7 +106,8 @@ class FederatedNetwork:
                 self.num_local_epochs,
                 self.minibatch_size,
                 [partitioned_iid_trainsets[i], partitioned_iid_testsets[i]],
-                self.drift_recovery_parameters['base_aggregation_method'],
+                self.drift_recovery_parameters['recovery_method'],
+                self.drift_recovery_parameters['fedrc_cluster_count'],
                 dataset_name
             )
             for i in range(num_iid_client_instances)
@@ -115,13 +117,11 @@ class FederatedNetwork:
         server_hierarchy = []
         absolute_index = 0
 
-        # Assign the number of clusters (K) for the FedRC algorithm
-        if self.drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.FEDRC:
-            server_tree_layout[0] = self.drift_recovery_parameters['num_clusters']
-
         for depth_level in range(len(server_tree_layout)):
             # For each level in the tree, create a list of server instances, by passing the absolute index
-            servers_at_level = [server_fn(server_id, self.dataset_name, absolute_index + i)
+            servers_at_level = [server_fn(server_id, self.dataset_name, absolute_index + i,
+                                          self.drift_recovery_parameters['recovery_method'],
+                                          self.drift_recovery_parameters['fedrc_cluster_count'])
                                 for i, server_id in enumerate(range(server_tree_layout[depth_level]))]
 
             server_hierarchy.append(servers_at_level)
@@ -160,7 +160,8 @@ class FederatedNetwork:
 
         # Train the clients initially using their local data
         initial_client_loss_and_accuracy = client_initial_training(self.clients, self.drift.is_drift,
-                                                                   self.drift.is_drift_end)
+                                                                   self.drift.is_drift_end,
+                                                                   self.drift_recovery_parameters['recovery_method'])
         # clients_loss_and_accuracy.append(initial_client_loss_and_accuracy)
 
         # Load the test set for server evaluation
@@ -190,14 +191,18 @@ class FederatedNetwork:
             # Updating (downwards) & evaluation: update the edge models using the global model parameters. (returns the
             # round_server_loss_and_accuracy, global_avg_loss_and_accuracy after both aggregating upwards and
             # distribution stage)
-            global_server = self.server_hierarchy[0][0] # TODO: needs to change in case of a hierarchical server structure
+            global_server = self.server_hierarchy[0][
+                0]  # TODO: needs to change in case of a hierarchical server structure
             if global_server.strategy.strategy_name == constants.RecoveryAlgorithm.FEDEX:
                 model_distribution_fedex(self.server_hierarchy[server_depth], self.clients)
+            elif global_server.strategy.strategy_name == constants.RecoveryAlgorithm.FEDRC:
+                model_distribution_fedrc(self.server_hierarchy[server_depth], sampled_clients)
             else:
                 model_distribution(self.server_hierarchy)
 
             # Evaluate server loss and accuracy after aggregation and distribution
-            round_server_loss_and_accuracy = server_hierarchy_evaluate(self.server_hierarchy, server_test_set, self.clients,
+            round_server_loss_and_accuracy = server_hierarchy_evaluate(self.server_hierarchy, server_test_set,
+                                                                       self.clients,
                                                                        self.simulation_parameters[
                                                                            'servers_have_test_data'])
             server_loss_and_accuracy.append(round_server_loss_and_accuracy)
@@ -224,9 +229,9 @@ class FederatedNetwork:
             clients_loss_and_accuracy.append(round_client_loss_and_accuracy)
 
             # Calculate the FedRC parameters for the clients participated in the training round
+            # Assumption: All clients are sampled for each round
             if self.drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.FEDRC:
                 compute_fedrc_metrics(round_client_loss_and_accuracy[0], sampled_clients)
-
 
         # Stop the timer
         end_time = time.time()

@@ -67,7 +67,7 @@ def link_clients_to_servers(leaf_servers: List[Server], clients: List[List[Clien
     # Distribute the clients to the servers according to a given ratio (e.g., equally, etc.)
     num_servers = len(leaf_servers)
 
-    for _clients in clients:
+    for _clients in filter(len, clients):  # Skip empty client lists
         # Get the distribution based on the strategy
         client_distribution = equal_distribution(len(_clients), num_servers)
 
@@ -80,7 +80,8 @@ def link_clients_to_servers(leaf_servers: List[Server], clients: List[List[Clien
         # Distribute clients to servers in a sequence of ascending order of client IDs
         for i, server in enumerate(leaf_servers):
             server.client_ids.extend(
-                _clients[j].client_id for j in range(linked_client_count, linked_client_count + client_distribution[i]))
+                _clients[j].client_id for j in
+                range(linked_client_count, linked_client_count + client_distribution[i]))
 
             # Assign the server ID to the respective clients to which they are connected to
             # Build a quick-access map from client_id to client instance
@@ -218,7 +219,8 @@ def handle_drift_for_round(round_idx: int, drift: Drift, server_hierarchy: List[
         if round_idx >= next_drift_step_round:
             if not drift.is_drift:  # execute only once: at the beginning of the drift step
                 # The server aggregation strategy needs to change for the FedAU's case, at the start of the drift step.
-                change_server_aggregation_strategy(server_hierarchy, drift_recovery_parameters['recovery_method'], drift)
+                change_server_aggregation_strategy(server_hierarchy, drift_recovery_parameters['recovery_method'],
+                                                   drift)
 
                 # Change the clients' (all of them) drift recovery method
                 change_client_drift_recovery_method(clients, drift_recovery_parameters['recovery_method'],
@@ -231,4 +233,3 @@ def handle_drift_for_round(round_idx: int, drift: Drift, server_hierarchy: List[
             # should not happen in LABEL_SWAP_ONCE's case, because apply_drift() is called once in that case
             if not drift.drift_mode == constants.DriftMode.LABEL_SWAP_ONCE:
                 drift.is_already_applied = False  # Reset the flag to apply drift again in the next step
-

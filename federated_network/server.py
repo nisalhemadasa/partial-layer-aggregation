@@ -5,6 +5,7 @@ Author: Nisal Hemadasa
 Date: 19-10-2024
 Version: 1.0
 """
+import copy
 from typing import List, OrderedDict, Tuple, Dict, Any
 
 import numpy as np
@@ -21,7 +22,7 @@ from models.model import SimpleModel, CNNModel, test, split_to_extractor_and_cla
 
 
 class Server:
-    def __init__(self, _server_id, _abs_id, _strategy, _model, _client_ids=None):
+    def __init__(self, _server_id, _abs_id, _strategy, _model, _fedrc_cluster_count, _client_ids=None):
         self.server_id = _server_id
         self.abs_id = _abs_id  # Absolute ID that keeps a running count of the servers in the server hierarchy
         self.strategy = _strategy
@@ -29,6 +30,13 @@ class Server:
         self.client_ids = []  # List of client IDs the server is connected to in the federated network
         self.child_server_ids = []  # List of child server IDs in the server hierarchy
         self.parent_server_id = None  # Parent server ID in the server hierarchy
+
+        # Create a list of models of size 'fedrc_cluster_count'
+        if self.strategy.strategy_name == constants.RecoveryAlgorithm.FEDRC:
+            self.fedrc_models = [copy.deepcopy(_model) for _ in range(_fedrc_cluster_count)]
+            self.model = None
+        else:
+            self.fedrc_models = None
 
     def train(self, client_model_parameters: Dict[str, OrderedDict],
               aux_classifier_parameters: Dict[str, OrderedDict] = None,
@@ -183,8 +191,9 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
 
 
 def model_aggregation_fedrc(server_models: List[Server], sampled_clients: List[Client],
-                      drift: Drift, drift_recovery_parameters: Dict[str, any], _is_server_has_test_data: bool=True,
-                      verbose=False):
+                            drift: Drift, drift_recovery_parameters: Dict[str, any],
+                            _is_server_has_test_data: bool = True,
+                            verbose=False):
     """
     Aggregate the models of the clients to the server model for FedRC algorithm.
     :param server_models: List of servers, dedicated for each drift type.
@@ -198,7 +207,7 @@ def model_aggregation_fedrc(server_models: List[Server], sampled_clients: List[C
     pass
 
 
-def model_distribution(server_hierarchy: List[List[Server]]) -> None:
+def model_distribution_hierarchy(server_hierarchy: List[List[Server]]) -> None:
     """
     The aggregated models are distributed down the hierarchy. I.e., the edge models are updated by the global model and
     leaf-server models are updated by the edge models.
@@ -233,11 +242,17 @@ def model_distribution_fedex(servers: List[Server], all_clients: List[Client]) -
         # Load the composite unlearning model ({E, W_hat}) to the server model
         set_parameters(client.model, server_extractor, False)
 
-def model_distribution_fedrc(servers: List[Server], all_clients: List[Client]) -> None:
-    """
-    Distribute the server model to all clients for FedRC algorithm.
-    """
 
+def model_distribution_fedrc(server_list: List[Server], sampled_clients: List[Client]) -> None:
+    """
+    The aggregated server models are distributed to each participating clients. Each client get all k server models.
+    I.e., each client also has k models in it.
+    :param server_list: List of servers in the hierarchy
+    :param sampled_clients: List of sampled clients
+    :return: None
+    """
+    for client_idx, client in enumerate(sampled_clients):
+        set_parameters(client.fedrc_models[client_idx], server_list[client_idx].model.state_dict())
 
 
 def server_hierarchy_evaluate(server_hierarchy: List[List[Server]], server_test_set: DataLoader,
@@ -315,15 +330,22 @@ def change_server_aggregation_strategy(server_hierarchy: List[Any], drift_recove
             server.strategy = strategy.FedAvg.aggregator_fn()
 
 
-def server_fn(server_id: int, dataset_name: str, server_abs_id: int) -> Server:
+def server_fn(server_id: int, dataset_name: str, server_abs_id: int, drift_recovery_method: str,
+              fedrc_cluster_count: int) -> Server:
     """
     Create a server instances on demand for the optimal use of resources.
     :param server_id: Server ID
     :param dataset_name: Name of the dataset
     :param server_abs_id: Absolute server ID; a running count of all the servers created
+    :param drift_recovery_method: Drift recovery method to be used by the client
+    :param fedrc_cluster_count: number of models (clusters) in the server (used in FedRC)
     :returns Server: A Server instance.
     """
-    aggregator_strategy = strategy.FedAvg.aggregator_fn()
+    if drift_recovery_method == constants.RecoveryAlgorithm.FEDRC:
+        aggregator_strategy = strategy.FedRC.aggregator_fn()
+    else:
+        aggregator_strategy = strategy.FedAvg.aggregator_fn()
+
     # model = SimpleModel().to(DEVICE)
     if dataset_name == constants.DatasetNames.MNIST or dataset_name == constants.DatasetNames.F_MNIST:
         model = CNNModel().to(DEVICE)
@@ -336,4 +358,5 @@ def server_fn(server_id: int, dataset_name: str, server_abs_id: int) -> Server:
     else:
         raise ValueError("Unsupported dataset name")
 
-    return Server(_server_id=server_id, _abs_id=server_abs_id, _strategy=aggregator_strategy, _model=model)
+    return Server(_server_id=server_id, _abs_id=server_abs_id, _strategy=aggregator_strategy, _model=model,
+                  _fedrc_cluster_count=fedrc_cluster_count)
