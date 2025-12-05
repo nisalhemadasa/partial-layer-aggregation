@@ -18,12 +18,11 @@ from federated_network.server import server_fn, model_aggregation, model_distrib
     server_hierarchy_evaluate, model_distribution_fedrc, model_distribution_hierarchy
 from federated_network.utils import update_progress, link_server_hierarchy, train_client_models, \
     link_clients_to_servers, handle_drift_for_round
-from logs.analysis_functions import compute_client_average_metrics, compute_server_average_metrics, \
+from log_utils.analysis_functions import compute_client_average_metrics, compute_server_average_metrics, \
     split_clients_loss_and_accuracy
-from logs.logging import write_logs
-from plots.plotting import plot_client_performance_vs_rounds, plot_server_performance_vs_rounds, \
-    plot_server_lvl_avg_performance_vs_rounds, plot_server_overall_avg_performance_vs_rounds, \
-    plot_client_layer_distance_vs_rounds, plot_client_distance_vs_rounds, plot_dataset_distribution, \
+from log_utils.logging import write_logs
+from plot_utils.plotting import plot_client_performance_vs_rounds, plot_server_performance_vs_rounds, \
+    plot_dataset_distribution, \
     plot_client_avg_performance_vs_rounds
 from strategy.FedRC.fedrc import compute_fedrc_metrics
 

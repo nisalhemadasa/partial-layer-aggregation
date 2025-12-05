@@ -9,9 +9,8 @@ Version: 1.0
 from typing import List, Tuple
 
 import constants
-from logs.logging import read_logs
-from plots.plotting import plot_client_performance_vs_rounds, plot_server_performance_vs_rounds, \
-    plot_client_avg_performance_vs_rounds, plot_server_lvl_avg_performance_vs_rounds, \
+from log_utils.logging import read_logs
+from plot_utils.plotting import plot_client_avg_performance_vs_rounds, plot_server_lvl_avg_performance_vs_rounds, \
     plot_server_overall_avg_performance_vs_rounds
 
 

@@ -26,11 +26,11 @@ TestResults.xml
 #ipynb_checkpoints
 *.ipynb_checkpoints
 #data sets
-*data/MNIST
-*data/FashionMNIST
-*data/cifar-10-batches-py
-*data/cifar-100-python
-*data/tiny-imagenet-200
+datasets/MNIST
+datasets/FashionMNIST
+datasets/cifar-10-batches-py
+datasets/cifar-100-python
+datasets/tiny-imagenet-200
 #pycache
 *__pycache__
 #Logs
