@@ -183,7 +183,8 @@ class FederatedNetwork:
             # parameters to the global model (returns the round_server_loss_and_accuracy, global_avg_loss_and_accuracy
             # after aggregating upwards, before the distribution stage)
             _ = model_aggregation(self.server_hierarchy, server_test_set, sampled_clients, self.drift,
-                                  self.drift_recovery_parameters, self.simulation_parameters['servers_have_test_data'])
+                                  self.drift_recovery_parameters['fedau_alpha'],
+                                  self.simulation_parameters['servers_have_test_data'])
 
             # If the clients download the model from the leaf servers of the hierarchy
             server_depth = len(self.server_hierarchy) - 1
