@@ -105,7 +105,7 @@ def model_aggregation_fedrc(server: Server, sampled_clients: List[Client], drift
         for client_id in server.client_ids}
 
     if verbose:
-        print('server:' + str(server.server_id) + ' -> ' + 'clients:' + str(server.client_ids))
+        print('aggregate models: server:' + str(server.server_id) + ' -> ' + 'clients:' + str(server.client_ids))
 
     # TODO: implement FedRC aggregation
     # Aggregate client models
@@ -139,27 +139,48 @@ def model_aggregation_fluid(server: Server, sampled_clients: List[Client], drift
                                    for client_id in server.client_ids}
 
         if verbose:
-            print('server:' + str(server.server_id) + ' -> ' + 'clients:' + str(server.client_ids))
+            print('aggregate models: server:' + str(server.server_id) + ' -> ' + 'clients:' + str(server.client_ids))
 
         server.train(client_model_parameters, client_aux_classifier_parameters, ema_weight)
 
 
-def model_aggregation_fedavg(server: Server, sampled_clients: List[Client], verbose=False) -> None:
+def model_aggregation_fedavg(server: Server, sampled_clients: List[Client], server_hierarchy, depth_level,
+                             verbose=False) -> None:
     """
-    Aggregate the models of the clients to the server model for FedAvg, RRT, FedEx algorithm.
+    In star-topology: Aggregate the models of the clients to the server model for FedAvg, RRT, FedEx algorithm.
+    In hierarchical topology: Aggregate the models of the clients and child servers to the parent server model for
+    FedAvg, RRT,
     :param server: Server instance
     :param sampled_clients: List of sampled clients
+    :param server_hierarchy: List of servers in the hierarchy
+    :param depth_level: Current depth level in the server hierarchy
     :param verbose: Whether to print detailed logs or not
     :return: None
     """
-    client_model_parameters = {client_id: sampled_clients[client_id].model.state_dict()
-                               for client_id in server.client_ids}
+    if sampled_clients:  # Star topology
+        # Get model parameters from all participating clients
+        model_parameters = {client_id: sampled_clients[client_id].model.state_dict()
+                            for client_id in server.client_ids}
 
-    if verbose:
-        print('server:' + str(server.server_id) + ' -> ' + 'clients:' + str(server.client_ids))
+        if verbose:
+            print('aggregate client models: server:' + str(server.server_id) + ' -> ' + 'clients:' + str(
+                server.client_ids))
+
+    elif server_hierarchy and depth_level is not None:  # Hierarchical topology
+        # Get model parameters from all child servers
+        model_parameters = {
+            child_server: server_hierarchy[depth_level + 1][child_server].model.state_dict()
+            for child_server in server.child_server_ids}
+
+        if verbose:
+            print('aggregate server models.')
+
+    else:
+        raise ValueError(
+            "model_aggregation_fedavg: Either sampled_clients or server_hierarchy and depth_level must be provided")
 
     # Aggregate client models
-    server.train(client_model_parameters, None, None)
+    server.train(model_parameters, None, None)
 
 
 def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: DataLoader, sampled_clients: List[Client],
@@ -182,18 +203,11 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
     # Store the loss and accuracy at each level of the server model hierarchy
     server_loss_and_accuracy = []
 
-    # EMA weight, and auxiliary classifier parameters, for the FedAU algorithm
-    ema_weight = None
-    client_aux_classifier_parameters = None
-
     # Evaluate server model on the upward traversal aggregation  only if the hierarchy has more than one level. Else,
     # this evaluation will be redundant as it is already done during the server model distribution phase.
     is_evaluate_server_model = False
     if _is_server_has_test_data and len(server_hierarchy) > 1:
         is_evaluate_server_model = True
-
-    if verbose:
-        print('aggregate client models')
 
     # Aggregate the models of the clients to the server model.Start by aggregating the leaves and move up the hierarchy
     for depth_level in range(len(server_hierarchy) - 1, -1, -1):
@@ -212,21 +226,13 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
                 elif server.strategy.strategy_name in {constants.RecoveryAlgorithm.FEDAVG,
                                                        constants.RecoveryAlgorithm.RRT,
                                                        constants.RecoveryAlgorithm.FEDEX}:
-                    model_aggregation_fedavg(server, sampled_clients, verbose=verbose)
+                    model_aggregation_fedavg(server, sampled_clients, None, None, verbose=verbose)
                 else:
                     raise ValueError("Server.model_aggregation: Unsupported recovery algorithm name")
 
-            else:   # ==== Only for Hierarchical FL: Upper hierarchical servers (aggregate models from child servers) ====
-                # Collect the parameters to a dictionary (server_id: server_model_parameters)
-                child_server_model_parameters = {
-                    child_server: server_hierarchy[depth_level + 1][child_server].model.state_dict()
-                    for child_server in server.child_server_ids}
+            else:  # ==== Upper hierarchical servers (aggregate models from child servers) ====
+                model_aggregation_fedavg(server, None, server_hierarchy, depth_level, verbose=verbose)
 
-                # Aggregate child server models. Auxiliary classifier parameters are not used in internal server nodes
-                # since they are not connected to clients which train auxiliary modules
-                server.train(child_server_model_parameters, None, ema_weight)
-
-            # TODO: testing
             # Evaluate the server model (not for FedEx)
             if is_evaluate_server_model and not server.strategy.strategy_name == constants.RecoveryAlgorithm.FEDEX:
                 loss, accuracy = server.model_evaluate(server_test_set)
@@ -234,7 +240,6 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
 
         if is_evaluate_server_model and not server.strategy.strategy_name == constants.RecoveryAlgorithm.FEDEX:
             server_loss_and_accuracy.append(loss_and_accuracy_at_level)
-
 
     if is_evaluate_server_model and not server.strategy.strategy_name == constants.RecoveryAlgorithm.FEDEX:
         server_loss_and_accuracy.reverse()  # Reverse the list to get the root first, to be consistent throughout the code

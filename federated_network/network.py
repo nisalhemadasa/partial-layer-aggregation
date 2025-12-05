@@ -15,7 +15,7 @@ from data.utils import convert_dataset_to_loader, split_iid_dataset, split_nonii
 from drift_concepts.drift import drift_fn
 from federated_network.client import client_fn, Client, client_initial_training
 from federated_network.server import server_fn, model_aggregation, model_distribution_fedex, \
-    server_hierarchy_evaluate, model_distribution_fedrc
+    server_hierarchy_evaluate, model_distribution_fedrc, model_distribution_hierarchy
 from federated_network.utils import update_progress, link_server_hierarchy, train_client_models, \
     link_clients_to_servers, handle_drift_for_round
 from logs.analysis_functions import compute_client_average_metrics, compute_server_average_metrics, \
@@ -199,7 +199,7 @@ class FederatedNetwork:
             elif global_server.strategy.strategy_name == constants.RecoveryAlgorithm.FEDRC:
                 model_distribution_fedrc(self.server_hierarchy[server_depth], sampled_clients)
             else:
-                model_distribution(self.server_hierarchy)
+                model_distribution_hierarchy(self.server_hierarchy)
 
             # Evaluate server loss and accuracy after aggregation and distribution
             round_server_loss_and_accuracy = server_hierarchy_evaluate(self.server_hierarchy, server_test_set,
