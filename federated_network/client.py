@@ -14,7 +14,7 @@ import torch
 from torch.utils.data import Dataset, Subset, DataLoader
 
 import constants
-from data.utils import convert_dataset_to_loader
+from data.utils import convert_dataset_to_loader, get_num_classes_from_dataset
 from models.model import train, test, CNNModel, rapid_train, fedau_clientside_train, set_parameters, \
     CNNTinyImageNet, CNNCIFAR10, CNNCIFAR100
 
@@ -41,12 +41,26 @@ class Client:
         self.auxiliary_classifier_parameters = None  # distance of the client from the server in the server hierarchy
         self.aux_trainloader = None  # dateset with random labels for training the auxiliary classifier in FedAU
 
-        # Create a list of models of size 'fedrc_cluster_count' (equivalent to the number of models server) in each client for FedRC
+        # ===== FedRC specific initializations =====
         if self.drift_recovery_method == constants.RecoveryAlgorithm.FEDRC:
+            # Create a list of models of size 'fedrc_cluster_count' (equivalent to the number of models server) in each client for FedRC
             self.fedrc_models = [copy.deepcopy(model) for _ in range(fedrc_cluster_count)]
+
             self.model = None
-            self.omega_i_k = 1/fedrc_cluster_count  # Cluster weights for client i and cluster K (initialized to 1/K, according to the original paper)
-            self.gamma_i_j_k = 1/fedrc_cluster_count   # Data weights for client i, data j, and cluster K (initialized to 1/K, according to the original paper)
+
+            # Cluster weights for client i and cluster K (initialized to 1/K, according to the original paper)
+            self.omega_i_k = torch.full((fedrc_cluster_count,), 1.0 / fedrc_cluster_count, device=DEVICE)
+
+            # Data weights for client i, data j, and cluster K (initialized to 1/K, according to the original paper)
+            self.gamma_i_j_k = torch.full((fedrc_cluster_count,), 1.0 / fedrc_cluster_count, device=DEVICE)
+
+            # Original paper does not mention the initialization of C_y_k.
+            # Following, I(x,y;theta_k) = exp(-f(x,y;theta_k))/C_y_k, we approximate C_y_k to 1.0 initially, since,
+            # 1. It causes the denominator in I to not distort exp(-loss) initially,
+            # 2. It avoids NaNs or division by zero.
+            # Therefore, we start with uniform C_y,k = 1.0 for all labels/clusters
+            num_classes = get_num_classes_from_dataset(self.local_trainset.dataset)
+            self.C_y_k = torch.ones(num_classes, fedrc_cluster_count, device=DEVICE)
         else:
             self.fedrc_models = None
 
