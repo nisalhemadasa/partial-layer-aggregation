@@ -19,6 +19,7 @@ from drift_concepts.drift import Drift
 from federated_network.client import DEVICE, Client
 from models.model import SimpleModel, CNNModel, test, split_to_extractor_and_classifier, set_parameters, \
     CNNTinyImageNet, CNNCIFAR10, CNNCIFAR100
+from strategy.FedRC.fedrc import get_fedrc_client_model_params
 
 
 class Server:
@@ -60,6 +61,8 @@ class Server:
         # TODO: remove is_drift to use from the beginning
         elif self.strategy.strategy_name == constants.RecoveryAlgorithm.FEDEX:
             self.strategy.aggregate_models(self.model, client_model_parameters)
+        elif self.strategy.strategy_name == constants.RecoveryAlgorithm.FEDRC:
+            self.strategy.aggregate_models(self.fedrc_models, client_model_parameters)
         else:
             # FedAvg: For internal servers or when there are no drifted clients
             self.strategy.aggregate_models(self.model, client_model_parameters)
@@ -92,6 +95,8 @@ class Server:
         return tuple(arr.mean(axis=0))
 
 
+
+
 def model_aggregation_fedrc(server: Server, sampled_clients: List[Client], drift: Drift, verbose=False) -> None:
     """
     Aggregate the models of the clients to the server model for FedRC algorithm.
@@ -101,7 +106,7 @@ def model_aggregation_fedrc(server: Server, sampled_clients: List[Client], drift
     :param verbose: Whether to print detailed logs or not
     """
     client_model_parameters = {
-        client_id: sampled_clients[client_id].fedrc_models[server.abs_id].state_dict()
+        client_id: get_fedrc_client_model_params(sampled_clients[client_id])
         for client_id in server.client_ids}
 
     if verbose:

@@ -27,7 +27,7 @@ class FedAvg:
         :param server_model: The server (edge or global) model
         :param client_model_params_dict: Dictionary containing the server IDs (keys) and the corresponding state dicts of the client models
         :param client_model_params_list: List of state dicts of the client models (used in the FedAU implementation)
-        :return: The parameters of the server (edge or global) model after aggregation (or averaged layers in FedAU's case)
+        :return: None
         """
         server_model_params = server_model.state_dict()
 
