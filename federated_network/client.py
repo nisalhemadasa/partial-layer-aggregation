@@ -17,6 +17,8 @@ import constants
 from data.utils import convert_dataset_to_loader, get_num_classes_from_dataset
 from models.model import train, test, CNNModel, rapid_train, fedau_clientside_train, set_parameters, \
     CNNTinyImageNet, CNNCIFAR10, CNNCIFAR100
+from strategy.FedRC import fedrc
+from strategy.FedRC.fedrc import compute_gamma
 
 DEVICE = torch.device("cpu")  # Try "cuda" to train on GPU
 print(
@@ -59,8 +61,8 @@ class Client:
             # 1. It causes the denominator in I to not distort exp(-loss) initially,
             # 2. It avoids NaNs or division by zero.
             # Therefore, we start with uniform C_y,k = 1.0 for all labels/clusters
-            num_classes = get_num_classes_from_dataset(self.local_trainset.dataset)
-            self.C_y_k = torch.ones(num_classes, fedrc_cluster_count, device=DEVICE)
+            self.num_classes = get_num_classes_from_dataset(self.local_trainset.dataset)
+            self.C_y_k = torch.ones(self.num_classes, fedrc_cluster_count, device=DEVICE)
         else:
             self.fedrc_models = None
 
@@ -164,6 +166,8 @@ def client_initial_training(_clients: List[Client], _is_drift: bool, _is_drift_e
 
         if _drift_recovery_method == constants.RecoveryAlgorithm.FEDRC:
             # Evaluate all FedRC models in the client
+            fedrc.compute_gamma(_clients)
+            fedrc.compute_omega(_clients)
             losses, accuracies = client.evaluate_fedrc_models() # returns ([loss1, loss2,...], [acc1, acc2,...])
             initial_client_loss_and_accuracy.append((losses, accuracies))
         else:

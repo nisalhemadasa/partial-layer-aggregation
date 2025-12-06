@@ -16,6 +16,11 @@ from torch import nn
 import constants
 from federated_network.client import Client
 
+DEVICE = torch.device("cpu")  # Try "cuda" to train on GPU
+print(
+    f"Training on {DEVICE} using PyTorch {torch.__version__}"
+)
+
 
 class FedRC:
     def __init__(self, strategy_name: str):
@@ -60,8 +65,42 @@ def get_fedrc_client_model_params(client: Client) -> List[OrderedDict]:
     return [model.state_dict() for model in client.fedrc_models]
 
 
-def compute_omega():
-    pass
+def compute_omega(_clients: List[Client]):
+    for client in _clients:
+        fedrc_models = client.fedrc_models  # List[nn.Module], length K
+        num_clusters = len(fedrc_models)
+
+        prev_omega = client.omega_i_k.to(DEVICE)  # [K]
+        prev_C = client.C_y_k.to(DEVICE)  # [num_classes, K]
+
+        # Accumulators over all local samples j
+        sum_gamma_per_cluster = torch.zeros(num_clusters, device=DEVICE)  # ∑_j γ_{i,j;k}
+        label_gamma = torch.zeros(client.num_classes, num_clusters, device=DEVICE)  # ∑_j 1{y_j=y} γ_{i,j;k}
+        num_samples = 0
+
+        # Loop over local data
+        # In the paper, one sample at a time is used, but here we use minibatches for efficiency (faster on GPU), but
+        # is mathematically equivalent (just vectorized).
+        for x, y in client.trainloader:
+            x = x.to(DEVICE)
+            y = y.to(DEVICE)  # B = batch size -> Label vector y is a 1D tensor of length [B]. This is equal to the 'minibatch_size' given in network.py.
+            batch_size = y.size(0)  # y.size(0) == B
+            num_samples += batch_size
+
+            # Compute per-sample loss for each cluster model
+            # losses_all: [B, K]
+            losses_all = torch.empty(batch_size, num_clusters, device=DEVICE)
+
+            for k, model_k in enumerate(fedrc_models):
+                model_k.to(DEVICE)
+                model_k.eval()  # we only evaluate here
+
+                with torch.no_grad():
+                    logits = model_k(x)  # [B, num_classes]
+                    # per-sample cross-entropy loss
+                    losses_all[:, k] = F.cross_entropy(
+                        logits, y, reduction="none"
+                    )
 
 
 def compute_gamma(loss: float, temperature: float = 1.0) -> torch.Tensor:
