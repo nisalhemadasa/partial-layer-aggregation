@@ -113,8 +113,10 @@ def compute_omega(_clients: List[Client]):
 
             # C_{y,k} term for this batch of samples: prev_C[y, k] -> [B, K]
             C_batch = prev_C[y] # gather rows by label y, from ----(C)
-            # To avoid C_batch (C_{y,k}) being zero, we clamp it to a minimum value equivalent to EPS, i.e.,
+            # To avoid C_batch (C_{y,k}) being zero (NaN), we clamp it to a minimum value equivalent to EPS, i.e.,
             # if C_batch < EPS, then C_batch = EPS
+            # For EPS, a very small value (1e-12), which is achievable in data type floating point precisions, is chosen
+            # to avoid numerical instability. 
             EPS = 1e-12
             C_batch = C_batch.clamp_min(EPS)            # avoid division by 0
 
