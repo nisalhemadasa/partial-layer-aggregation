@@ -34,11 +34,9 @@ datasets/tiny-imagenet-200
 #pycache
 *__pycache__
 #Logs
-logs/saved_logs/
-logs/saved_logs/**
+logs/
 #Plots
-plots/saved_plots/
-plots/saved_plots/**
+plots/
 #Configs
 configs/
 configs/**

@@ -154,7 +154,7 @@ def client_initial_training(_clients: List[Client], _is_drift: bool, _is_drift_e
     :param _is_drift_end: Flag indicating whether the drift period has ended or not
     :param _drift_recovery_method: Drift recovery method to be used by the client
     :return:  List of loss and accuracy of each client after the initial training
-        1. FEDRC: [([loss1, loss2,...], [acc1, acc2,...]), ..., ]
+        1. FedRC: [([loss1, loss2,...], [acc1, acc2,...]), ..., ]
         2. Others: [(loss, accuracy), ..., ]
     """
     initial_client_loss_and_accuracy = []
