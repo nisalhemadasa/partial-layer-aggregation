@@ -111,31 +111,31 @@ def compute_omega(_clients: List[Client]):
             # exp(-loss) term: [B, K]
             exp_neg_loss = torch.exp(-losses_all)  # from ----(B)
 
-            # C_{y,k} term for this batch of samples: prev_C[y, k] -> [B, K]
+            # C_{y,k} term for this batch of samples.
+            # prev_C[y, k] shape: [B, K]
             C_batch = prev_C[y] # gather rows by label y, from ----(C)
             # To avoid C_batch (C_{y,k}) being zero (NaN), we clamp it to a minimum value equivalent to EPS, i.e.,
             # if C_batch < EPS, then C_batch = EPS
             # For EPS, a very small value (1e-12), which is achievable in data type floating point precisions, is chosen
-            # to avoid numerical instability. 
+            # to avoid numerical instability.
             EPS = 1e-12
-            C_batch = C_batch.clamp_min(EPS)            # avoid division by 0
+            C_batch = C_batch.clamp_min(EPS)            # avoid division by 0 and getting NaN
 
+            # I_tilde(x, y; θ_k) = exp(-f) / C_{y,k}, from ----- (D)
+            I_tilde = exp_neg_loss / C_batch    # I_tilde shape: [B, K]
 
-            # I_tilde(x, y; θ_k) = exp(-f) / C_{y,k}
-            I_tilde = exp_neg_loss / C_batch            # [B, K]
-
-            # Numerator for γ: ω_{i;k}^{t-1} * I_tilde
+            # Numerator for γ: ω_{i;k}^{t-1} * I_tilde, from ----- Eq. (3) in the paper
             # prev_omega: [K] -> [1, K]
             numerators = prev_omega.unsqueeze(0) * I_tilde   # [B, K]
 
-            # Denominator: sum over clusters n
+            # Denominator: sum over clusters n, from ----- Eq. (3) in the paper
             denom = numerators.sum(dim=1, keepdim=True).clamp_min(EPS)  # [B, 1]
 
-            # γ_{i,j;k}^{(t)}: [B, K]
+            # γ_{i,j;k}^{(t)}: [B, K], from ----- Eq. (3) in the paper
             gamma_batch = numerators / denom
 
             # Accumulate sums over j
-            sum_gamma_per_cluster += gamma_batch.sum(dim=0)  # ∑_j γ_{i,j;k}
+            sum_gamma_per_cluster += gamma_batch.sum(dim=0)  # ∑_j γ_{i,j;k}, from ----- Eq. (3) in the paper
 
             # Label-wise accumulation for C_{y,k}:
             # For each sample j with label y_j, add gamma_batch[j, :] to row y_j.
@@ -146,7 +146,7 @@ def compute_omega(_clients: List[Client]):
             # No data, keep previous omega/C unchanged
             return
 
-        # ω_i,k^(t) = (1 / N_i) ∑_j γ_{i,j;k}
+        # ω_i,k^(t) = (1 / N_i) ∑_j γ_{i,j;k}, from ----- Eq. (3) in the paper
         new_omega = sum_gamma_per_cluster / float(num_samples)
 
         # Cluster total weight per k: ∑_y ∑_j 1{y_j=y} γ_{i,j;k} = ∑_j γ_{i,j;k}
