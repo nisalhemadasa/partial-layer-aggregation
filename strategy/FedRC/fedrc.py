@@ -81,8 +81,8 @@ def compute_omega(_clients: List[Client]):
         C_{y,k} = (1/N) · ∑_i ∑_j 1{ y_{i,j} = y } · γ_{i,j;k} / (1/N) · ∑_i ∑_j γ_{i,j;k} --------(E)
 
         Eq. (3) is renamed into two parts for clarity:
-        γᵢⱼ,ₖᵗ = ( ωᵢ,ₖ^(t−1) · Ĩ(xᵢⱼ, yᵢⱼ; θₖ^(t−1)) ) / ∑ₙ=1..K [ ωᵢ,ₙ^(t−1) · Ĩ(xᵢⱼ, yᵢⱼ; θₙ^(t−1)) ]  ------ Eq. (3.1)
-        𝛾̃ᵢⱼₖ = ( ωᵢ,ₖ^(t−1) · Ĩ(xᵢⱼ, yᵢⱼ; θₖ) ) /  ∑ₙ [ ωᵢ,ₙ^(t−1) · Ĩ(xᵢⱼ, yᵢⱼ; θₙ) ] ------ Eq. (3.2)
+        γᵢⱼ,ₖᵗ = ( ωᵢ,ₖ^(t−1) · Ĩ(xᵢⱼ, yᵢⱼ; θₖ^(t−1)) ) / ∑ₙ=1...K [ ωᵢ,ₙ^(t−1) · Ĩ(xᵢⱼ, yᵢⱼ; θₙ^(t−1)) ]  ------ Eq. (3.1)
+        ω_{i,k}^(t) = (1 / N_i) ∑_j γ_{i,j;k} ------ Eq. (3.2)
 
     """
     for client in _clients:
@@ -94,7 +94,7 @@ def compute_omega(_clients: List[Client]):
 
         # Accumulators over all local samples j
         sum_gamma_per_cluster = torch.zeros(num_clusters, device=DEVICE)  # ∑_j γ_{i,j;k} --- from numerator of (E)
-        label_gamma = torch.zeros(client.num_classes, num_clusters, device=DEVICE)  # ∑_j 1{y_j=y} γ_{i,j;k} ---- from denominator of (E)
+        label_gamma = torch.zeros(client.num_classes, num_clusters, device=DEVICE)  # ∑_j 1{y_j=y} γ_{i,j;k} ---- from denominator of (E). Shape: [num_classes, K]
         num_samples = 0
 
         # Loop over local data
@@ -150,7 +150,7 @@ def compute_omega(_clients: List[Client]):
 
             # From (E): Label-wise accumulation for C_{y,k}
             # I.e., we calculate the proportion of the data pairs labeled as y,and that chooses the cluster/model k.
-            # For each sample j with label y_j, add gamma_batch[j, :] to row y_j.
+            # For each sample j with label y_j, add gamma_batch[j, :] () to row y_j.
             # label_gamma: [num_classes, K]
             label_gamma.index_add_(0, y, gamma_batch)
 
@@ -158,10 +158,11 @@ def compute_omega(_clients: List[Client]):
             # No data, keep previous omega/C unchanged
             return
 
-        # ω_i,k^(t) = (1 / N_i) ∑_j γ_{i,j;k}, from ----- Eq. (3) in the paper
+        # ω_{i,k}^(t) = (1 / N_i) ∑_j γ_{i,j;k}, from ----- Eq. (3.2)
         new_omega = sum_gamma_per_cluster / float(num_samples)
 
-        # Cluster total weight per k: ∑_y ∑_j 1{y_j=y} γ_{i,j;k} = ∑_j γ_{i,j;k}
+        # Cluster total weight per k: ∑_y ∑_j 1{y_j=y} γ_{i,j;k} = ∑_j γ_{i,j;k}!!!!!
+        # Adds numerical-safety: avoid division by zero
         cluster_weight_total = sum_gamma_per_cluster.clamp_min(EPS)  # [K]
 
         # C_{y,k}^(t) = (∑_j 1{y_j=y} γ_{i,j;k}) / (∑_j γ_{i,j;k})
