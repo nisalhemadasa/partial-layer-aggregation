@@ -4,6 +4,8 @@ Description: This file consists supporting functions for FedRC (Robust Clusterin
 Y. Guo, X. Tang, and T. Lin, “FedRC: Tackling Diverse Distribution Shifts Challenge in Federated Learning by Robust
 Clustering,” in Proceedings of the 41st International Conference on Machine Learning (ICML 2024), 2024.
 
+Assumption: No adding or removing (refer to the appendix H.4.) of global models (θ_k) are done.
+
 Author: Nisal Hemadasa
 Date: 04-12-2025
 Version: 1.0
@@ -73,6 +75,15 @@ def compute_omega(_clients: List[Client]):
         - P(y|x; θ_k) ≈ exp(-f) ---------------- (B)
         - P(y; θ_k) ≈ C_{y,k} ------------------ (C)
         - I(x, y; θ_k) ≈ exp(-f) / C_{y,k} ----- (D)
+
+        Label-wise accumulation for C_{y,k} => I.e., we calculate the proportion of the data pairs labeled as y,and that
+        chooses the cluster/model k.
+        C_{y,k} = (1/N) · ∑_i ∑_j 1{ y_{i,j} = y } · γ_{i,j;k} / (1/N) · ∑_i ∑_j γ_{i,j;k} --------(E)
+
+        Eq. (3) is renamed into two parts for clarity:
+        γᵢⱼ,ₖᵗ = ( ωᵢ,ₖ^(t−1) · Ĩ(xᵢⱼ, yᵢⱼ; θₖ^(t−1)) ) / ∑ₙ=1..K [ ωᵢ,ₙ^(t−1) · Ĩ(xᵢⱼ, yᵢⱼ; θₙ^(t−1)) ]  ------ Eq. (3.1)
+        𝛾̃ᵢⱼₖ = ( ωᵢ,ₖ^(t−1) · Ĩ(xᵢⱼ, yᵢⱼ; θₖ) ) /  ∑ₙ [ ωᵢ,ₙ^(t−1) · Ĩ(xᵢⱼ, yᵢⱼ; θₙ) ] ------ Eq. (3.2)
+
     """
     for client in _clients:
         fedrc_models = client.fedrc_models  # List[nn.Module], length K
@@ -82,8 +93,8 @@ def compute_omega(_clients: List[Client]):
         prev_C = client.C_y_k.to(DEVICE)  # [num_classes, K]
 
         # Accumulators over all local samples j
-        sum_gamma_per_cluster = torch.zeros(num_clusters, device=DEVICE)  # ∑_j γ_{i,j;k}
-        label_gamma = torch.zeros(client.num_classes, num_clusters, device=DEVICE)  # ∑_j 1{y_j=y} γ_{i,j;k}
+        sum_gamma_per_cluster = torch.zeros(num_clusters, device=DEVICE)  # ∑_j γ_{i,j;k} --- from numerator of (E)
+        label_gamma = torch.zeros(client.num_classes, num_clusters, device=DEVICE)  # ∑_j 1{y_j=y} γ_{i,j;k} ---- from denominator of (E)
         num_samples = 0
 
         # Loop over local data
@@ -104,8 +115,8 @@ def compute_omega(_clients: List[Client]):
                 model_k.eval()  # we only evaluate here
 
                 with torch.no_grad():
-                    logits = model_k(x)  # get the logits in a tenson of dimension [B, num_classes]
-                    losses_all[:, k] = F.cross_entropy(logits, y, reduction="none") # per-sample cross-entropy loss, from ----(A)
+                    logits = model_k(x)  # get the logits in a tenson of dimension [B, num_classes]. Represented by m_{i,k}(x, θ_k) in appendix H.2. in the paper.
+                    losses_all[:, k] = F.cross_entropy(logits, y, reduction="none") # per-sample cross-entropy loss, from ----(A), and appendix H.2. in the paper.
                     # losses_all shape: [B, K]
 
             # exp(-loss) term: [B, K]
@@ -137,7 +148,8 @@ def compute_omega(_clients: List[Client]):
             # Accumulate sums over j
             sum_gamma_per_cluster += gamma_batch.sum(dim=0)  # ∑_j γ_{i,j;k}, from ----- Eq. (3) in the paper
 
-            # Label-wise accumulation for C_{y,k}:
+            # From (E): Label-wise accumulation for C_{y,k}
+            # I.e., we calculate the proportion of the data pairs labeled as y,and that chooses the cluster/model k.
             # For each sample j with label y_j, add gamma_batch[j, :] to row y_j.
             # label_gamma: [num_classes, K]
             label_gamma.index_add_(0, y, gamma_batch)
