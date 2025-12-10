@@ -67,7 +67,7 @@ def get_fedrc_client_model_params(client: Client) -> List[OrderedDict]:
     return [model.state_dict() for model in client.fedrc_models]
 
 
-def compute_omega(_clients: List[Client]):
+def compute_omega(_clients: List[Client]) -> None:
     """
     Implements Eq. (3) for a single client, using the approximations from the paper:
 
@@ -84,6 +84,28 @@ def compute_omega(_clients: List[Client]):
         γᵢⱼ,ₖᵗ = ( ωᵢ,ₖ^(t−1) · Ĩ(xᵢⱼ, yᵢⱼ; θₖ^(t−1)) ) / ∑ₙ=1...K [ ωᵢ,ₙ^(t−1) · Ĩ(xᵢⱼ, yᵢⱼ; θₙ^(t−1)) ]  ------ Eq. (3.1)
         ω_{i,k}^(t) = (1 / N_i) ∑_j γ_{i,j;k} ------ Eq. (3.2)
 
+    Algorithm in a nutshell => This is an EM (Expectation–Maximization) algorithm with the following steps:
+   ┌──────────────────┐
+   │   OLD (ω, C, θ)  │
+   └───────┬──────────┘
+           │
+           ▼
+   ┌──────────────────┐
+   │   E-step         │
+   │ compute γ        │
+   └───────┬──────────┘
+           │
+           ▼
+   ┌──────────────────┐
+   │   M-step         │
+   │ update (ω, C, θ) │
+   └───────┬──────────┘
+           │
+           ▼
+   repeat until convergence
+
+    :param _clients: List of clients to compute omega and C for
+    :return: None
     """
     for client in _clients:
         fedrc_models = client.fedrc_models  # List[nn.Module], length K
@@ -197,16 +219,26 @@ def compute_omega(_clients: List[Client]):
         # label_gamma: [num_classes, K]
         new_C_y_k = label_gamma / cluster_weight_total.unsqueeze(0)  # ----- (E.numerator) / (E.denominator) = Eq. (E)
 
-        # Optional: normalize rows or handle clusters with extremely low weight
-        # e.g., set C_y,k to uniform if cluster k has almost no responsibility
+        # =========================================================================================================
+        # Numerical safety, when, denominator of C_{y,k} is extremely low (cluster k has almost no samples assigned)
+        # (This part is not specified in the paper)
+        # ==========================================================================================================
+        # For numerical safety: handle clusters with extremely low samples assigned.
+        # low_mass_mask (extremely lower γ value) is a boolean vector of shape [K].If cluster_weight_total less than
+        # 1e-6, we declare that cluster
+        # (e.g.,k=3) to have low mass (i.e. low_mass_mask[3] = [True]).
         low_mass_mask = (cluster_weight_total < 1e-6)
+        # Then, if cluster k has almost no samples assigned (γ <<< ), it's C_y,k is set to 1.0.
+        # Why 1.0? This way C_{y,k} will
+        #   1. have a neutral, non-informative prior, equally likely across all labels,
+        #   2. prevent NaNs and keeps the algorithm numerically stable.
         if low_mass_mask.any():
-            # For such clusters, fall back to uniform over labels
+            # For all labels y, where γ <<<, set C_{y,k} = 1.0
             new_C_y_k[:, low_mass_mask] = 1.0
 
-        # Save back to client (detach to avoid any accidental graph retention)
-        client.fedrc_omega = new_omega.detach()
-        client.fedrc_C = new_C_y_k.detach()
+        # Save back to client (detach stops tracking it in PyTorch’s computation graph (treats it like a NumPy array))
+        client.omega_i_k = new_omega.detach()
+        client.C_y_k = new_C_y_k.detach()
 
 
 def compute_gamma(loss: float, temperature: float = 1.0) -> torch.Tensor:
