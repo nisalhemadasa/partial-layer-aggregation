@@ -53,7 +53,7 @@ class Client:
             # Cluster weights for client i and cluster K (initialized to 1/K, according to the original paper)
             self.omega_i_k = torch.full((fedrc_cluster_count,), 1.0 / fedrc_cluster_count, device=DEVICE)
 
-            # Data weights for client i, data j, and cluster K (initialized to 1/K, according to the original paper)
+            # Sample weights for client i, sample j, and cluster K (initialized to 1/K, according to the original paper)
             self.gamma_i_j_k = torch.full((fedrc_cluster_count,), 1.0 / fedrc_cluster_count, device=DEVICE)
 
             # Original paper does not mention the initialization of C_y_k.
@@ -62,6 +62,7 @@ class Client:
             # 2. It avoids NaNs or division by zero.
             # Therefore, we start with uniform C_y,k = 1.0 for all labels/clusters
             self.num_classes = get_num_classes_from_dataset(self.local_trainset.dataset)
+            # How much of cluster k is made up of label y
             self.C_y_k = torch.ones(self.num_classes, fedrc_cluster_count, device=DEVICE)
         else:
             self.fedrc_models = None

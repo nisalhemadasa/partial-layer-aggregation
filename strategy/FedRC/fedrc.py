@@ -74,7 +74,7 @@ def compute_omega(_clients: List[Client]):
         - f(x, y; θ_k) = cross-entropy loss ---- (A)
         - P(y|x; θ_k) ≈ exp(-f) ---------------- (B)
         - P(y; θ_k) ≈ C_{y,k} ------------------ (C)
-        - I(x, y; θ_k) ≈ exp(-f) / C_{y,k} ----- (D)
+        - I_tilde(x, y; θ_k) ≈ exp(-f) / C_{y,k} ----- (D)
 
         Label-wise accumulation for C_{y,k} => I.e., we calculate the proportion of the data pairs labeled as y,and that
         chooses the cluster/model k.
@@ -119,66 +119,94 @@ def compute_omega(_clients: List[Client]):
                     losses_all[:, k] = F.cross_entropy(logits, y, reduction="none") # per-sample cross-entropy loss, from ----(A), and appendix H.2. in the paper.
                     # losses_all shape: [B, K]
 
+            # ===================================
+            # constructing Eq. (D)
+            # I_tilde - this I_tilde value is then used to compute Eq. (3.1)
+            # ===================================
             # exp(-loss) term: [B, K]
-            exp_neg_loss = torch.exp(-losses_all)  # from ----(B)
+            # B -> mini_batch_size
+            # K -> number of fedrc_models (taken from the for-loop above) which is equivalent to number of clusters.
+            exp_neg_loss = torch.exp(-losses_all)  # from (B) ---- (B.numerator)
 
             # C_{y,k} term for this batch of samples.
             # prev_C[y, k] shape: [B, K]
-            C_batch = prev_C[y] # gather rows by label y, from ----(C)
+            C_batch = prev_C[y] # gather rows by label y, from(C) ---- (B.denominator)
             # To avoid C_batch (C_{y,k}) being zero (NaN), we clamp it to a minimum value equivalent to EPS, i.e.,
             # if C_batch < EPS, then C_batch = EPS
             # For EPS, a very small value (1e-12), which is achievable in data type floating point precisions, is chosen
             # to avoid numerical instability.
             EPS = 1e-12
-            C_batch = C_batch.clamp_min(EPS)            # avoid division by 0 and getting NaN
+            C_batch = C_batch.clamp_min(EPS) # avoid division by 0 and getting NaN | ---- (B.denominator)
 
             # I_tilde(x, y; θ_k) = exp(-f) / C_{y,k}, from ----- (D)
-            I_tilde = exp_neg_loss / C_batch    # I_tilde shape: [B, K]
+            I_tilde = exp_neg_loss / C_batch    # I_tilde shape: [B, K] | ---- (B.numerator / B.denominator)
 
-            # Numerator for γ: ω_{i;k}^{t-1} * I_tilde, from ----- Eq. (3) in the paper
+            # =============================================================================
+            # constructing Eq. (3.1), by applying I_tilde from (D) in (3.1)
+            # New γ : Sample weights for client i, sample j, and cluster K
+            # =============================================================================
+            # Numerator for γ = ω_{i;k}^{t-1} * I_tilde
             # prev_omega: [K] -> [1, K]
-            numerators = prev_omega.unsqueeze(0) * I_tilde   # [B, K]
+            numerators = prev_omega.unsqueeze(0) * I_tilde   # [B, K] | ----- (3.1.numerator)
 
-            # Denominator: sum over clusters n, from ----- Eq. (3) in the paper
-            denom = numerators.sum(dim=1, keepdim=True).clamp_min(EPS)  # [B, 1]
+            # Denominator: sum over clusters n, from Eq. (3.1) (clamped to EPS to avoid division by 0 and getting NaN)
+            denominator = numerators.sum(dim=1, keepdim=True).clamp_min(EPS)  # [B, 1] | ----- (3.1.denominator)
 
-            # γ_{i,j;k}^{(t)}: [B, K], from ----- Eq. (3) in the paper
-            gamma_batch = numerators / denom
+            # γ_{i,j;k}^{(t)}: [B, K], from Eq. (3.1)
+            gamma_batch = numerators / denominator  # ------- (3.1.numerator / 3.1.denominator) = Eq. (3.1)
 
-            # Accumulate sums over j
-            sum_gamma_per_cluster += gamma_batch.sum(dim=0)  # ∑_j γ_{i,j;k}, from ----- Eq. (3) in the paper
+            # ===================================================================
+            # Constructing Eq. (3.2) - part 1
+            # ===================================================================
+            # ∑_j γ_{i,j;k}^{(t)} (from Eq. (3.1)), (i.e., Accumulates γ_{i,j;k}^{(t)} over j)
+            # sums over the batch dimension B, so: input: [B, K], output: [K]
+            sum_gamma_per_cluster += gamma_batch.sum(dim=0)  #  [K] | from Eq. (3.2) ----- Eq. (3.2.1)
 
-            # From (E): Label-wise accumulation for C_{y,k}
-            # I.e., we calculate the proportion of the data pairs labeled as y,and that chooses the cluster/model k.
-            # For each sample j with label y_j, add gamma_batch[j, :] () to row y_j.
+            # ===============================================================================================
+            # Constructing (E) - part 1, using the calculated new γ_{i,j;k} values from Eq. (3.1)
+            # ===============================================================================================
+            # Numerator for New C_{y,k} = ∑_j 1{y_j=y} · γ_{i,j;k},
+            # where 1{y_j=y} is an indicator function. i.e., 1{y_j=y} = 1, if y_j == y, else 0
+            # Label-wise accumulation of gamma values
             # label_gamma: [num_classes, K]
-            label_gamma.index_add_(0, y, gamma_batch)
+            label_gamma.index_add_(0, y, gamma_batch)   # ------ (E.numerator)
 
         if num_samples == 0:
             # No data, keep previous omega/C unchanged
             return
 
-        # ω_{i,k}^(t) = (1 / N_i) ∑_j γ_{i,j;k}, from ----- Eq. (3.2)
-        new_omega = sum_gamma_per_cluster / float(num_samples)
+        # ===================================================================
+        # Constructing Eq. (3.2) - part 2
+        # new ω : ω_{i,k}^(t) : Cluster weights for client i and cluster K
+        # ===================================================================
+        # ω_{i,k}^(t) = (1 / N_i) ∑_j γ_{i,j;k}
+        new_omega = sum_gamma_per_cluster / float(num_samples) # ----- Eq. (3.2.1) * (1 / N_i) = Eq. (3.2)
 
-        # Cluster total weight per k: ∑_y ∑_j 1{y_j=y} γ_{i,j;k} = ∑_j γ_{i,j;k}!!!!!
-        # Adds numerical-safety: avoid division by zero
-        cluster_weight_total = sum_gamma_per_cluster.clamp_min(EPS)  # [K]
+        # ===============================================================================================
+        # Constructing (E) - part 2
+        # ===============================================================================================
+        # Denominator for New C_{y,k} = ∑_j γ_{i,j;k} -> (new γ from Eq. (3.1))
+        # To Eq. (3.2.1), add numerical-safety: avoid division by zero
+        cluster_weight_total = sum_gamma_per_cluster.clamp_min(EPS)  # [K] | ----- (E.denominator)
 
+        # ===============================================================================================
+        # Constructing (E) - part 3
+        # new C_{y,k} : How much of cluster k is made up of label y
+        # ===============================================================================================
         # C_{y,k}^(t) = (∑_j 1{y_j=y} γ_{i,j;k}) / (∑_j γ_{i,j;k})
         # label_gamma: [num_classes, K]
-        new_C = label_gamma / cluster_weight_total.unsqueeze(0)
+        new_C_y_k = label_gamma / cluster_weight_total.unsqueeze(0)  # ----- (E.numerator) / (E.denominator) = Eq. (E)
 
         # Optional: normalize rows or handle clusters with extremely low weight
         # e.g., set C_y,k to uniform if cluster k has almost no responsibility
         low_mass_mask = (cluster_weight_total < 1e-6)
         if low_mass_mask.any():
             # For such clusters, fall back to uniform over labels
-            new_C[:, low_mass_mask] = 1.0
+            new_C_y_k[:, low_mass_mask] = 1.0
 
         # Save back to client (detach to avoid any accidental graph retention)
         client.fedrc_omega = new_omega.detach()
-        client.fedrc_C = new_C.detach()
+        client.fedrc_C = new_C_y_k.detach()
 
 
 def compute_gamma(loss: float, temperature: float = 1.0) -> torch.Tensor:
@@ -195,7 +223,7 @@ def compute_gamma(loss: float, temperature: float = 1.0) -> torch.Tensor:
 
 def compute_fedrc_metrics(loss: float, clients: List[Client]):
     """
-    Compute gamma (data weights) and omega (cluster weights) for FedRC algorithm.
+    Compute gamma (sample weights) and omega (cluster weights) for FedRC algorithm.
     :param loss: The average Cross entropy loss of all the samples of all participated clients in the current round
     :param clients: List of clients participated in the current round
     """
