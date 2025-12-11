@@ -162,16 +162,15 @@ def client_initial_training(_clients: List[Client], _is_drift: bool, _is_drift_e
     # All the clients are trained individually using local data initially
     for client in _clients:
         client.sample_data()
-        # We assume no drift during initial training. Hence, drift related parameters are set to None
-        client.fit(_is_drift, _is_drift_end, None, client.client_id, _drift_recovery_method, None)
 
         if _drift_recovery_method == constants.RecoveryAlgorithm.FEDRC:
             # Evaluate all FedRC models in the client
-            fedrc.compute_gamma(_clients)
-            fedrc.compute_omega(_clients)
+            fedrc.fit(client)
             losses, accuracies = client.evaluate_fedrc_models() # returns ([loss1, loss2,...], [acc1, acc2,...])
             initial_client_loss_and_accuracy.append((losses, accuracies))
         else:
+            # We assume no drift during initial training. Hence, drift related parameters are set to None
+            client.fit(_is_drift, _is_drift_end, None, client.client_id, _drift_recovery_method, None)
             initial_client_loss_and_accuracy.append(client.evaluate())  # return (loss, accuracy)
 
     return initial_client_loss_and_accuracy
