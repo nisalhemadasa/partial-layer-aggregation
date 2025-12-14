@@ -19,7 +19,7 @@ import torch.nn.functional as F
 import constants
 from federated_network.client import Client
 
-DEVICE = torch.device("cpu")  # Try "cuda" to train on GPU
+DEVICE = torch.device("cuda")  # Try "cuda" to train on GPU
 print(
     f"Training on {DEVICE} using PyTorch {torch.__version__}"
 )
@@ -89,24 +89,24 @@ def fit(client: Client) -> None:
         ω_{i,k}^(t) = (1 / N_i) ∑_j γ_{i,j;k} ------ Eq. (3.2)
 
     Algorithm in a nutshell => This is an EM (Expectation–Maximization) algorithm with the following steps:
-   ┌──────────────────┐
-   │   OLD (ω, C, θ)  │
-   └───────┬──────────┘
-           │
-           ▼
-   ┌──────────────────┐
-   │   E-step         │
-   │ compute γ        │
-   └───────┬──────────┘
-           │
-           ▼
-   ┌──────────────────┐
-   │   M-step         │
-   │ update (ω, C, θ) │
-   └───────┬──────────┘
-           │
-           ▼
-   repeat until convergence
+    ┌──────────────────┐
+    │   OLD (ω, C, θ)  │
+    └───────┬──────────┘
+            │
+            ▼
+    ┌──────────────────┐
+    │   E-step         │
+    │ compute γ        │
+    └───────┬──────────┘
+            │
+            ▼
+    ┌──────────────────┐
+    │   M-step         │
+    │ update (ω, C, θ) │
+    └───────┬──────────┘
+            │
+            ▼
+    repeat until convergence
 
     :param client: client to perform the FedRC training step, and update its ω and C values
     :return: None
@@ -118,9 +118,9 @@ def fit(client: Client) -> None:
     prev_omega = client.omega_i_k.to(DEVICE)  # [K]
     prev_C = client.C_y_k.to(DEVICE)  # [num_classes, K]
 
-    # Accumulators over all local samples j
-    sum_gamma_per_cluster = torch.zeros(num_clusters, device=DEVICE)  # ∑_j γ_{i,j;k} --- from numerator of (E)
-    label_gamma = torch.zeros(client.num_classes, num_clusters, device=DEVICE)  # ∑_j 1{y_j=y} γ_{i,j;k} ---- from denominator of (E). Shape: [num_classes, K]
+    # Initiate variables to hold the values of numerator and denominator of Eq. (E)
+    sum_gamma_per_cluster = torch.zeros(num_clusters, device=DEVICE)  # ∑_j γ_{i,j;k} --- from denominator of (E)
+    label_gamma = torch.zeros(client.num_classes, num_clusters, device=DEVICE)  # ∑_j 1{y_j=y} γ_{i,j;k} ---- from numerator of (E). Shape: [num_classes, K]
     num_samples = 0
 
     # Loop over local data
@@ -208,16 +208,15 @@ def fit(client: Client) -> None:
             optimizer_k = fedrc_optimizers[k]
             optimizer_k.zero_grad()
 
-            logits_k = model_k(x)                          # [B, num_classes]
-            per_sample_loss_k = F.cross_entropy(
-                logits_k, y, reduction="none"
-            )                                              # [B]
+            logits_k = model_k(x)   # [B, num_classes]
+            per_sample_loss_k = F.cross_entropy(logits_k, y, reduction="none")  # [B]
 
             # Eq. (5): weighted loss over this batch for cluster k
-            # L_k ≈ mean_j γ_{i,j;k} * CE_k(x_j, y_j)
-            weights = gamma_batch[:, k].detach()           # [B], no grad through gamma
-            loss_k = (weights * per_sample_loss_k).mean()
+            # L_k ≈ mean_j γ_{i,j;k} * Cross_Entropy_loss_on_cluster_k(x_j, y_j)
+            gamma_ijk  = gamma_batch[:, k].detach()           # [B], no grad through gamma, gamma_ijk -> per sample cluster weights
+            loss_k = (gamma_ijk  * per_sample_loss_k).mean()
 
+            # Backward pass and optimization
             loss_k.backward()
             optimizer_k.step()
 
@@ -230,14 +229,14 @@ def fit(client: Client) -> None:
     # new ω : ω_{i,k}^(t) : Cluster weights for client i and cluster K
     # ===================================================================
     # ω_{i,k}^(t) = (1 / N_i) ∑_j γ_{i,j;k}
-    new_omega = sum_gamma_per_cluster / float(num_samples)  # ----- Eq. (3.2.1) * (1 / N_i) = Eq. (3.2)
+    new_omega = sum_gamma_per_cluster / float(num_samples)  # ----- Eq. (3.2.1) * (1 / N_i) = Eq. (3.2) #TODO:change naming to new_omega_i_k?
 
     # ===============================================================================================
     # Constructing (E) - part 2
     # ===============================================================================================
     # Denominator for New C_{y,k} = ∑_j γ_{i,j;k} -> (new γ from Eq. (3.1))
     # To Eq. (3.2.1), add numerical-safety: avoid division by zero
-    cluster_weight_total = sum_gamma_per_cluster.clamp_min(EPS)  # [K] | ----- (E.denominator)
+    cluster_weight_total = sum_gamma_per_cluster.clamp_min(EPS)  # [K] | ----- (E.denominator)  #TODO:change naming gamma_ijk_total?
 
     # ===============================================================================================
     # Constructing (E) - part 3
