@@ -12,6 +12,7 @@ import constants
 from drift_concepts.drift import Drift, apply_drift
 from federated_network.client import set_parameters, Client, change_client_drift_recovery_method
 from federated_network.server import Server, change_server_aggregation_strategy
+from strategy.FedRC import fedrc
 
 
 def equal_distribution(num_clients: int, num_servers: int) -> List[int]:
@@ -144,20 +145,35 @@ def train_client_models(all_clients, sampled_client_ids, servers: List[Server], 
                 # Evaluates the adaptability of the server model to the data
                 round_client_loss_and_accuracy.append(client.evaluate())
 
-            # If the client is sampled in this global training round, then train using the server aggregated parameters
-            client.fit(drift.is_drift, drift.is_drift_end, server.model.state_dict(), client.client_id,
-                       client.drift_recovery_method, drift.drifted_client_indices)
+            # TODO: this part could be better organized
+            if drift_recovery_method == constants.RecoveryAlgorithm.FEDRC:
+                # Evaluate all FedRC models in the client
+                fedrc.fit(client)
+            else:
+                # If the client is sampled in this global training round, then train using the server aggregated parameters
+                client.fit(drift.is_drift, drift.is_drift_end, server.model.state_dict(), client.client_id,
+                           client.drift_recovery_method, drift.drifted_client_indices)
         else:
-            # If the client is not sampled, perform local training without server parameters
-            client.fit(drift.is_drift, drift.is_drift_end, None, client.client_id, client.drift_recovery_method,
-                       drift.drifted_client_indices)
+            # TODO: this part could be better organized
+            if drift_recovery_method == constants.RecoveryAlgorithm.FEDRC:
+                # Evaluate all FedRC models in the client
+                fedrc.fit(client)
+            else:
+                # If the client is not sampled, perform local training without server parameters
+                client.fit(drift.is_drift, drift.is_drift_end, None, client.client_id, client.drift_recovery_method,
+                           drift.drifted_client_indices)
 
             if is_server_adaptability:
                 round_client_loss_and_accuracy.append(client.evaluate())
 
+        # TODO: this part could be better organized
         if not is_server_adaptability:
-            # Evaluate the adaptability of the client models to the data
-            round_client_loss_and_accuracy.append(client.evaluate())
+            if drift_recovery_method == constants.RecoveryAlgorithm.FEDRC:
+                losses, accuracies = client.evaluate_fedrc_models() # returns ([loss1, loss2,...], [acc1, acc2,...])
+                round_client_loss_and_accuracy.append((losses, accuracies))
+            else:
+                # Evaluate the adaptability of the client models to the data
+                round_client_loss_and_accuracy.append(client.evaluate())
 
     return round_client_loss_and_accuracy
 
