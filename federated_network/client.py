@@ -48,6 +48,8 @@ class Client:
             # Create a list of models of size 'fedrc_cluster_count' (equivalent to the number of models server) in each client for FedRC
             self.fedrc_models = [copy.deepcopy(model) for _ in range(fedrc_cluster_count)]
 
+            self.fedrc_optimizers = [torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9) for model in self.fedrc_models]
+
             self.model = None
 
             # Cluster weights for client i and cluster K (initialized to 1/K, according to the original paper)

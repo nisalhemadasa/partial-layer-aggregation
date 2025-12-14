@@ -113,6 +113,7 @@ def fit(client: Client) -> None:
     """
     fedrc_models = client.fedrc_models  # List[nn.Module], length K
     num_clusters = len(fedrc_models)
+    fedrc_optimizers = client.fedrc_optimizers  # Optimizers for weights train of the fedrc_models
 
     prev_omega = client.omega_i_k.to(DEVICE)  # [K]
     prev_C = client.C_y_k.to(DEVICE)  # [num_classes, K]
@@ -204,7 +205,7 @@ def fit(client: Client) -> None:
         for k, model_k in enumerate(fedrc_models):
             model_k.to(DEVICE)
             model_k.train()
-            optimizer_k = optimizer_list[k]
+            optimizer_k = fedrc_optimizers[k]
             optimizer_k.zero_grad()
 
             logits_k = model_k(x)                          # [B, num_classes]
