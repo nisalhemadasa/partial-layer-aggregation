@@ -9,8 +9,9 @@ from collections import defaultdict, Counter
 from typing import List, Tuple, Dict
 
 import matplotlib
+matplotlib.use("Agg")   # headless tkinter for linux server environments
 
-matplotlib.use('TkAgg')  # Or 'TkAgg', 'Qt5Agg', etc.
+# matplotlib.use('TkAgg')  # Or 'TkAgg', 'Qt5Agg', etc. Use this in windowed environments
 import matplotlib.pyplot as plt
 from numpy import sort
 

@@ -6,12 +6,21 @@ Date: 10-01-2025
 Version: 1.0
 """
 
-from typing import List, Tuple
+from typing import List, Tuple, Union
 
 import constants
 from log_utils.logging import read_logs
 from plot_utils.plotting import plot_client_avg_performance_vs_rounds, plot_server_lvl_avg_performance_vs_rounds, \
     plot_server_overall_avg_performance_vs_rounds
+
+
+def as_scalar(x: Union[float, List[float]]) -> float:
+    """
+    #TODO: Docstring
+    """
+    if isinstance(x, list):
+        return sum(x) / len(x) if len(x) > 0 else 0.0
+    return float(x)
 
 
 def compute_client_average_metrics(data: List[List[Tuple]]) -> List[Tuple[float, float]]:
@@ -33,6 +42,10 @@ def compute_client_average_metrics(data: List[List[Tuple]]) -> List[Tuple[float,
 
         for client_metrics in epoch_data:  # Iterate over each client
             loss, accuracy = client_metrics
+
+            loss = as_scalar(loss)
+            accuracy = as_scalar(accuracy)
+
             total_loss += loss
             total_accuracy += accuracy
 

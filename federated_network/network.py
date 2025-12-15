@@ -24,7 +24,6 @@ from log_utils.logging import write_logs
 from plot_utils.plotting import plot_client_performance_vs_rounds, plot_server_performance_vs_rounds, \
     plot_dataset_distribution, \
     plot_client_avg_performance_vs_rounds
-from strategy.FedRC.fedrc import compute_fedrc_metrics
 
 
 class FederatedNetwork:
@@ -204,7 +203,8 @@ class FederatedNetwork:
             round_server_loss_and_accuracy = server_hierarchy_evaluate(self.server_hierarchy, server_test_set,
                                                                        self.clients,
                                                                        self.simulation_parameters[
-                                                                           'servers_have_test_data'])
+                                                                           'servers_have_test_data'],
+                                                                       self.drift_recovery_parameters['recovery_method'])
             server_loss_and_accuracy.append(round_server_loss_and_accuracy)
 
             # Update the progress of the simulation
@@ -227,11 +227,6 @@ class FederatedNetwork:
                                                                  self.simulation_parameters,
                                                                  self.drift_recovery_parameters['recovery_method'])
             clients_loss_and_accuracy.append(round_client_loss_and_accuracy)
-
-            # Calculate the FedRC parameters for the clients participated in the training round
-            # Assumption: All clients are sampled for each round
-            if self.drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.FEDRC:
-                compute_fedrc_metrics(round_client_loss_and_accuracy[0], sampled_clients)
 
         # Stop the timer
         end_time = time.time()
@@ -257,7 +252,7 @@ class FederatedNetwork:
         # Plot the performance of the server hierarchy
         plot_server_performance_vs_rounds(server_loss_and_accuracy, file_save_path=file_save_path)
 
-        # Get average performance of the clients
+        # Get average performance of the clients    #TODO: fix for fedrc and uncomment
         client_averages = compute_client_average_metrics(clients_loss_and_accuracy)
 
         # ==========LOGGING FUNCTION CALLS==============

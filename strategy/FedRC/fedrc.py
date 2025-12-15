@@ -15,9 +15,10 @@ from typing import List, OrderedDict, Dict
 import torch
 from torch import nn
 import torch.nn.functional as F
+from torch.utils.data import DataLoader
 
 import constants
-from federated_network.client import Client
+from models.model import set_parameters
 
 DEVICE = torch.device("cuda")  # Try "cuda" to train on GPU
 print(
@@ -33,7 +34,7 @@ class FedRC:
                          client_model_params_dict: Dict[str, List[OrderedDict]]) -> None:
         """
         Aggregate the client models to the global model and returns the new aggregated model.
-        *** Here we use FedAvg, as the orginal paper allows using any aggregation method ***
+        *** Here we use FedAvg, as the original paper allows using any aggregation method ***
         # TODO: This function is not designed to the hierarchical server topology
         :param fedrc_server_models: The list of models (cluster bases) in the server model
         :param client_model_params_dict: Dictionary containing the client IDs (keys) and the corresponding state dicts
@@ -43,33 +44,34 @@ class FedRC:
         for idx in range(len(fedrc_server_models)):
             server_model_params = fedrc_server_models[idx].state_dict()
 
-            if client_model_params_dict is not None:
+            if client_model_params_dict: # if not empty
                 for client in client_model_params_dict.keys():
                     assert len(client_model_params_dict[client]) == len(fedrc_server_models), \
                         "Number of FedRC models in the client and server must be the same."
-                    fedrc_client_models = client_model_params_dict[client]
                 client_model_params_list = client_model_params_dict.values()
 
             # Simple averaging of weights
             updated_server_model_params = server_model_params.copy()
             for key in updated_server_model_params.keys():
                 updated_server_model_params[key] = torch.stack(
-                    [client_model_params[key].float() for client_model_params in client_model_params_list], 0).mean(0)
+                    [client_model_params[idx][key].float() for client_model_params in client_model_params_list], 0).mean(0)
 
             # Load the FedAvg-ed parameters to the server model
-            # set_parameters(server_model, updated_server_model_params)
+            set_parameters(fedrc_server_models[idx], updated_server_model_params)
 
 
-def get_fedrc_client_model_params(client: Client) -> List[OrderedDict]:
+def get_fedrc_client_model_params(fedrc_models: List[nn.Module] | None, ) -> List[OrderedDict[str, torch.Tensor]]:
     """
     Return a list of state_dicts for all FedRC models of a client.
-    :param client: The client whose FedRC model parameters are to be retrieved
+    :param fedrc_models: List of FedRC models of the client
     :return: List of state_dicts for all FedRC models of the client
     """
-    return [model.state_dict() for model in client.fedrc_models]
+    return [model.state_dict() for model in fedrc_models]
 
 
-def fit(client: Client) -> None:
+def fit(fedrc_models: List[nn.Module], _dataset: DataLoader, fedrc_optimizers: List[torch.optim.SGD],
+        old_omega_i_k: torch.Tensor, old_C_y_k: torch.Tensor, num_classes: int) -> (
+        tuple[torch.Tensor, torch.Tensor] | None):
     """
     Train the client model using training set, and using gamma. Then update the ω and C values for the client.
 
@@ -108,25 +110,34 @@ def fit(client: Client) -> None:
             ▼
     repeat until convergence
 
-    :param client: client to perform the FedRC training step, and update its ω and C values
+    :param fedrc_models: models (from x clusters) from the client to perform the FedRC training step, and update its ω
+    and C values.
+    :param _dataset: training dataset loader for the client.
+    :param fedrc_optimizers: optimizers corresponding to each fedrc_model for performing the optimization step.
+    :param old_omega_i_k: Previous omega values for the client.
+    :param old_C_y_k: Previous C values for the client.
+    :param num_classes: Number of classes in the dataset.
     :return: None
     """
-    fedrc_models = client.fedrc_models  # List[nn.Module], length K
-    num_clusters = len(fedrc_models)
-    fedrc_optimizers = client.fedrc_optimizers  # Optimizers for weights train of the fedrc_models
+    num_clusters = len(fedrc_models)  # List[nn.Module], length K
+    fedrc_optimizers = fedrc_optimizers  # Optimizers for weights train of the fedrc_models
 
-    prev_omega = client.omega_i_k.to(DEVICE)  # [K]
-    prev_C = client.C_y_k.to(DEVICE)  # [num_classes, K]
+    prev_omega = old_omega_i_k.to(DEVICE)  # [K]
+    prev_C = old_C_y_k.to(DEVICE)  # [num_classes, K]
 
     # Initiate variables to hold the values of numerator and denominator of Eq. (E)
     sum_gamma_per_cluster = torch.zeros(num_clusters, device=DEVICE)  # ∑_j γ_{i,j;k} --- from denominator of (E)
-    label_gamma = torch.zeros(client.num_classes, num_clusters, device=DEVICE)  # ∑_j 1{y_j=y} γ_{i,j;k} ---- from numerator of (E). Shape: [num_classes, K]
+    label_gamma = torch.zeros(num_classes, num_clusters, device=DEVICE)  # ∑_j 1{y_j=y} γ_{i,j;k} ---- from numerator of (E). Shape: [num_classes, K]
     num_samples = 0
+
+    # Constant EPS: For EPS, a very small value (1e-12), which is achievable in data type floating point precisions, is chosen
+    # to avoid numerical instability.
+    EPS = 1e-12
 
     # Loop over local data
     # In the paper, one sample at a time is used, but here we use minibatches for efficiency (faster on GPU), but
     # is mathematically equivalent (just vectorized).
-    for x, y in client.trainloader:
+    for x, y in _dataset:
         x = x.to(DEVICE)
         y = y.to(DEVICE)  # B = batch size -> Label vector y is a 1D tensor of length [B]. This is equal to the 'minibatch_size' given in network.py.
         batch_size = y.size(0)  # y.size(0) == B
@@ -141,7 +152,8 @@ def fit(client: Client) -> None:
             model_k.eval()  # we only evaluate here
 
             with torch.no_grad():
-                logits = model_k(x)  # get the logits in a tenson of dimension [B, num_classes]. Represented by m_{i,k}(x, θ_k) in appendix H.2. in the paper.
+                logits = model_k(
+                    x)  # get the logits in a tenson of dimension [B, num_classes]. Represented by m_{i,k}(x, θ_k) in appendix H.2. in the paper.
                 losses_all[:, k] = F.cross_entropy(logits, y, reduction="none")  # per-sample cross-entropy loss, from ----(A), and appendix H.2. in the paper.
                 # losses_all shape: [B, K]
 
@@ -159,9 +171,6 @@ def fit(client: Client) -> None:
         C_batch = prev_C[y]  # gather rows by label y, from(C) ---- (B.denominator)
         # To avoid C_batch (C_{y,k}) being zero (NaN), we clamp it to a minimum value equivalent to EPS, i.e.,
         # if C_batch < EPS, then C_batch = EPS
-        # For EPS, a very small value (1e-12), which is achievable in data type floating point precisions, is chosen
-        # to avoid numerical instability.
-        EPS = 1e-12
         C_batch = C_batch.clamp_min(EPS)  # avoid division by 0 and getting NaN | ---- (B.denominator)
 
         # I_tilde(x, y; θ_k) = exp(-f) / C_{y,k}, from ----- (D)
@@ -208,20 +217,20 @@ def fit(client: Client) -> None:
             optimizer_k = fedrc_optimizers[k]
             optimizer_k.zero_grad()
 
-            logits_k = model_k(x)   # [B, num_classes]
+            logits_k = model_k(x)  # [B, num_classes]
             per_sample_loss_k = F.cross_entropy(logits_k, y, reduction="none")  # [B]
 
             # Eq. (5): weighted loss over this batch for cluster k
             # L_k ≈ mean_j γ_{i,j;k} * Cross_Entropy_loss_on_cluster_k(x_j, y_j)
-            gamma_ijk  = gamma_batch[:, k].detach()           # [B], no grad through gamma, gamma_ijk -> per sample cluster weights
-            loss_k = (gamma_ijk  * per_sample_loss_k).mean()
+            gamma_ijk = gamma_batch[:, k].detach()  # [B], no grad through gamma, gamma_ijk -> per sample cluster weights
+            loss_k = (gamma_ijk * per_sample_loss_k).mean()
 
             # Backward pass and optimization
             loss_k.backward()
             optimizer_k.step()
 
     if num_samples == 0:
-        # No data, keep previous omega/C unchanged
+        # No data, keep previous omega/C unchanged, return None
         return
 
     # ===================================================================
@@ -263,9 +272,8 @@ def fit(client: Client) -> None:
         # For all labels y, where γ <<<, set C_{y,k} = 1.0
         new_C_y_k[:, low_mass_mask] = 1.0
 
-    # Save back to client (detach stops tracking it in PyTorch’s computation graph (treats it like a NumPy array))
-    client.omega_i_k = new_omega.detach()
-    client.C_y_k = new_C_y_k.detach()
+    # Return new omega and C(detach stops tracking it in PyTorch’s computation graph (treats it like a NumPy array))
+    return new_omega.detach(), new_C_y_k.detach()
 
 
 def aggregator_fn():

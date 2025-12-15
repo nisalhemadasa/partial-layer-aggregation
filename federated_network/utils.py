@@ -134,8 +134,9 @@ def train_client_models(all_clients, sampled_client_ids, servers: List[Server], 
         server = servers[client.parent_server_id]
 
         if client.client_id in sampled_client_ids:
-            if not server.strategy.strategy_name == constants.RecoveryAlgorithm.FEDEX:
-                # Download the server model parameters to the client
+            if not server.strategy.strategy_name in [constants.RecoveryAlgorithm.FEDEX, constants.RecoveryAlgorithm.FEDRC]:
+                # Download the server model parameters to the client. The above two strategies have already done this in
+                # network.model_distribution_fedex and network.model_distribution_fedrc functions.
                 set_parameters(client.model, server.model.state_dict())
 
             if verbose:
@@ -145,23 +146,17 @@ def train_client_models(all_clients, sampled_client_ids, servers: List[Server], 
                 # Evaluates the adaptability of the server model to the data
                 round_client_loss_and_accuracy.append(client.evaluate())
 
-            # TODO: this part could be better organized
-            if drift_recovery_method == constants.RecoveryAlgorithm.FEDRC:
-                # Evaluate all FedRC models in the client
-                fedrc.fit(client)
+            # If the client is sampled in this global training round, then train using the server aggregated parameters
+            if server.strategy.strategy_name == constants.RecoveryAlgorithm.FEDRC:
+                client.fit(drift.is_drift, drift.is_drift_end, None, client.client_id,
+                           client.drift_recovery_method, drift.drifted_client_indices)
             else:
-                # If the client is sampled in this global training round, then train using the server aggregated parameters
                 client.fit(drift.is_drift, drift.is_drift_end, server.model.state_dict(), client.client_id,
                            client.drift_recovery_method, drift.drifted_client_indices)
         else:
-            # TODO: this part could be better organized
-            if drift_recovery_method == constants.RecoveryAlgorithm.FEDRC:
-                # Evaluate all FedRC models in the client
-                fedrc.fit(client)
-            else:
-                # If the client is not sampled, perform local training without server parameters
-                client.fit(drift.is_drift, drift.is_drift_end, None, client.client_id, client.drift_recovery_method,
-                           drift.drifted_client_indices)
+            # If the client is not sampled, perform local training without server parameters
+            client.fit(drift.is_drift, drift.is_drift_end, None, client.client_id, client.drift_recovery_method,
+                       drift.drifted_client_indices)
 
             if is_server_adaptability:
                 round_client_loss_and_accuracy.append(client.evaluate())
@@ -210,18 +205,19 @@ def handle_drift_for_round(round_idx: int, drift: Drift, server_hierarchy: List[
     # Outside the global drift window
     if round_idx < drift.drift_start_round or round_idx >= drift.drift_end_round:
         if drift.is_drift:  # execute only once: after the drift period ends
-            # Change the aggregation strategy back to FedAvg outside the drift window
-            change_server_aggregation_strategy(server_hierarchy, constants.RecoveryAlgorithm.FEDAVG, drift)
+            if not drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.FEDRC:
+                # Change the aggregation strategy back to FedAvg outside the drift window
+                change_server_aggregation_strategy(server_hierarchy, constants.RecoveryAlgorithm.FEDAVG, drift)
 
-            if not drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.FLUID:
-                # Change the clients' (all of them) drift recovery method
-                change_client_drift_recovery_method(clients, drift_recovery_parameters['base_aggregation_method'],
-                                                    drift.drifted_client_indices)
-            else:
-                # FLUID
-                # Change the clients' (only the drift affected clients) drift recovery method
-                change_client_drift_recovery_method(clients, constants.RecoveryAlgorithm.FLUID,
-                                                    drift.drifted_client_indices)
+                if not drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.FLUID:
+                    # Change the clients' (all of them) drift recovery method
+                    change_client_drift_recovery_method(clients, drift_recovery_parameters['base_aggregation_method'],
+                                                        drift.drifted_client_indices)
+                else:
+                    # FLUID
+                    # Change the clients' (only the drift affected clients) drift recovery method
+                    change_client_drift_recovery_method(clients, constants.RecoveryAlgorithm.FLUID,
+                                                        drift.drifted_client_indices)
 
             drift.is_drift = False
 

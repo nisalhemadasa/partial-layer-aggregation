@@ -22,7 +22,7 @@ def write_logs(loss_and_accuracy: List[any], file_name: str) -> None:
 
     def save_as_pkl(_loss_and_accuracy: List[any], _file_name: str) -> None:
         """Save the loss and accuracy data to a binary file"""
-        _file_name = _file_name + constants.FileExtesions.PKL
+        _file_name = _file_name + constants.FileExtentions.PKL
 
         # Save to a binary file
         with open(_file_name, "wb") as file:
@@ -30,7 +30,7 @@ def write_logs(loss_and_accuracy: List[any], file_name: str) -> None:
 
     def save_as_csv(_loss_and_accuracy: List[any], _file_name: str) -> None:
         """Save the loss and accuracy data to a CSV file"""
-        _file_name = _file_name + constants.FileExtesions.CSV
+        _file_name = _file_name + constants.FileExtentions.CSV
 
         # Save to a CSV file
         with open(file_name, "w", newline="") as file:

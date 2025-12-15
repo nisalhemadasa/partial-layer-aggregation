@@ -76,6 +76,20 @@ class Server:
         loss, accuracy = test(self.model, _test_set)
         return float(loss), float(accuracy)
 
+    def evaluate_fedrc_models(self, _test_set: DataLoader) -> Tuple[List[float], List[float]]:
+        """
+        Evaluate all FedRC models in the client on the validation data and return the loss and accuracy
+        :param _test_set: test data
+        :return: list of losses and accuracies. e.g., ([loss1, loss2,...], [acc1, acc2,...])
+        """
+        losses = []
+        accuracies = []
+        for model in self.fedrc_models:
+            loss, accuracy = test(model, _test_set)
+            losses.append(float(loss))
+            accuracies.append(float(accuracy))
+        return losses, accuracies
+
     def average_client_evaluation_results(self, all_clients: List[Client]) -> tuple:
         """
         Get the average evaluation performance (accuracy and loss) of the connected clients.
@@ -106,13 +120,12 @@ def model_aggregation_fedrc(server: Server, sampled_clients: List[Client], drift
     :param verbose: Whether to print detailed logs or not
     """
     client_model_parameters = {
-        client_id: get_fedrc_client_model_params(sampled_clients[client_id])
+        client_id: get_fedrc_client_model_params(sampled_clients[client_id].fedrc_models)
         for client_id in server.client_ids}
 
     if verbose:
         print('aggregate models: server:' + str(server.server_id) + ' -> ' + 'clients:' + str(server.client_ids))
 
-    # TODO: implement FedRC aggregation
     # Aggregate client models
     server.train(client_model_parameters, None, None)
 
@@ -296,13 +309,15 @@ def model_distribution_fedrc(server_list: List[Server], sampled_clients: List[Cl
     :param sampled_clients: List of sampled clients
     :return: None
     """
+    server = server_list[0] #TODO: implemented only for single server topology
     for client_idx, client in enumerate(sampled_clients):
-        set_parameters(client.fedrc_models[client_idx], server_list[client_idx].model.state_dict())
+        for cluster_idx in range(len(server.fedrc_models)):
+            set_parameters(client.fedrc_models[cluster_idx], server.fedrc_models[cluster_idx].state_dict())
 
 
 def server_hierarchy_evaluate(server_hierarchy: List[List[Server]], server_test_set: DataLoader,
                               all_clients: List[Client],
-                              _is_server_has_test_data: bool) -> List:
+                              _is_server_has_test_data: bool, _drift_recovery_method: str) -> List:
     """
     The aggregated models are distributed down the hierarchy. I.e., the edge models are updated by the global model and
     client models are updated by the edge models.
@@ -312,6 +327,7 @@ def server_hierarchy_evaluate(server_hierarchy: List[List[Server]], server_test_
     :param _is_server_has_test_data: Boolean flag to indicate whether server possesses test data to do in-server
     evaluations after client model aggregation. Else, the average of client evaluation results will be used as server
     evaluation performance.
+    :param _drift_recovery_method: Drift recovery method
     :return: None
     """
     # Store the loss and accuracy at each level of the server model hierarchy
@@ -320,13 +336,20 @@ def server_hierarchy_evaluate(server_hierarchy: List[List[Server]], server_test_
 
     # Evaluate the accuracy of the root server model
     global_server = server_hierarchy[0][0]
-    if _is_server_has_test_data:
-        loss, accuracy = global_server.model_evaluate(server_test_set)
-    else:
-        loss, accuracy = global_server.average_client_evaluation_results(all_clients)
 
-    # Store the loss and accuracy of the global server model
-    server_loss_and_accuracy.append([(loss, accuracy)])
+    # TODO: this part has to be refactored
+    if _drift_recovery_method == constants.RecoveryAlgorithm.FEDRC:
+        # Evaluate all FedRC models in the client
+        losses, accuracies = global_server.evaluate_fedrc_models(server_test_set)  # returns ([loss1, loss2,...], [acc1, acc2,...])
+        server_loss_and_accuracy.append((losses, accuracies))
+    else:
+        if _is_server_has_test_data:
+            loss, accuracy = global_server.model_evaluate(server_test_set)
+        else:
+            loss, accuracy = global_server.average_client_evaluation_results(all_clients)
+
+        # Store the loss and accuracy of the global server model
+        server_loss_and_accuracy.append([(loss, accuracy)])
 
     # Evaluate the edge servers down the hierarchy starting upto the leaf servers
     for depth_level in range(len(server_hierarchy) - 1):
@@ -369,6 +392,8 @@ def change_server_aggregation_strategy(server_hierarchy: List[Any], drift_recove
             drifted = set(drift.drifted_client_indices or [])  # makes sure it's at least an empty set and not None
             if set(server.client_ids) & drifted:  # checks if there is any intersection
                 server.strategy = strategy.FedEx.aggregator_fn()
+    elif drift_recovery_method == constants.RecoveryAlgorithm.FEDRC:
+        pass
     else:
         # if the drift is ended, change the strategy back to FedAvg
         for server in server_hierarchy[-1]:
