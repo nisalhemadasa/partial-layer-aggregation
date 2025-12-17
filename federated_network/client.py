@@ -19,7 +19,7 @@ from models.model import train, test, CNNModel, rapid_train, fedau_clientside_tr
     CNNTinyImageNet, CNNCIFAR10, CNNCIFAR100
 from strategy.FedRC import fedrc
 
-DEVICE = torch.device("cpu")  # Try "cuda" to train on GPU
+DEVICE = torch.device("cuda")  # Try "cuda" to train on GPU
 print(
     f"Training on {DEVICE} using PyTorch {torch.__version__}"
 )
