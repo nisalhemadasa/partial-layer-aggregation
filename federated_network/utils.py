@@ -134,10 +134,7 @@ def train_client_models(all_clients, sampled_client_ids, servers: List[Server], 
         server = servers[client.parent_server_id]
 
         if client.client_id in sampled_client_ids:
-            if not server.strategy.strategy_name in [constants.RecoveryAlgorithm.FEDEX, constants.RecoveryAlgorithm.FEDRC]:
-                # Download the server model parameters to the client. The above two strategies have already done this in
-                # network.model_distribution_fedex and network.model_distribution_fedrc functions.
-                set_parameters(client.model, server.model.state_dict())
+            # If the client is sampled in this global training round, then execute the following
 
             if verbose:
                 print('server:' + str(server.server_id) + ' -> ' + 'client:' + str(client.client_id))
@@ -146,7 +143,13 @@ def train_client_models(all_clients, sampled_client_ids, servers: List[Server], 
                 # Evaluates the adaptability of the server model to the data
                 round_client_loss_and_accuracy.append(client.evaluate())
 
-            # If the client is sampled in this global training round, then train using the server aggregated parameters
+            # Download the server model parameters to the client.
+            if not server.strategy.strategy_name in [constants.RecoveryAlgorithm.FEDEX, constants.RecoveryAlgorithm.FEDRC]:
+                # The above two strategies have already done this in network.model_distribution_fedex and
+                # network.model_distribution_fedrc functions.
+                set_parameters(client.model, server.model.state_dict())
+
+            # Train the client models using the server aggregated parameters
             if server.strategy.strategy_name == constants.RecoveryAlgorithm.FEDRC:
                 client.fit(drift.is_drift, drift.is_drift_end, None, client.client_id,
                            client.drift_recovery_method, drift.drifted_client_indices)
@@ -161,7 +164,6 @@ def train_client_models(all_clients, sampled_client_ids, servers: List[Server], 
             if is_server_adaptability:
                 round_client_loss_and_accuracy.append(client.evaluate())
 
-        # TODO: this part could be better organized
         if not is_server_adaptability:
             if drift_recovery_method == constants.RecoveryAlgorithm.FEDRC:
                 losses, accuracies = client.evaluate_fedrc_models() # returns ([loss1, loss2,...], [acc1, acc2,...])

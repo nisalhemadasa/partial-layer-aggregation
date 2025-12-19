@@ -75,7 +75,7 @@ def main():
 
     # Define the drift specifications
     drift_specifications = dict(
-        clients_fraction=0,  # Fraction of clients that are drift affected(literature also uses a list of fractions)
+        clients_fraction=0.3,  # Fraction of clients that are drift affected(literature also uses a list of fractions)
         drift_localization_factor=1,  # Factor to localize the drift to a certain concentrated group of clients
         is_synchronous=True,  # If the drift is synchronous or asynchronous
         async_drift_specs=async_drift_specs,  # Specifications for the asynchronous case
@@ -97,7 +97,8 @@ def main():
         # --------------------------------------------------------------------------------
         # Therefore, it must have at least two entries (start and end of drift).
         max_rotation=45,  # Maximum rotation angle for the drift created by rotations
-        class_pairs_to_swap=[[(1, 2), (3, 4)], [(5, 7)]],   # label indices (not the class names)
+        # class_pairs_to_swap=[[(1, 2), (3, 4)], [(5, 7)]],   # label indices (not the class names)
+        class_pairs_to_swap=[[(1, 2)]],   # label indices (not the class names)
         # Classes to be swapped in the label-swapping drift method
         # class_pairs_to_swap=[[(1, 2), (5, 7)], [(1, 2), (5, 7)]],  # Classes to be swapped in the label-swapping drift method
         # class_pairs_to_swap=[[('T-shirt/top', 'Pullover'), ('Sandal', 'Sneaker')]],  # Classes to be swapped in F_MNIST
@@ -112,7 +113,7 @@ def main():
         is_server_adaptability=False,  # Evaluate the adaptability of servers/clients to the data/drift distribution
         is_plot_client_data_distributions=False, # Whether to plot the client data distributions
         client_ids_to_plot_data_distributions = [0, 1],  # Client IDs whose internal data distributions to be plotted.
-        servers_have_test_data=False # Whether servers have test data for evaluation or the server accuracy/loss is got by averaging the client test accuracy/losses
+        servers_have_test_data=True # Whether servers have test data for evaluation or the server accuracy/loss is got by averaging the client test accuracy/losses
     )
     #
     # # Create a federated network
@@ -170,7 +171,7 @@ def main():
     # 000000000000000000000000000000000000000000000
     # Define drift recovery algorithm related parameters
     drift_recovery_parameters = dict(
-        recovery_method=constants.RecoveryAlgorithm.FEDRC,  # Aggregation method used during the drift period
+        recovery_method=constants.RecoveryAlgorithm.FEDAU,  # Aggregation method used during the drift period
         base_aggregation_method=constants.RecoveryAlgorithm.FEDAVG,  # Aggregation algorithm used outside the drift period
         fedau_alpha=0.9, # EMA weight (alpha) parameter for the FedAU algorithm
         fedrc_cluster_count=3 # Number of clusters (K) for the FedRC algorithm
@@ -195,8 +196,8 @@ def main():
 
     # Running the simulation
     fed_net.run_simulation(
-        file_save_path='plots/swap/saved_plots_fedrc/',
-        log_save_path='logs/swap/saved_logs_fedrc/')
+        file_save_path='plots/swap/saved_plots_fedau/',
+        log_save_path='logs/swap/saved_logs_fedau/')
 
     # # 000000000000000000000000000000000000000000000
     # # Define drift recovery algorithm related parameters

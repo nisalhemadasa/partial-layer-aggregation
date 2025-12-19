@@ -121,6 +121,7 @@ class Client:
                 rapid_train(self.model, self.trainloader, _epochs=self.epochs, _batch_size=self.mini_batch_size)
             elif drift_recovery_method == constants.RecoveryAlgorithm.FEDAU or drift_recovery_method == constants.RecoveryAlgorithm.FLUID:
                 # FedAU client side operations
+                train(self.model, self.trainloader, _epochs=self.epochs)
                 self.auxiliary_classifier_parameters = fedau_clientside_train(self.model, self.trainloader,
                                                                               self.aux_trainloader,
                                                                               server_model_parameters,
