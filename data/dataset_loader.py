@@ -216,12 +216,6 @@ def load_datasets(_dataset_name: str, verbose: bool = False) -> list[Dataset]:
         trainset.targets = torch.Tensor(trainset.targets).to(torch.int64)
         testset.targets = torch.Tensor(testset.targets).to(torch.int64)
 
-        # trainset.data = torch.from_numpy(trainset.data).to(torch.uint8)
-        # trainset.data = trainset.data.permute(0, 3, 1, 2)
-        #
-        # testset.data = torch.from_numpy(testset.data).to(torch.uint8)
-        # testset.data = testset.data.permute(0, 3, 1, 2)
-
     return [trainset, testset]
 
 

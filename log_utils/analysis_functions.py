@@ -6,13 +6,23 @@ Date: 10-01-2025
 Version: 1.0
 """
 
-from typing import List, Tuple
+from typing import List, Tuple, Union
+
+from torch.distributed.tensor import empty
 
 import constants
-from logs.logging import read_logs
-from plots.plotting import plot_client_performance_vs_rounds, plot_server_performance_vs_rounds, \
-    plot_client_avg_performance_vs_rounds, plot_server_lvl_avg_performance_vs_rounds, \
+from log_utils.logging import read_logs
+from plot_utils.plotting import plot_client_avg_performance_vs_rounds, plot_server_lvl_avg_performance_vs_rounds, \
     plot_server_overall_avg_performance_vs_rounds
+
+
+def as_scalar(x: Union[float, List[float]]) -> float:
+    """
+    #TODO: Docstring
+    """
+    if isinstance(x, list):
+        return sum(x) / len(x) if len(x) > 0 else 0.0
+    return float(x)
 
 
 def compute_client_average_metrics(data: List[List[Tuple]]) -> List[Tuple[float, float]]:
@@ -34,6 +44,7 @@ def compute_client_average_metrics(data: List[List[Tuple]]) -> List[Tuple[float,
 
         for client_metrics in epoch_data:  # Iterate over each client
             loss, accuracy = client_metrics
+
             total_loss += loss
             total_accuracy += accuracy
 
@@ -157,3 +168,34 @@ def plot_average_performance() -> None:
     plot_client_avg_performance_vs_rounds(clients_avg_loss_and_accuracy)
     plot_server_lvl_avg_performance_vs_rounds(server_lvl_avg_loss_and_accuracy)
     plot_server_overall_avg_performance_vs_rounds(server_overall_avg_loss_and_accuracy)
+
+
+def convert_fedrc_metrics_to_pairs(data: List[List[List[Tuple[List[float], List[float]]]]], num_fedrc_clusters: int) -> List[
+    List[List[List[Tuple[float, float]]]]]:
+    """
+    Reformat the FedRC loss and accuracy data structure to a logging compatible format.
+    input -> [[([v1, v2, v3], [v4, v5, v6])]]
+    output -> [(v1, v4)], [(v2, v5)], [(v3, v6)]
+    :param data: FedRC loss and accuracy data
+    :param num_fedrc_clusters: Number of FedRC clusters
+    Returns: Re-formatted data
+    """
+    cluster_metrics = dict((cluster_idx, []) for cluster_idx in range(num_fedrc_clusters))
+
+    # TODO: simplify this. Make this more meaningful. this is a quick and dirty solution.
+    for epoch_data in data:
+        cluster_epoch_metric = [[] for _ in range(num_fedrc_clusters)]
+        for client_idx, client_metrics in enumerate(epoch_data): # here, len(epoch_data) = num_clients
+            # if epoch contains exactly one element like [([..],[..])]
+            acc_list, loss_list = client_metrics                # here, len(client_metrics) = 2, i.e., [acc_list, loss_list]
+            reformatted_cluster_acc_loss = list(zip(acc_list, loss_list))   # here, len(reformatted_cluster_acc_loss) = num_fedrc_clusters
+
+            for cluster_idx, reformatted_client_metrics in enumerate(reformatted_cluster_acc_loss):
+                cluster_epoch_metric[cluster_idx].append(reformatted_client_metrics)
+
+        # Append cluster-wise client-metrics for the epoch
+        for cluster_idx in range(num_fedrc_clusters):
+            cluster_metrics[cluster_idx].append(cluster_epoch_metric[cluster_idx])
+
+    return list(cluster_metrics.values())
+    # return [[list(group) for group in zip(*clients_metrics_reformatted)]]

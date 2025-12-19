@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader
 
 import constants
 
-DEVICE = torch.device("cpu")  # Try "cuda" to train on GPU
+DEVICE = torch.device("cuda")  # Try "cuda" to train on GPU
 print(
     f"Training on {DEVICE} using PyTorch {torch.__version__}"
 )
@@ -494,6 +494,8 @@ def rapid_train(_model: nn.Module, _dataset: DataLoader, _epochs: int, _batch_si
     epsilon = 0.005
 
     criterion = nn.CrossEntropyLoss()
+
+    _model = _model.to(DEVICE)
     _model.train()
     for epoch in range(_epochs):
         correct, total, epoch_loss = 0, 0, 0.0
@@ -581,7 +583,10 @@ def train(_model: nn.Module, _dataset: DataLoader, _epochs: int, verbose=False) 
     # criterion = nn.BCELoss()
     criterion = nn.CrossEntropyLoss()
     _optimizer = torch.optim.Adam(_model.parameters(), lr=0.001)
+
+    _model = _model.to(DEVICE)
     _model.train()
+
     for epoch in range(_epochs):
         correct, total, epoch_loss = 0, 0, 0.0
         # this loop is added because _dataset is dictionary like and torch.from_numpy() expects only Dataloader types.
@@ -636,13 +641,19 @@ def test(_model: nn.Module, _dataset: DataLoader) -> tuple[float, float]:
     # criterion = nn.BCEWithLogitsLoss()
     criterion = nn.CrossEntropyLoss()
     correct, total, loss = 0, 0, 0.0
+
+    _model = _model.to(DEVICE)
     _model.eval()
+
     with torch.no_grad():
         # this loop is added because _dataset is dictionary like and torch.from_numpy() expects only Dataloader types
         for _x, _y in _dataset:
             # inputs = _x.unsqueeze(1).float()   # Ensure images are in the right format and shape to feed to the model
             inputs = _x
             labels = _y
+
+            inputs = inputs.to(DEVICE)  # move inputs to device
+            labels = labels.to(DEVICE)  # move labels to device
 
             # forward pass
             outputs = _model(inputs)

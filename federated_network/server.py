@@ -5,6 +5,7 @@ Author: Nisal Hemadasa
 Date: 19-10-2024
 Version: 1.0
 """
+import copy
 from typing import List, OrderedDict, Tuple, Dict, Any
 
 import numpy as np
@@ -18,10 +19,11 @@ from drift_concepts.drift import Drift
 from federated_network.client import DEVICE, Client
 from models.model import SimpleModel, CNNModel, test, split_to_extractor_and_classifier, set_parameters, \
     CNNTinyImageNet, CNNCIFAR10, CNNCIFAR100
+from strategy.FedRC.fedrc import get_fedrc_client_model_params
 
 
 class Server:
-    def __init__(self, _server_id, _abs_id, _strategy, _model, _client_ids=None):
+    def __init__(self, _server_id, _abs_id, _strategy, _model, _fedrc_cluster_count, _client_ids=None):
         self.server_id = _server_id
         self.abs_id = _abs_id  # Absolute ID that keeps a running count of the servers in the server hierarchy
         self.strategy = _strategy
@@ -30,16 +32,20 @@ class Server:
         self.child_server_ids = []  # List of child server IDs in the server hierarchy
         self.parent_server_id = None  # Parent server ID in the server hierarchy
 
+        # Create a list of models of size 'fedrc_cluster_count'
+        if self.strategy.strategy_name == constants.RecoveryAlgorithm.FEDRC:
+            self.fedrc_models = [copy.deepcopy(_model) for _ in range(_fedrc_cluster_count)]
+            self.model = None
+        else:
+            self.fedrc_models = None
+
     def train(self, client_model_parameters: Dict[str, OrderedDict],
-              aux_classifier_parameters: Dict[str, OrderedDict] = None,
-              drift_recovery_parameters: Dict[str, any] = None,
-              is_drift: bool = False) -> None:
+              aux_classifier_parameters: Dict[str, OrderedDict] = None, ema_weight: float = None) -> None:
         """
         Train the server model using the client model parameters.
         :param client_model_parameters: List of client model parameters
         :param aux_classifier_parameters: List of auxiliary classifier parameters from drifted clients
-        :param drift_recovery_parameters: Drift recovery algorithm parameter
-        :param is_drift: Boolean flag to indicate whether there is a concept drift or not
+        :param ema_weight: EMA weight (alpha) parameter for the FedAU algorithm
         :return: None
         """
         if (self.strategy.strategy_name == constants.RecoveryAlgorithm.FEDAU or
@@ -49,15 +55,14 @@ class Server:
                 if all(param is None for param in aux_classifier_parameters.values()):
                     return
 
-                # EMA weight parameter for FedAU algorithm
-                ema_weight = drift_recovery_parameters['fedau_alpha']
-
                 # FedAU: For servers with clients with auxiliary classifiers (i.e., leaf servers, having drifted nodes)
                 self.strategy.aggregate_models(self.model, client_model_parameters, aux_classifier_parameters,
                                                ema_weight)
         # TODO: remove is_drift to use from the beginning
         elif self.strategy.strategy_name == constants.RecoveryAlgorithm.FEDEX:
             self.strategy.aggregate_models(self.model, client_model_parameters)
+        elif self.strategy.strategy_name == constants.RecoveryAlgorithm.FEDRC:
+            self.strategy.aggregate_models(self.fedrc_models, client_model_parameters)
         else:
             # FedAvg: For internal servers or when there are no drifted clients
             self.strategy.aggregate_models(self.model, client_model_parameters)
@@ -70,6 +75,20 @@ class Server:
         """
         loss, accuracy = test(self.model, _test_set)
         return float(loss), float(accuracy)
+
+    def evaluate_fedrc_models(self, _test_set: DataLoader) -> Tuple[List[float], List[float]]:
+        """
+        Evaluate all FedRC models in the client on the validation data and return the loss and accuracy
+        :param _test_set: test data
+        :return: list of losses and accuracies. e.g., ([loss1, loss2,...], [acc1, acc2,...])
+        """
+        losses = []
+        accuracies = []
+        for model in self.fedrc_models:
+            loss, accuracy = test(model, _test_set)
+            losses.append(float(loss))
+            accuracies.append(float(accuracy))
+        return losses, accuracies
 
     def average_client_evaluation_results(self, all_clients: List[Client]) -> tuple:
         """
@@ -90,8 +109,100 @@ class Server:
         return tuple(arr.mean(axis=0))
 
 
+
+
+def model_aggregation_fedrc(server: Server, sampled_clients: List[Client], drift: Drift, verbose=False) -> None:
+    """
+    Aggregate the models of the clients to the server model for FedRC algorithm.
+    :param server: Server instance
+    :param sampled_clients: List of sampled clients
+    :param drift: Drift instance
+    :param verbose: Whether to print detailed logs or not
+    """
+    client_model_parameters = {
+        client_id: get_fedrc_client_model_params(sampled_clients[client_id].fedrc_models)
+        for client_id in server.client_ids}
+
+    if verbose:
+        print('aggregate models: server:' + str(server.server_id) + ' -> ' + 'clients:' + str(server.client_ids))
+
+    # Aggregate client models
+    server.train(client_model_parameters, None, None)
+
+
+def model_aggregation_fluid(server: Server, sampled_clients: List[Client], drift: Drift, ema_weight,
+                            verbose=False) -> None:
+    """
+    Aggregate the models of the clients to the server model for FedAU and FLUID algorithm.
+    :param server: Server instance
+    :param sampled_clients: List of sampled clients
+    :param drift: Drift instance
+    :param ema_weight: EMA weight (alpha) parameter for the FedAU algorithm
+    :param verbose: Whether to print detailed logs or not
+    """
+    # Get auxiliary classifier parameters from drifted clients only
+    drifted_client_ids = set(drift.drifted_client_indices or [])
+    if drift.is_drift and drifted_client_ids:
+        # Collect the parameters to a dictionary (client_id: aux_classifier_parameters)
+        client_aux_classifier_parameters = {client_id:
+                                                (sampled_clients[
+                                                     client_id].auxiliary_classifier_parameters  # get aux classifier params
+                                                 if client_id in drifted_client_ids else None)
+                                            # drifted clients only
+                                            for client_id in
+                                            server.client_ids}  # connected to this server
+
+        # Get model parameters from all participating clients
+        client_model_parameters = {client_id: sampled_clients[client_id].model.state_dict()
+                                   for client_id in server.client_ids}
+
+        if verbose:
+            print('aggregate models: server:' + str(server.server_id) + ' -> ' + 'clients:' + str(server.client_ids))
+
+        server.train(client_model_parameters, client_aux_classifier_parameters, ema_weight)
+
+
+def model_aggregation_fedavg(server: Server, sampled_clients: List[Client], server_hierarchy, depth_level,
+                             verbose=False) -> None:
+    """
+    In star-topology: Aggregate the models of the clients to the server model for FedAvg, RRT, FedEx algorithm.
+    In hierarchical topology: Aggregate the models of the clients and child servers to the parent server model for
+    FedAvg, RRT,
+    :param server: Server instance
+    :param sampled_clients: List of sampled clients
+    :param server_hierarchy: List of servers in the hierarchy
+    :param depth_level: Current depth level in the server hierarchy
+    :param verbose: Whether to print detailed logs or not
+    :return: None
+    """
+    if sampled_clients:  # Star topology
+        # Get model parameters from all participating clients
+        model_parameters = {client_id: sampled_clients[client_id].model.state_dict()
+                            for client_id in server.client_ids}
+
+        if verbose:
+            print('aggregate client models: server:' + str(server.server_id) + ' -> ' + 'clients:' + str(
+                server.client_ids))
+
+    elif server_hierarchy and depth_level is not None:  # Hierarchical topology
+        # Get model parameters from all child servers
+        model_parameters = {
+            child_server: server_hierarchy[depth_level + 1][child_server].model.state_dict()
+            for child_server in server.child_server_ids}
+
+        if verbose:
+            print('aggregate server models.')
+
+    else:
+        raise ValueError(
+            "model_aggregation_fedavg: Either sampled_clients or server_hierarchy and depth_level must be provided")
+
+    # Aggregate client models
+    server.train(model_parameters, None, None)
+
+
 def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: DataLoader, sampled_clients: List[Client],
-                      drift: Drift, drift_recovery_parameters: Dict[str, any], _is_server_has_test_data: bool,
+                      drift: Drift, ema_weight: float, _is_server_has_test_data: bool,
                       verbose=False) -> List:
     """
     Aggregate the models of the clients to the server model.
@@ -99,7 +210,7 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
     :param server_test_set: List of test data for server model evaluation, once the aggregation is done
     :param sampled_clients: List of sampled clients
     :param drift: Drift instance
-    :param drift_recovery_parameters: Drift recovery algorithm parameters
+    :param ema_weight: EMA weight (alpha) parameter for the FedAU algorithm
     :param _is_server_has_test_data: Boolean flag to indicate whether server possesses test data to do in-server
     evaluations after client model aggregation. Else, the average of client evaluation results will be used as server
     evaluation performance.
@@ -110,64 +221,36 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
     # Store the loss and accuracy at each level of the server model hierarchy
     server_loss_and_accuracy = []
 
-    # EMA weight, and auxiliary classifier parameters, for the FedAU algorithm
-    ema_weight = None
-    client_aux_classifier_parameters = None
-
     # Evaluate server model on the upward traversal aggregation  only if the hierarchy has more than one level. Else,
     # this evaluation will be redundant as it is already done during the server model distribution phase.
     is_evaluate_server_model = False
     if _is_server_has_test_data and len(server_hierarchy) > 1:
         is_evaluate_server_model = True
 
-    if verbose:
-        print('aggregate client models')
-
     # Aggregate the models of the clients to the server model.Start by aggregating the leaves and move up the hierarchy
     for depth_level in range(len(server_hierarchy) - 1, -1, -1):
         loss_and_accuracy_at_level = []
 
         for server in server_hierarchy[depth_level]:
-            if depth_level == len(server_hierarchy) - 1:
-                # Leaf nodes
+            if depth_level == len(server_hierarchy) - 1:  # ==== Leaf servers ====
                 # Get client (learning) model parameters
-                client_model_parameters = {client_id: sampled_clients[client_id].model.state_dict()
-                                           for client_id in server.client_ids}
+                if server.strategy.strategy_name == constants.RecoveryAlgorithm.FEDRC:
+                    model_aggregation_fedrc(server, sampled_clients, drift, verbose=verbose)
 
-                # Get auxiliary classifier parameters from drifted clients only
-                if drift.is_drift:
-                    if server.strategy.strategy_name == constants.RecoveryAlgorithm.FEDAU or server.strategy.strategy_name == constants.RecoveryAlgorithm.FLUID:
-                        drifted_client_ids = set(drift.drifted_client_indices or [])
-                        if drift.is_drift and drifted_client_ids:
-                            # Collect the parameters to a dictionary (client_id: aux_classifier_parameters)
-                            client_aux_classifier_parameters = {client_id:
-                                                                    (sampled_clients[
-                                                                         client_id].auxiliary_classifier_parameters  # get aux classifier params
-                                                                     if client_id in drifted_client_ids else None)
-                                                                # drifted clients only
-                                                                for client_id in
-                                                                server.client_ids}  # connected to this server
+                elif server.strategy.strategy_name in {constants.RecoveryAlgorithm.FEDAU,
+                                                       constants.RecoveryAlgorithm.FLUID}:
+                    model_aggregation_fluid(server, sampled_clients, drift, ema_weight, verbose=verbose)
 
-                            ema_weight = drift_recovery_parameters['fedau_alpha']
+                elif server.strategy.strategy_name in {constants.RecoveryAlgorithm.FEDAVG,
+                                                       constants.RecoveryAlgorithm.RRT,
+                                                       constants.RecoveryAlgorithm.FEDEX}:
+                    model_aggregation_fedavg(server, sampled_clients, None, None, verbose=verbose)
+                else:
+                    raise ValueError("Server.model_aggregation: Unsupported recovery algorithm name")
 
-                if verbose:
-                    print('server:' + str(server.server_id) + ' -> ' + 'clients:' + str(server.client_ids))
+            else:  # ==== Upper hierarchical servers (aggregate models from child servers) ====
+                model_aggregation_fedavg(server, None, server_hierarchy, depth_level, verbose=verbose)
 
-                # Aggregate client models
-                server.train(client_model_parameters, client_aux_classifier_parameters, drift_recovery_parameters,
-                             drift.is_drift)
-            else:
-                # Internal nodes: Aggregate models from child servers
-                # Collect the parameters to a dictionary (server_id: server_model_parameters)
-                child_server_model_parameters = {
-                    child_server: server_hierarchy[depth_level + 1][child_server].model.state_dict()
-                    for child_server in server.child_server_ids}
-
-                # Aggregate child server models. Auxiliary classifier parameters are not used in internal server nodes
-                # since they are not connected to clients which train auxiliary modules
-                server.train(child_server_model_parameters, None, ema_weight)
-
-            # TODO: testing
             # Evaluate the server model (not for FedEx)
             if is_evaluate_server_model and not server.strategy.strategy_name == constants.RecoveryAlgorithm.FEDEX:
                 loss, accuracy = server.model_evaluate(server_test_set)
@@ -182,7 +265,7 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
     return server_loss_and_accuracy
 
 
-def model_distribution(server_hierarchy: List[List[Server]]) -> None:
+def model_distribution_hierarchy(server_hierarchy: List[List[Server]]) -> None:
     """
     The aggregated models are distributed down the hierarchy. I.e., the edge models are updated by the global model and
     leaf-server models are updated by the edge models.
@@ -208,8 +291,6 @@ def model_distribution_fedex(servers: List[Server], all_clients: List[Client]) -
     :param servers: The aggregated server models (to be distributed)
     :param all_clients: List of all clients
     """
-    round_server_loss_and_accuracy = []
-
     for client in all_clients:  # TODO: here fedex is done to all cleints and not only drifted clients
         # Get the server to which the client is connected
         server = servers[client.parent_server_id]
@@ -219,16 +300,24 @@ def model_distribution_fedex(servers: List[Server], all_clients: List[Client]) -
         # Load the composite unlearning model ({E, W_hat}) to the server model
         set_parameters(client.model, server_extractor, False)
 
-        # round_server_loss_and_accuracy.append(client.evaluate())
 
-    # # Position-wise average server loss and accuracy. i.e., take the average loss of all clients (likewise in accuracy)
-    # arr = np.array(round_server_loss_and_accuracy)  # shape (N, 2)
-    # return tuple(arr.mean(axis=0))
+def model_distribution_fedrc(server_list: List[Server], sampled_clients: List[Client]) -> None:
+    """
+    The aggregated server models are distributed to each participating clients. Each client get all k server models.
+    I.e., each client also has k models in it.
+    :param server_list: List of servers in the hierarchy
+    :param sampled_clients: List of sampled clients
+    :return: None
+    """
+    server = server_list[0] #TODO: implemented only for single server topology
+    for client_idx, client in enumerate(sampled_clients):
+        for cluster_idx in range(len(server.fedrc_models)):
+            set_parameters(client.fedrc_models[cluster_idx], server.fedrc_models[cluster_idx].state_dict())
 
 
 def server_hierarchy_evaluate(server_hierarchy: List[List[Server]], server_test_set: DataLoader,
                               all_clients: List[Client],
-                              _is_server_has_test_data: bool) -> List:
+                              _is_server_has_test_data: bool, _drift_recovery_method: str) -> List:
     """
     The aggregated models are distributed down the hierarchy. I.e., the edge models are updated by the global model and
     client models are updated by the edge models.
@@ -238,6 +327,7 @@ def server_hierarchy_evaluate(server_hierarchy: List[List[Server]], server_test_
     :param _is_server_has_test_data: Boolean flag to indicate whether server possesses test data to do in-server
     evaluations after client model aggregation. Else, the average of client evaluation results will be used as server
     evaluation performance.
+    :param _drift_recovery_method: Drift recovery method
     :return: None
     """
     # Store the loss and accuracy at each level of the server model hierarchy
@@ -246,13 +336,20 @@ def server_hierarchy_evaluate(server_hierarchy: List[List[Server]], server_test_
 
     # Evaluate the accuracy of the root server model
     global_server = server_hierarchy[0][0]
-    if _is_server_has_test_data:
-        loss, accuracy = global_server.model_evaluate(server_test_set)
-    else:
-        loss, accuracy = global_server.average_client_evaluation_results(all_clients)
 
-    # Store the loss and accuracy of the global server model
-    server_loss_and_accuracy.append([(loss, accuracy)])
+    # TODO: this part has to be refactored
+    if _drift_recovery_method == constants.RecoveryAlgorithm.FEDRC:
+        # Evaluate all FedRC models in the client
+        losses, accuracies = global_server.evaluate_fedrc_models(server_test_set)  # returns ([loss1, loss2,...], [acc1, acc2,...])
+        server_loss_and_accuracy.append((losses, accuracies))
+    else:
+        if _is_server_has_test_data:
+            loss, accuracy = global_server.model_evaluate(server_test_set)
+        else:
+            loss, accuracy = global_server.average_client_evaluation_results(all_clients)
+
+        # Store the loss and accuracy of the global server model
+        server_loss_and_accuracy.append([(loss, accuracy)])
 
     # Evaluate the edge servers down the hierarchy starting upto the leaf servers
     for depth_level in range(len(server_hierarchy) - 1):
@@ -295,21 +392,30 @@ def change_server_aggregation_strategy(server_hierarchy: List[Any], drift_recove
             drifted = set(drift.drifted_client_indices or [])  # makes sure it's at least an empty set and not None
             if set(server.client_ids) & drifted:  # checks if there is any intersection
                 server.strategy = strategy.FedEx.aggregator_fn()
+    elif drift_recovery_method == constants.RecoveryAlgorithm.FEDRC:
+        pass
     else:
         # if the drift is ended, change the strategy back to FedAvg
         for server in server_hierarchy[-1]:
             server.strategy = strategy.FedAvg.aggregator_fn()
 
 
-def server_fn(server_id: int, dataset_name: str, server_abs_id: int) -> Server:
+def server_fn(server_id: int, dataset_name: str, server_abs_id: int, drift_recovery_method: str,
+              fedrc_cluster_count: int) -> Server:
     """
     Create a server instances on demand for the optimal use of resources.
     :param server_id: Server ID
     :param dataset_name: Name of the dataset
     :param server_abs_id: Absolute server ID; a running count of all the servers created
+    :param drift_recovery_method: Drift recovery method to be used by the client
+    :param fedrc_cluster_count: number of models (clusters) in the server (used in FedRC)
     :returns Server: A Server instance.
     """
-    aggregator_strategy = strategy.FedAvg.aggregator_fn()
+    if drift_recovery_method == constants.RecoveryAlgorithm.FEDRC:
+        aggregator_strategy = strategy.FedRC.aggregator_fn()
+    else:
+        aggregator_strategy = strategy.FedAvg.aggregator_fn()
+
     # model = SimpleModel().to(DEVICE)
     if dataset_name == constants.DatasetNames.MNIST or dataset_name == constants.DatasetNames.F_MNIST:
         model = CNNModel().to(DEVICE)
@@ -322,4 +428,5 @@ def server_fn(server_id: int, dataset_name: str, server_abs_id: int) -> Server:
     else:
         raise ValueError("Unsupported dataset name")
 
-    return Server(_server_id=server_id, _abs_id=server_abs_id, _strategy=aggregator_strategy, _model=model)
+    return Server(_server_id=server_id, _abs_id=server_abs_id, _strategy=aggregator_strategy, _model=model,
+                  _fedrc_cluster_count=fedrc_cluster_count)

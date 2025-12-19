@@ -10,7 +10,7 @@ Version: 1.0
 # Directory paths related to datasets
 class Paths:
     # path to download and read the datasets
-    DATASET = 'data/'
+    DATASET = 'datasets/'
 
     # path related to saved plots
     PLOT_SAVE_PATH = './plots/saved_plots/'
@@ -20,7 +20,7 @@ class Paths:
 
 
 # File extensions
-class FileExtesions:
+class FileExtentions:
     PKL = '.pkl'
     CSV = '.csv'
 
@@ -188,6 +188,7 @@ class RecoveryAlgorithm:
     FEDAU = 'fedau'
     FLUID = 'fluid'
     FEDEX = 'fedex'
+    FEDRC = 'fedrc'
 
 
 # Types of models used in the project

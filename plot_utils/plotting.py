@@ -8,8 +8,11 @@ Version: 1.0
 from collections import defaultdict, Counter
 from typing import List, Tuple, Dict
 
-import matplotlib.pyplot as plt
 import matplotlib
+matplotlib.use("Agg")   # headless tkinter for linux server environments
+
+# matplotlib.use('TkAgg')  # Or 'TkAgg', 'Qt5Agg', etc. Use this in windowed environments
+import matplotlib.pyplot as plt
 from numpy import sort
 
 # Choose a backend based on what works best for your environment
@@ -18,8 +21,6 @@ from torch import Tensor
 import constants
 from data.dataset_loader import get_dataset_classnames_from_indices
 from federated_network.client import Client
-
-matplotlib.use('TkAgg')  # Or 'TkAgg', 'Qt5Agg', etc.
 
 
 def plot_client_performance_vs_rounds(loss_and_accuracy: List[List[Tuple]], file_save_path=None) -> None:
@@ -339,7 +340,7 @@ def configure_and_save_plot(_plt, _x_label, _y_label, _title, _file_path, _legen
     #     _plt.grid()
 
     if _label_rotate is not None:
-        _plt.xticks(rotation=_label_rotate, ha='right') # test is horizontally aligned to right
+        _plt.xticks(rotation=_label_rotate, ha='right')  # test is horizontally aligned to right
         _plt.tight_layout()  # Automatically adjusts subplot margins so labels fit inside the figure.
 
     # Save the plot as a high-quality PNG
