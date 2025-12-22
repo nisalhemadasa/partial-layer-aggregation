@@ -144,9 +144,10 @@ def train_client_models(all_clients, sampled_client_ids, servers: List[Server], 
                 round_client_loss_and_accuracy.append(client.evaluate())
 
             # Download the server model parameters to the client.
-            if not server.strategy.strategy_name in [constants.RecoveryAlgorithm.FEDEX, constants.RecoveryAlgorithm.FEDRC]:
-                # The above two strategies have already done this in network.model_distribution_fedex and
+            if not server.strategy.strategy_name in [constants.RecoveryAlgorithm.FEDEX, constants.RecoveryAlgorithm.FEDRC, constants.RecoveryAlgorithm.FEDAU]:
+                # FedRC and FedEx strategies have already done this in network.model_distribution_fedex and
                 # network.model_distribution_fedrc functions.
+                # FedAU does this inside the client.fit() function.
                 set_parameters(client.model, server.model.state_dict())
 
             # Train the client models using the server aggregated parameters

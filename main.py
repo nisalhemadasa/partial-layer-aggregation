@@ -98,7 +98,7 @@ def main():
         # Therefore, it must have at least two entries (start and end of drift).
         max_rotation=45,  # Maximum rotation angle for the drift created by rotations
         # class_pairs_to_swap=[[(1, 2), (3, 4)], [(5, 7)]],   # label indices (not the class names)
-        class_pairs_to_swap=[[(1, 2)]],   # label indices (not the class names)
+        class_pairs_to_swap=[[(1, 2),(3, 4)]],   # label indices (not the class names)
         # Classes to be swapped in the label-swapping drift method
         # class_pairs_to_swap=[[(1, 2), (5, 7)], [(1, 2), (5, 7)]],  # Classes to be swapped in the label-swapping drift method
         # class_pairs_to_swap=[[('T-shirt/top', 'Pullover'), ('Sandal', 'Sneaker')]],  # Classes to be swapped in F_MNIST
@@ -137,14 +137,14 @@ def main():
     #     file_save_path='./plots/saved_plots_7_1/',
     #     log_save_path='./logs/saved_logs_7_1/')
 
-    # 000000000000000000000000000000000000000000000
-    # Define drift recovery algorithm related parameters
-    drift_recovery_parameters = dict(
-        recovery_method=constants.RecoveryAlgorithm.FEDAVG,  # Aggregation method used during the drift period
-        base_aggregation_method=constants.RecoveryAlgorithm.FEDAVG,  # Aggregation algorithm used outside the drift period
-        fedau_alpha=0.9, # EMA weight (alpha) parameter for the FedAU algorithm
-        fedrc_cluster_count=3 # Number of clusters (K) for the FedRC algorithm
-    )
+    # # 000000000000000000000000000000000000000000000
+    # # Define drift recovery algorithm related parameters
+    # drift_recovery_parameters = dict(
+    #     recovery_method=constants.RecoveryAlgorithm.FEDAVG,  # Aggregation method used during the drift period
+    #     base_aggregation_method=constants.RecoveryAlgorithm.FEDAVG,  # Aggregation algorithm used outside the drift period
+    #     fedau_alpha=0.9, # EMA weight (alpha) parameter for the FedAU algorithm
+    #     fedrc_cluster_count=3 # Number of clusters (K) for the FedRC algorithm
+    # )
 
 
     # # Create a federated network
@@ -171,7 +171,7 @@ def main():
     # 000000000000000000000000000000000000000000000
     # Define drift recovery algorithm related parameters
     drift_recovery_parameters = dict(
-        recovery_method=constants.RecoveryAlgorithm.FEDAU,  # Aggregation method used during the drift period
+        recovery_method=constants.RecoveryAlgorithm.FEDRC,  # Aggregation method used during the drift period
         base_aggregation_method=constants.RecoveryAlgorithm.FEDAVG,  # Aggregation algorithm used outside the drift period
         fedau_alpha=0.9, # EMA weight (alpha) parameter for the FedAU algorithm
         fedrc_cluster_count=3 # Number of clusters (K) for the FedRC algorithm
@@ -180,13 +180,13 @@ def main():
 
     # Create a federated network
     fed_net = FederatedNetwork(
-        num_iid_client_instances=5,  # Number of IID clients in the federated network
+        num_iid_client_instances=10,  # Number of IID clients in the federated network
         # num_iid_client_instances=100,  # Suggested at FLTA
         num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
         server_tree_layout=[1],
         # Number of servers at each level of the server tree of depth n = [n, n-1,..., 1]
         # num_training_rounds=100,  # In literature, over 50 rounds are trained. FLUID trains 100 rounds
-        num_training_rounds=5,  # Number of training rounds (in literature, over 50 rounds are trained.)
+        num_training_rounds=50,  # Number of training rounds (in literature, over 50 rounds are trained.)
         dataset_name=constants.DatasetNames.MNIST,  # Name of the dataset
         drift_specs=drift_specifications,  # Drift specifications
         simulation_parameters=simulation_parameters,  # Parameters specifying the simulation scenarios
@@ -196,8 +196,8 @@ def main():
 
     # Running the simulation
     fed_net.run_simulation(
-        file_save_path='plots/swap/saved_plots_fedau/',
-        log_save_path='logs/swap/saved_logs_fedau/')
+        file_save_path='plots/swap/saved_plots_fedrc/',
+        log_save_path='logs/swap/saved_logs_fedrc/')
 
     # # 000000000000000000000000000000000000000000000
     # # Define drift recovery algorithm related parameters

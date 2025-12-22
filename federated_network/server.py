@@ -130,8 +130,8 @@ def model_aggregation_fedrc(server: Server, sampled_clients: List[Client], drift
     server.train(client_model_parameters, None, None)
 
 
-def model_aggregation_fluid(server: Server, sampled_clients: List[Client], drift: Drift, ema_weight,
-                            verbose=False) -> None:
+def model_aggregation_fedau_fluid(server: Server, sampled_clients: List[Client], drift: Drift, ema_weight,
+                                  verbose=False) -> None:
     """
     Aggregate the models of the clients to the server model for FedAU and FLUID algorithm.
     :param server: Server instance
@@ -239,7 +239,7 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
 
                 elif server.strategy.strategy_name in {constants.RecoveryAlgorithm.FEDAU,
                                                        constants.RecoveryAlgorithm.FLUID}:
-                    model_aggregation_fluid(server, sampled_clients, drift, ema_weight, verbose=verbose)
+                    model_aggregation_fedau_fluid(server, sampled_clients, drift, ema_weight, verbose=verbose)
 
                 elif server.strategy.strategy_name in {constants.RecoveryAlgorithm.FEDAVG,
                                                        constants.RecoveryAlgorithm.RRT,
