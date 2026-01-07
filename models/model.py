@@ -23,7 +23,9 @@ print(
 
 
 class SimpleModel(nn.Module):
-    def __init__(self):
+    def __init__(self, _model_id: int=None):
+        self.model_id = _model_id
+
         super(SimpleModel, self).__init__()
         # Define the layers for MNIST dataset (28 x 28 dimensional images)
         self.dense1 = nn.Linear(in_features=28 * 28, out_features=10)  # Dense layer with 28 * 28 inputs and 10 outputs
@@ -48,7 +50,9 @@ class SimpleModel(nn.Module):
 
 # for MNIST and F_MNIST dataset (28 x 28 dimensional images)
 class CNNModel(nn.Module):
-    def __init__(self):
+    def __init__(self, _model_id: int=None):
+        self.model_id = _model_id
+
         """Defines the architecture of the network"""
         super(CNNModel, self).__init__()
         self.conv1 = nn.Conv2d(in_channels=1, out_channels=32, kernel_size=3)
@@ -83,7 +87,9 @@ class CNNCIFAR10(nn.Module):
     Output: 10-class(CIFAR-10) classification
     """
 
-    def __init__(self, num_classes=10):
+    def __init__(self, num_classes=10, _model_id: int=None):
+        self.model_id = _model_id
+
         super(CNNCIFAR10, self).__init__()
 
         # CIFAR has 3 channels
@@ -127,7 +133,9 @@ class CNNCIFAR100(nn.Module):
     Output: 100-class(CIFAR-100) classification
     """
 
-    def __init__(self, num_classes=100):
+    def __init__(self, num_classes=100, _model_id: int=None):
+        self.model_id = _model_id
+
         super(CNNCIFAR100, self).__init__()
 
         # CIFAR has 3 channels
@@ -264,7 +272,9 @@ class CNNTinyImageNet(nn.Module):
     Output: [B, num_classes] (logits, not log_softmax)
     """
 
-    def __init__(self, num_classes: int = 200):
+    def __init__(self, num_classes: int = 200, _model_id: int=None):
+        self.model_id = _model_id
+
         super().__init__()
 
         # Stem: keep it small
