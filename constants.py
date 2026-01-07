@@ -184,11 +184,13 @@ class RecoveryAlgorithm:
     FEDAVG = 'fedavg'  # Adam-based training
     # Server-side only algorithms
     RRT = 'rrt'
+    ORACLE = 'oracle'   # Clustering-based
     # Both client-side and server-side algorithms
     FEDAU = 'fedau'
     FLUID = 'fluid'
     FEDEX = 'fedex'
-    FEDRC = 'fedrc'
+    FEDRC = 'fedrc' # Clustering-based
+
 
 
 # Types of models used in the project

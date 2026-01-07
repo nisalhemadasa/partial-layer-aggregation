@@ -171,10 +171,10 @@ def main():
     # 000000000000000000000000000000000000000000000
     # Define drift recovery algorithm related parameters
     drift_recovery_parameters = dict(
-        recovery_method=constants.RecoveryAlgorithm.FEDRC,  # Aggregation method used during the drift period
+        recovery_method=constants.RecoveryAlgorithm.ORACLE,  # Aggregation method used during the drift period
         base_aggregation_method=constants.RecoveryAlgorithm.FEDAVG,  # Aggregation algorithm used outside the drift period
         fedau_alpha=0.9, # EMA weight (alpha) parameter for the FedAU algorithm
-        fedrc_cluster_count=3 # Number of clusters (K) for the FedRC algorithm
+        cluster_count=3 # Number of clusters (K) for the multi-global-model-based algorithms (FedRC, Oracle)
     )
 
 

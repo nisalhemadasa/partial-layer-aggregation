@@ -91,7 +91,7 @@ class FederatedNetwork:
                 self.minibatch_size,
                 [partitioned_noniid_trainsets[i], partitioned_noniid_testsets[i]],
                 self.drift_recovery_parameters['recovery_method'],
-                self.drift_recovery_parameters['fedrc_cluster_count'],
+                self.drift_recovery_parameters['cluster_count'],    # for FedRC, each client maintains the same number of local models as the multiple global models the server maintains
                 dataset_name
             )
             for i in range(num_noniid_client_instances)
@@ -105,7 +105,7 @@ class FederatedNetwork:
                 self.minibatch_size,
                 [partitioned_iid_trainsets[i], partitioned_iid_testsets[i]],
                 self.drift_recovery_parameters['recovery_method'],
-                self.drift_recovery_parameters['fedrc_cluster_count'],
+                self.drift_recovery_parameters['cluster_count'],
                 dataset_name
             )
             for i in range(num_iid_client_instances)
@@ -119,7 +119,7 @@ class FederatedNetwork:
             # For each level in the tree, create a list of server instances, by passing the absolute index
             servers_at_level = [server_fn(server_id, self.dataset_name, absolute_index + i,
                                           self.drift_recovery_parameters['recovery_method'],
-                                          self.drift_recovery_parameters['fedrc_cluster_count'])
+                                          self.drift_recovery_parameters['cluster_count'])
                                 for i, server_id in enumerate(range(server_tree_layout[depth_level]))]
 
             server_hierarchy.append(servers_at_level)
@@ -241,7 +241,7 @@ class FederatedNetwork:
             # Concert round_client_loss_and_accuracy of each cluster into a format compatible with logging functions
             cluster_clients_loss_and_accuracy = convert_fedrc_metrics_to_pairs(clients_loss_and_accuracy,
                                                                                self.drift_recovery_parameters[
-                                                                                   'fedrc_cluster_count'])
+                                                                                   'cluster_count'])
             file_save_path_stem = file_save_path
             log_save_path_stem = log_save_path
             for cluster_idx, clients_loss_and_accuracy in enumerate(cluster_clients_loss_and_accuracy):
@@ -325,7 +325,7 @@ class FederatedNetwork:
             # Concert round_client_loss_and_accuracy of each cluster into a format compatible with logging functions
             cluster_server_loss_and_accuracy = convert_fedrc_metrics_to_pairs(server_loss_and_accuracy,
                                                                               self.drift_recovery_parameters[
-                                                                                  'fedrc_cluster_count'])
+                                                                                  'cluster_count'])
 
             for cluster_idx, server_loss_and_accuracy in enumerate(cluster_server_loss_and_accuracy):
                 # data formatting modification for server metrics

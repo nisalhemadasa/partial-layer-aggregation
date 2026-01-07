@@ -23,7 +23,7 @@ from strategy.FedRC.fedrc import get_fedrc_client_model_params
 
 
 class Server:
-    def __init__(self, _server_id, _abs_id, _strategy, _model, _fedrc_cluster_count, _client_ids=None):
+    def __init__(self, _server_id, _abs_id, _strategy, _model, _cluster_count, _client_ids=None):
         self.server_id = _server_id
         self.abs_id = _abs_id  # Absolute ID that keeps a running count of the servers in the server hierarchy
         self.strategy = _strategy
@@ -32,12 +32,12 @@ class Server:
         self.child_server_ids = []  # List of child server IDs in the server hierarchy
         self.parent_server_id = None  # Parent server ID in the server hierarchy
 
-        # Create a list of models of size 'fedrc_cluster_count'
-        if self.strategy.strategy_name == constants.RecoveryAlgorithm.FEDRC:
-            self.fedrc_models = [copy.deepcopy(_model) for _ in range(_fedrc_cluster_count)]
+        # Create a list of models of size '_cluster_count'
+        if self.strategy.strategy_name in [constants.RecoveryAlgorithm.FEDRC, constants.RecoveryAlgorithm.ORACLE]:
+            self.multi_models = [copy.deepcopy(_model) for _ in range(_cluster_count)]
             self.model = None
         else:
-            self.fedrc_models = None
+            self.multi_models = None
 
     def train(self, client_model_parameters: Dict[str, OrderedDict],
               aux_classifier_parameters: Dict[str, OrderedDict] = None, ema_weight: float = None) -> None:
@@ -62,7 +62,7 @@ class Server:
         elif self.strategy.strategy_name == constants.RecoveryAlgorithm.FEDEX:
             self.strategy.aggregate_models(self.model, client_model_parameters)
         elif self.strategy.strategy_name == constants.RecoveryAlgorithm.FEDRC:
-            self.strategy.aggregate_models(self.fedrc_models, client_model_parameters)
+            self.strategy.aggregate_models(self.multi_models, client_model_parameters)
         else:
             # FedAvg: For internal servers or when there are no drifted clients
             self.strategy.aggregate_models(self.model, client_model_parameters)
@@ -76,15 +76,16 @@ class Server:
         loss, accuracy = test(self.model, _test_set)
         return float(loss), float(accuracy)
 
-    def evaluate_fedrc_models(self, _test_set: DataLoader) -> Tuple[List[float], List[float]]:
+    def evaluate_multi_models(self, _test_set: DataLoader) -> Tuple[List[float], List[float]]:
         """
-        Evaluate all FedRC models in the client on the validation data and return the loss and accuracy
+        Evaluate all multi-global models in clustering approach (e.g., FedRC, Oracle) in the client on the validation
+        data and return the loss and accuracy
         :param _test_set: test data
         :return: list of losses and accuracies. e.g., ([loss1, loss2,...], [acc1, acc2,...])
         """
         losses = []
         accuracies = []
-        for model in self.fedrc_models:
+        for model in self.multi_models:
             loss, accuracy = test(model, _test_set)
             losses.append(float(loss))
             accuracies.append(float(accuracy))
@@ -311,8 +312,8 @@ def model_distribution_fedrc(server_list: List[Server], sampled_clients: List[Cl
     """
     server = server_list[0] #TODO: implemented only for single server topology
     for client_idx, client in enumerate(sampled_clients):
-        for cluster_idx in range(len(server.fedrc_models)):
-            set_parameters(client.fedrc_models[cluster_idx], server.fedrc_models[cluster_idx].state_dict())
+        for cluster_idx in range(len(server.multi_models)):
+            set_parameters(client.fedrc_models[cluster_idx], server.multi_models[cluster_idx].state_dict())
 
 
 def server_hierarchy_evaluate(server_hierarchy: List[List[Server]], server_test_set: DataLoader,
@@ -338,9 +339,9 @@ def server_hierarchy_evaluate(server_hierarchy: List[List[Server]], server_test_
     global_server = server_hierarchy[0][0]
 
     # TODO: this part has to be refactored
-    if _drift_recovery_method == constants.RecoveryAlgorithm.FEDRC:
-        # Evaluate all FedRC models in the client
-        losses, accuracies = global_server.evaluate_fedrc_models(server_test_set)  # returns ([loss1, loss2,...], [acc1, acc2,...])
+    if _drift_recovery_method in [constants.RecoveryAlgorithm.FEDRC, constants.RecoveryAlgorithm.ORACLE]:
+        # Evaluate all multiple models in the servers, in clustering-based algorithms (FedRC, Oracle)
+        losses, accuracies = global_server.evaluate_multi_models(server_test_set)  # returns ([loss1, loss2,...], [acc1, acc2,...])
         server_loss_and_accuracy.append((losses, accuracies))
     else:
         if _is_server_has_test_data:
@@ -401,14 +402,14 @@ def change_server_aggregation_strategy(server_hierarchy: List[Any], drift_recove
 
 
 def server_fn(server_id: int, dataset_name: str, server_abs_id: int, drift_recovery_method: str,
-              fedrc_cluster_count: int) -> Server:
+              cluster_count: int) -> Server:
     """
     Create a server instances on demand for the optimal use of resources.
     :param server_id: Server ID
     :param dataset_name: Name of the dataset
     :param server_abs_id: Absolute server ID; a running count of all the servers created
     :param drift_recovery_method: Drift recovery method to be used by the client
-    :param fedrc_cluster_count: number of models (clusters) in the server (used in FedRC)
+    :param cluster_count: number of models (clusters) in the server (for multi-global-model methods, e.g.FedRC, Oracle)
     :returns Server: A Server instance.
     """
     if drift_recovery_method == constants.RecoveryAlgorithm.FEDRC:
@@ -429,4 +430,4 @@ def server_fn(server_id: int, dataset_name: str, server_abs_id: int, drift_recov
         raise ValueError("Unsupported dataset name")
 
     return Server(_server_id=server_id, _abs_id=server_abs_id, _strategy=aggregator_strategy, _model=model,
-                  _fedrc_cluster_count=fedrc_cluster_count)
+                  _cluster_count=cluster_count)

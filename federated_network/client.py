@@ -208,7 +208,8 @@ def client_fn(client_id: int, if_iid: bool, num_local_epochs: int, mini_batch_si
     :param mini_batch_size: size of the batches for the clients to train on
     :param _dataset: train and test datasets
     :param drift_recovery_method: Drift recovery method to be used by the client
-    :param fedrc_cluster_count: number of models (clusters) in the server (used in FedRC)
+    :param fedrc_cluster_count: number of models (clusters) in the client (is equivalent to the number of multiple
+    models (clusters) in the server. Used in FedRC)
     :param dataset_name: name of the dataset
     :returns Client: A Client instance.
     """
