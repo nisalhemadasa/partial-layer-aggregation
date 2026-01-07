@@ -74,6 +74,9 @@ class FederatedNetwork:
         _labels_noniid_test = get_unique_labels_per_subset(self.testset, partitioned_noniid_testsets)
 
         # Concept drift properties
+        # if drift_specs['async_drift_specs']['is_read_scenarios']:
+        #
+        # else:
         self.drift = drift_fn(self.num_client_instances, num_training_rounds, drift_specs)
 
         # Simulation parameters

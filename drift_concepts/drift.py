@@ -18,7 +18,7 @@ from torch.utils.data import Dataset
 
 import constants
 from data.utils import get_num_classes_from_dataset, get_random_labels, convert_dataset_to_loader
-from drift_concepts.drift_scenarios import get_drift_ids
+from drift_concepts.drift_scenarios import transpose_drift_pattern, read_drift_pattern_from_csv
 from federated_network.client import Client
 
 
@@ -403,7 +403,8 @@ def drift_fn(num_client_instances: int, num_training_rounds: int, drift_specs: D
     if not drift_specs['is_synchronous']:
         if drift_specs['async_drift_specs']['is_read_scenarios']:
             # If Asynchornous drift patterns are defined using the scenario .csv files
-            drift_ids = get_drift_ids(drift_specs['async_drift_specs']['scenario_num'])
+            drift_ids = read_drift_pattern_from_csv(drift_specs['async_drift_specs']['scenario_num'])
+            drift_ids_col, n_clients, n_drifts, n_timesteps = transpose_drift_pattern(drift_ids)
         else:
             # If Asynchronous drift patterns are custom defined using the parameters
             drift_duration = drift_end_round - drift_start_round  # Duration of the drift in rounds
