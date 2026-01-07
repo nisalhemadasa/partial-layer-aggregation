@@ -14,6 +14,8 @@ def main():
         num_drift_groups=2,  # Number of groups of clients that are affected by the drift asynchronously
         drift_groups=None,  # Groups of clients that are affected by the drift asynchronously
         drift_split_round=0.8,  # Times at which the drift is split into multiple asynchronous drifts,
+        is_read_scenarios=True,  # Whether to read the asynchronous drift patterns from the ./drift_concepts/scenarios directory
+        scenario_num=1  # Scenario number for the asynchronous drift patterns defined in the ./drift_concepts/scenarios directory
     )
 
     # # Define the drift specifications
@@ -77,7 +79,7 @@ def main():
     drift_specifications = dict(
         clients_fraction=0.3,  # Fraction of clients that are drift affected(literature also uses a list of fractions)
         drift_localization_factor=1,  # Factor to localize the drift to a certain concentrated group of clients
-        is_synchronous=True,  # If the drift is synchronous or asynchronous
+        is_synchronous=False,  # If the drift is synchronous or asynchronous
         async_drift_specs=async_drift_specs,  # Specifications for the asynchronous case
         #--------------------------------------------------------------------------------
         drift_mode=constants.DriftMode.LABEL_SWAP_ONCE,  # Drift creation method
