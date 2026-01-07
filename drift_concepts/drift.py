@@ -23,18 +23,21 @@ from federated_network.client import Client
 
 
 class Drift:
-    def __init__(self, num_drifted_clients, drift_localization_factor, is_synchronous, async_drift_specs, drift_mode,
-                 drift_start_round, drift_end_round, drift_step_rounds, drifted_client_indices, max_rotation,
+    def __init__(self, drifted_clients_fraction, drift_group_proportions, is_synchronous, is_random, async_drift_specs,
+                 drift_mode, drift_start_round, drift_end_round, drift_step_rounds, num_client_instances, max_rotation,
                  class_pairs_to_swap, label_swap_percentage_steps, current_drift_step):
         # Number of clients to be applied with drifted data
-        self.num_drifted_clients = num_drifted_clients
+        self.num_drifted_clients = int(drifted_clients_fraction * num_client_instances)
 
-        # Factor to localize the drift to a certain concentrated group of clients. The value ranges from 0 to 1. E.g.,
-        # 0.25 indicates that all drifted clients are concentrated on the first 0.25 indices of the clients.
-        self.drift_localization_factor = drift_localization_factor
+        # Proportions are used to calculate the number of clients in each drift group, at each drift step
+        self.drift_group_sizes = np.floor(
+            np.asarray(drift_group_proportions) * self.num_drifted_clients + 0.5).astype(int).tolist()
 
         # If the drift is synchronous or asynchronous
         self.is_synchronous = is_synchronous
+
+        # If the drifted clients are selected randomly at the beginning of the simulation
+        self.is_random = is_random
 
         # Drift specifications for asynchronous drift
         self.async_drift_specs = async_drift_specs
@@ -60,7 +63,12 @@ class Drift:
         self.drift_end_round = drift_end_round
 
         # List of clients that have drifted data
-        self.drifted_client_indices = drifted_client_indices
+        self.drifted_client_indices = get_clients_indices_with_drift(num_client_instances,
+                                                                     self.num_drifted_clients,
+                                                                     self.drift_group_sizes,
+                                                                     self.is_synchronous,
+                                                                     self.is_random,
+                                                                     self.async_drift_specs)
         print("Drifted clients: ", self.drifted_client_indices)
 
         # Maximum rotation angle for the drift created by rotations
@@ -320,53 +328,45 @@ class Drift:
         return clients
 
 
-def get_clients_with_drift(_num_client_instances: int, _clients_fraction_with_drift: float,
-                           drift_localization_factor: float, is_synchronous: bool, async_drift_specs: Dict) -> list:
+def get_clients_indices_with_drift(_num_client_instances: int, _num_drifted_clients: int,
+                                   drift_group_sizes: list[list[int]], is_synchronous: bool, is_random: bool,
+                                   async_drift_specs: Dict) -> list:
     """
     Get the list of clients that have drifted data.
     :param _num_client_instances: Total number of client instances in the federated network
-    :param _clients_fraction_with_drift: Fraction of clients with drifted data
-    :param drift_localization_factor: Factor to localize the drift to a certain concentrated group of clients
+    :param _num_drifted_clients: Number of client undergoing drift
+    :param drift_group_sizes: Sizes of the drift affected client groups at each drift_step_rounds
+            - outer list : timesteps (len(drift_group_sizes) -> number of timesteps)
+            - inner list : sizes of drift groups (len(drift_group_sizes[0]) ->sequence of drifted client group sizes)
     :param is_synchronous: Boolean indicating if the drift is synchronous or asynchronous
+    :param is_random: Boolean indicating if the drifted clients are selected randomly at the beginning
     :param async_drift_specs: Dictionary containing the specifications for asynchronous drift
     :return: Indices of clients with drifted data
     """
-    num_clients_with_drift = int(_clients_fraction_with_drift * _num_client_instances * drift_localization_factor)
-    # The cohort of clients with the possibility of drift occurrence
-    _num_client_cohort_with_drift = int(_num_client_instances * drift_localization_factor)
-    client_indices = torch.randperm(_num_client_cohort_with_drift).tolist()
-    drift_clients = client_indices[:num_clients_with_drift]
+    if is_random:  # only for the synchronous drift case
+        # get random permutation of client indices undergoing drift
+        client_indices = torch.randperm(_num_client_instances).tolist()
+        drifted_clients_indices = client_indices[:_num_drifted_clients]
+        return drifted_clients_indices
+    elif not is_synchronous:  # only for asynchronous drift cases
+        # get the first N clients as undergoing drift
+        drifted_clients_indices = []
 
-    if not is_synchronous:
-        drifted_client_grouping_margin_indices = [
-            math.ceil(i * (_num_client_instances / async_drift_specs['num_drift_groups']))
-            for i in range(1, async_drift_specs['num_drift_groups'])
-        ]
+        for drift_timestep in drift_group_sizes:
+            current_group = []
+            client_idx = 1  # restart counting for each timestep
 
-        # Initialize an empty list to store the grouped lists
-        grouped_drifted_clients = []
-        # Sort the drifted client indices to ensure proper ordering
-        sorted_drift_clients = sorted(drift_clients)
-        # Iterate over the drifted_client_grouping_margin_indices and progressively build the groups
-        current_group = []
+            for group_size in drift_timestep:
+                # get consecutive client indices for the current drift group
+                current_group.append(list(range(client_idx, client_idx + group_size)))
+                client_idx += group_size
 
-        # Each element in 'drift_groups' is a cumulative list of all previous groups, plus the new values up to the
-        # current margin
-        for margin in drifted_client_grouping_margin_indices:
-            # Add all client indices that are less than or equal to the current margin
-            current_group.extend(idx for idx in sorted_drift_clients if idx < margin and idx not in current_group)
-            # Append a copy of the current_group to avoid modifying previous lists
-            grouped_drifted_clients.append(current_group[:])
-        # Add the final group containing all indices
-        grouped_drifted_clients.append(sorted_drift_clients)
+            drifted_clients_indices.append(current_group)
 
-        # For testing purposes
-        grouped_drifted_clients = [list(set(grouped_drifted_clients[1]) - set(grouped_drifted_clients[0])),
-                                   grouped_drifted_clients[1]]
-
-        async_drift_specs['drift_groups'] = grouped_drifted_clients
-
-    return drift_clients
+        async_drift_specs['drift_groups'] = drifted_clients_indices
+        return drifted_clients_indices
+    else:
+        raise ValueError("Synchronous non-random drift case is not implemented yet.")
 
 
 def modify_drifted_client_groups(drift: Drift, _round: int) -> None:
@@ -399,32 +399,25 @@ def drift_fn(num_client_instances: int, num_training_rounds: int, drift_specs: D
     print("Drift start round: ", drift_start_round)
     print("Drift end round: ", drift_end_round)
 
-    # The round which the drift starts to affect on the second group of drifted clients in asynchronous case
-    if not drift_specs['is_synchronous']:
-        if drift_specs['async_drift_specs']['is_read_scenarios']:
-            # If Asynchornous drift patterns are defined using the scenario .csv files
-            drift_ids = read_drift_pattern_from_csv(drift_specs['async_drift_specs']['scenario_num'])
-            drift_ids_col, n_clients, n_drifts, n_timesteps = transpose_drift_pattern(drift_ids)
-        else:
-            # If Asynchronous drift patterns are custom defined using the parameters
-            drift_duration = drift_end_round - drift_start_round  # Duration of the drift in rounds
-            drift_split_round = math.ceil(
-                drift_start_round + drift_specs['async_drift_specs']['drift_split_round'] * drift_duration)
-            print("Async drift split round: ", drift_split_round)
-            drift_specs['async_drift_specs']['drift_split_round'] = drift_split_round
+    # # The round which the drift starts to affect on the second group of drifted clients in asynchronous case
+    # if not drift_specs['is_synchronous']:
+    #     # If Asynchronous drift patterns are custom defined using the parameters
+    #     drift_duration = drift_end_round - drift_start_round  # Duration of the drift in rounds
+    #     drift_split_round = math.ceil(
+    #         drift_start_round + drift_specs['async_drift_specs']['drift_split_round'] * drift_duration)
+    #     print("Async drift split round: ", drift_split_round)
+    #     drift_specs['async_drift_specs']['drift_split_round'] = drift_split_round
 
-    return Drift(num_drifted_clients=drift_specs['clients_fraction'] * num_client_instances,
-                 drift_localization_factor=drift_specs['drift_localization_factor'],
+    return Drift(drifted_clients_fraction=drift_specs['clients_fraction'],
+                 drift_group_proportions=drift_specs['drift_group_proportions'],
                  is_synchronous=drift_specs['is_synchronous'],
+                 is_random=drift_specs['is_random'],
                  async_drift_specs=drift_specs['async_drift_specs'],
                  drift_mode=drift_specs['drift_mode'],
                  drift_start_round=drift_start_round,
                  drift_end_round=drift_end_round,
                  drift_step_rounds=[math.ceil(i * num_training_rounds) for i in drift_specs['drift_step_rounds']],
-                 drifted_client_indices=get_clients_with_drift(num_client_instances, drift_specs['clients_fraction'],
-                                                               drift_specs['drift_localization_factor'],
-                                                               drift_specs['is_synchronous'],
-                                                               drift_specs['async_drift_specs']),
+                 num_client_instances=num_client_instances,
                  max_rotation=drift_specs['max_rotation'],
                  class_pairs_to_swap=drift_specs['class_pairs_to_swap'],
                  label_swap_percentage_steps=drift_specs['label_swap_percentage_steps'],
