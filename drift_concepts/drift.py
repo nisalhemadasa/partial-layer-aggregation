@@ -25,7 +25,7 @@ from federated_network.client import Client
 class Drift:
     def __init__(self, drifted_clients_fraction, drift_group_proportions, is_synchronous, is_random, async_drift_specs,
                  drift_mode, drift_start_round, drift_end_round, drift_step_rounds, num_client_instances, max_rotation,
-                 class_pairs_to_swap, label_swap_percentage_steps, current_drift_step):
+                 class_pairs_to_swap, async_class_pairs_to_swap , label_swap_percentage_steps, current_drift_step):
         # Number of clients to be applied with drifted data
         self.num_drifted_clients = int(drifted_clients_fraction * num_client_instances)
 
@@ -76,6 +76,9 @@ class Drift:
 
         # Classes to be swapped in the label-swapping drift method
         self.class_pairs_to_swap = class_pairs_to_swap
+
+        # Classes to be swapped in the label-swapping drift method for asynchronous drift, with multiple drift groups
+        self.async_class_pairs_to_swap = async_class_pairs_to_swap
 
         # Current round of the federated training
         self.current_round = 0
@@ -343,7 +346,7 @@ def get_clients_indices_with_drift(_num_client_instances: int, _num_drifted_clie
     :param async_drift_specs: Dictionary containing the specifications for asynchronous drift
     :return: Indices of clients with drifted data
     """
-    if is_random:  # only for the synchronous drift case
+    if is_random and is_synchronous:  # only for the synchronous drift case
         # get random permutation of client indices undergoing drift
         client_indices = torch.randperm(_num_client_instances).tolist()
         drifted_clients_indices = client_indices[:_num_drifted_clients]
@@ -420,6 +423,7 @@ def drift_fn(num_client_instances: int, num_training_rounds: int, drift_specs: D
                  num_client_instances=num_client_instances,
                  max_rotation=drift_specs['max_rotation'],
                  class_pairs_to_swap=drift_specs['class_pairs_to_swap'],
+                 async_class_pairs_to_swap=drift_specs['async_class_pairs_to_swap'],
                  label_swap_percentage_steps=drift_specs['label_swap_percentage_steps'],
                  current_drift_step=drift_specs['current_drift_step'])
 
