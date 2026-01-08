@@ -117,7 +117,7 @@ class FederatedNetwork:
             for i in range(num_iid_client_instances)
         ]
 
-        # Create instances for servers at each level of the server tree
+        # Create instances for servers (Create multiple servers)
         server_hierarchy = []
         absolute_index = 0
 
@@ -131,7 +131,7 @@ class FederatedNetwork:
                     self.drift_recovery_parameters['recovery_method'],
                     _cluster_count
                 )
-                for i, server_id in enumerate(range(server_tree_layout[depth_level]))]
+                for i, server_id in enumerate(range(_cluster_count))]
 
             server_hierarchy.append(servers_at_level)
             absolute_index += server_tree_layout[depth_level]

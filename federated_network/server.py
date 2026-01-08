@@ -335,13 +335,12 @@ def model_distribution_fedrc(server_list: List[Server], sampled_clients: List[Cl
             set_parameters(client.fedrc_models[cluster_idx], server.multi_models[cluster_idx].state_dict())
 
 
-def server_hierarchy_evaluate(server_hierarchy: List[List[Server]], server_test_set: DataLoader,
+def server_hierarchy_evaluate(server_hierarchy: List[Server], server_test_set: DataLoader,
                               all_clients: List[Client],
                               _is_server_has_test_data: bool, _drift_recovery_method: str) -> List:
     """
-    The aggregated models are distributed down the hierarchy. I.e., the edge models are updated by the global model and
-    client models are updated by the edge models.
-    :param server_hierarchy: List of servers in the hierarchy
+    The aggregated models are distributed to the client models.
+    :param server_hierarchy: List of servers
     :param server_test_set: List of test data for server model evaluation, once the aggregation is done
     :param all_clients: List of all clients
     :param _is_server_has_test_data: Boolean flag to indicate whether server possesses test data to do in-server
