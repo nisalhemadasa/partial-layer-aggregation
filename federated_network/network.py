@@ -82,6 +82,12 @@ class FederatedNetwork:
         # Drift recovery parameters
         self.drift_recovery_parameters = drift_recovery_parameters
 
+        # Determine the cluster count based on the recovery method
+        if self.drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.FEDRC:
+            _cluster_count = self.drift_recovery_parameters['fedrc_cluster_count']
+        else:
+            _cluster_count = self.drift_recovery_parameters['cluster_count']
+
         # Create client instances
         self.noniid_clients = [
             client_fn(
@@ -91,7 +97,7 @@ class FederatedNetwork:
                 self.minibatch_size,
                 [partitioned_noniid_trainsets[i], partitioned_noniid_testsets[i]],
                 self.drift_recovery_parameters['recovery_method'],
-                self.drift_recovery_parameters['cluster_count'],    # for FedRC, each client maintains the same number of local models as the multiple global models the server maintains
+                _cluster_count,    # for FedRC, each client maintains the same number of local models as the multiple global models the server maintains
                 dataset_name
             )
             for i in range(num_noniid_client_instances)
@@ -105,7 +111,7 @@ class FederatedNetwork:
                 self.minibatch_size,
                 [partitioned_iid_trainsets[i], partitioned_iid_testsets[i]],
                 self.drift_recovery_parameters['recovery_method'],
-                self.drift_recovery_parameters['cluster_count'],
+                _cluster_count,
                 dataset_name
             )
             for i in range(num_iid_client_instances)
@@ -117,10 +123,15 @@ class FederatedNetwork:
 
         for depth_level in range(len(server_tree_layout)):
             # For each level in the tree, create a list of server instances, by passing the absolute index
-            servers_at_level = [server_fn(server_id, self.dataset_name, absolute_index + i,
-                                          self.drift_recovery_parameters['recovery_method'],
-                                          self.drift_recovery_parameters['cluster_count'])
-                                for i, server_id in enumerate(range(server_tree_layout[depth_level]))]
+            servers_at_level = [
+                server_fn(
+                    server_id,
+                    self.dataset_name,
+                    absolute_index + i,
+                    self.drift_recovery_parameters['recovery_method'],
+                    _cluster_count
+                )
+                for i, server_id in enumerate(range(server_tree_layout[depth_level]))]
 
             server_hierarchy.append(servers_at_level)
             absolute_index += server_tree_layout[depth_level]

@@ -33,7 +33,7 @@ class Server:
         self.parent_server_id = None  # Parent server ID in the server hierarchy
 
         # Create a list of models of size '_cluster_count'
-        if self.strategy.strategy_name in [constants.RecoveryAlgorithm.FEDRC, constants.RecoveryAlgorithm.ORACLE]:
+        if self.strategy.strategy_name == constants.RecoveryAlgorithm.FEDRC:
             self.multi_models = [copy.deepcopy(_model) for _ in range(_cluster_count)]
             self.model = None
         else:
