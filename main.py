@@ -30,24 +30,24 @@ def main():
 
     # Define the drift specifications
     drift_specifications = dict(
-        clients_fraction=0.6,  # Fraction of clients that are drift affected(literature also uses a list of fractions)
+        clients_fraction=0.8,  # Fraction of clients that are drift affected(literature also uses a list of fractions)
         # Proportions of the size of the drift affected client groups at each drift_step_rounds.
         # outer list - timesteps
         # inner list: group size proportions
-        drift_group_proportions=[[0.2, 0.3, 0.5],  # At the first drift step - drift_step_rounds[0]
-                                 [0.3, 0.5, 0.2],  # drift_step_rounds[1]
-                                 [0.3, 0.2, 0.5]],
+        drift_group_proportions=[[0.5, 0.5],  # At the first drift step - drift_step_rounds[0]
+                                 [0.3, 0.7],  # drift_step_rounds[1]
+                                 [0.6, 0.4]],
         # drift_step_rounds[2], the last drift_step_round indicates the end of the drift period.
         is_synchronous=False,  # If the drift is synchronous or asynchronous
         is_random=True, # Whether to randomly select the clients to be affected by the drift
         async_drift_specs=async_drift_specs,  # Specifications for the asynchronous case
         # --------------------------------------------------------------------------------
-        drift_mode=constants.DriftMode.LABEL_SWAP_ONCE,  # Drift creation method
-        drift_step_rounds=[0.4, 0.6, 0.7, 0.9],
-        # Rounds at which the drift steps occurs. Also indicates the start and end of drift period.
+        # drift_mode=constants.DriftMode.LABEL_SWAP_ONCE,  # Drift creation method
+        # drift_step_rounds=[0.4, 0.6, 0.7, 0.9],
+        # # Rounds at which the drift steps occurs. Also indicates the start and end of drift period.
         # #--------------------------------------------------------------------------------
-        # drift_mode=constants.DriftMode.LABEL_SWAP_INCREMENTAL_STEPS, # Drift creation method
-        # drift_step_rounds=[0.2, 0.6, 1],  # Rounds at which the drift steps occurs. Also indicates the start and end of drift period.
+        drift_mode=constants.DriftMode.LABEL_SWAP_INCREMENTAL_STEPS, # Drift creation method
+        drift_step_rounds=[0.4, 0.6, 0.7, 0.9],  # Rounds at which the drift steps occurs. Also indicates the start and end of drift period.
         # #--------------------------------------------------------------------------------
         # drift_mode=constants.DriftMode.ROTATION_GRADUAL,  # Drift creation method
         # drift_step_rounds=[0.2, 0.6, 1],    # In Rotation gradual case, this indicates only the start and end of drift period.
@@ -61,9 +61,9 @@ def main():
         # Therefore, it must have at least two entries (start and end of drift).
         max_rotation=45,  # Maximum rotation angle for the drift created by rotations
         class_pairs_to_swap=[[(1, 2), (3, 4)], [(5, 7)]],  # label indices (not the class names)
-        async_class_pairs_to_swap=[[[(1, 2), (3, 4)], [(5, 7)], [(1, 3), (2, 5), (6, 9)]],  # drift_step_rounds[0] (2-swaps, 1-swap, 3-swaps)
-                                   [[(5, 7)], [(1, 2), (3, 4)], [(1, 3), (2, 5), (6, 9)]],  # drift_step_rounds[1] (1-swap, 2-swaps, 3-swaps)
-                                   [[(5, 7)], [(1, 3), (2, 5), (6, 9)], [(1, 2), (3, 4)]]], # drift_step_rounds[2] (1-swap, 3-swaps, 2-swaps)
+        async_class_pairs_to_swap=[[[(1, 2), (3, 4)], [(5, 7)]],  # drift_step_rounds[0] (2-swaps, 1-swap)
+                                   [[(1, 2), (3, 4)], [(1, 2), (3, 4)]],  # drift_step_rounds[1] (2-swap, 2-swaps)
+                                   [[(5, 7)], [(1, 2), (3, 4)]]], # drift_step_rounds[2] (1-swap, 2-swaps)
         # class_pairs_to_swap=[[(1, 2),(3, 4)]],   # label indices (not the class names)
         # Classes to be swapped in the label-swapping drift method
         # class_pairs_to_swap=[[(1, 2), (5, 7)], [(1, 2), (5, 7)]],  # Classes to be swapped in the label-swapping drift method
@@ -87,10 +87,14 @@ def main():
     # Define drift recovery algorithm related parameters
     drift_recovery_parameters = dict(
         recovery_method=constants.RecoveryAlgorithm.ORACLE,  # Aggregation method used during the drift period
-        base_aggregation_method=constants.RecoveryAlgorithm.FEDAVG,
+        base_aggregation_method=constants.RecoveryAlgorithm.ORACLE,
         # Aggregation algorithm used outside the drift period
         fedau_alpha=0.9,  # EMA weight (alpha) parameter for the FedAU algorithm
-        cluster_count=3  # Number of clusters (K) for the multi-global-model-based algorithms (FedRC, Oracle)
+        fedrc_cluster_count=3,  # Number of clusters (K) for the FedRC algorithm
+        # Number of clusters (K) for the Oracle (multi-global-model-based) algorithm
+        #   - drift_specifications['drift_group_proportions'][0] -> number of drift affected client groups
+        #   - '+1' -> for the non-drift affected client group
+        cluster_count=len(drift_specifications['drift_group_proportions'][0]) + 1
     )
 
     # Create a federated network

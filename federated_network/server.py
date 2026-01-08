@@ -61,7 +61,7 @@ class Server:
         # TODO: remove is_drift to use from the beginning
         elif self.strategy.strategy_name == constants.RecoveryAlgorithm.FEDEX:
             self.strategy.aggregate_models(self.model, client_model_parameters)
-        elif self.strategy.strategy_name == constants.RecoveryAlgorithm.FEDRC:
+        elif self.strategy.strategy_name in [constants.RecoveryAlgorithm.FEDRC, constants.RecoveryAlgorithm.ORACLE]:
             self.strategy.aggregate_models(self.multi_models, client_model_parameters)
         else:
             # FedAvg: For internal servers or when there are no drifted clients
@@ -110,19 +110,35 @@ class Server:
         return tuple(arr.mean(axis=0))
 
 
-
-
-def model_aggregation_fedrc(server: Server, sampled_clients: List[Client], drift: Drift, verbose=False) -> None:
+def model_aggregation_fedrc(server: Server, sampled_clients: List[Client], verbose=False) -> None:
     """
     Aggregate the models of the clients to the server model for FedRC algorithm.
     :param server: Server instance
     :param sampled_clients: List of sampled clients
-    :param drift: Drift instance
     :param verbose: Whether to print detailed logs or not
     """
     client_model_parameters = {
         client_id: get_fedrc_client_model_params(sampled_clients[client_id].fedrc_models)
         for client_id in server.client_ids}
+
+    if verbose:
+        print('aggregate models: server:' + str(server.server_id) + ' -> ' + 'clients:' + str(server.client_ids))
+
+    # Aggregate client models
+    server.train(client_model_parameters, None, None)
+
+
+def model_aggreagation_oracle(server: Server, sampled_clients: List[Client], verbose=False) -> None:
+    """
+    Aggregate the models of the clients to the server model for Oracle algorithm.
+    :param server: Server instance
+    :param sampled_clients: List of sampled clients
+    :param verbose: Whether to print detailed logs or not
+    """
+    if sampled_clients:  # Star topology
+        # Get model parameters from all participating clients
+        client_model_parameters = {client_id: sampled_clients[client_id].model.state_dict()
+                                   for client_id in server.client_ids}
 
     if verbose:
         print('aggregate models: server:' + str(server.server_id) + ' -> ' + 'clients:' + str(server.client_ids))
@@ -238,6 +254,9 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
                 if server.strategy.strategy_name == constants.RecoveryAlgorithm.FEDRC:
                     model_aggregation_fedrc(server, sampled_clients, drift, verbose=verbose)
 
+                elif server.strategy.strategy_name == constants.RecoveryAlgorithm.ORACLE:
+                    model_aggreagation_oracle(server, sampled_clients, drift, verbose=verbose)
+
                 elif server.strategy.strategy_name in {constants.RecoveryAlgorithm.FEDAU,
                                                        constants.RecoveryAlgorithm.FLUID}:
                     model_aggregation_fedau_fluid(server, sampled_clients, drift, ema_weight, verbose=verbose)
@@ -310,7 +329,7 @@ def model_distribution_fedrc(server_list: List[Server], sampled_clients: List[Cl
     :param sampled_clients: List of sampled clients
     :return: None
     """
-    server = server_list[0] #TODO: implemented only for single server topology
+    server = server_list[0]  # TODO: implemented only for single server topology
     for client_idx, client in enumerate(sampled_clients):
         for cluster_idx in range(len(server.multi_models)):
             set_parameters(client.fedrc_models[cluster_idx], server.multi_models[cluster_idx].state_dict())
@@ -341,7 +360,8 @@ def server_hierarchy_evaluate(server_hierarchy: List[List[Server]], server_test_
     # TODO: this part has to be refactored
     if _drift_recovery_method in [constants.RecoveryAlgorithm.FEDRC, constants.RecoveryAlgorithm.ORACLE]:
         # Evaluate all multiple models in the servers, in clustering-based algorithms (FedRC, Oracle)
-        losses, accuracies = global_server.evaluate_multi_models(server_test_set)  # returns ([loss1, loss2,...], [acc1, acc2,...])
+        losses, accuracies = global_server.evaluate_multi_models(
+            server_test_set)  # returns ([loss1, loss2,...], [acc1, acc2,...])
         server_loss_and_accuracy.append((losses, accuracies))
     else:
         if _is_server_has_test_data:
@@ -414,6 +434,8 @@ def server_fn(server_id: int, dataset_name: str, server_abs_id: int, drift_recov
     """
     if drift_recovery_method == constants.RecoveryAlgorithm.FEDRC:
         aggregator_strategy = strategy.FedRC.aggregator_fn()
+    elif drift_recovery_method == constants.RecoveryAlgorithm.ORACLE:
+        aggregator_strategy = strategy.Oracle.aggregator_fn()
     else:
         aggregator_strategy = strategy.FedAvg.aggregator_fn()
 
