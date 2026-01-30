@@ -23,7 +23,7 @@ print(
 
 
 class SimpleModel(nn.Module):
-    def __init__(self, _model_id: int=None):
+    def __init__(self, _model_id: int = None):
         self.model_id = _model_id
 
         super(SimpleModel, self).__init__()
@@ -50,28 +50,48 @@ class SimpleModel(nn.Module):
 
 # for MNIST and F_MNIST dataset (28 x 28 dimensional images)
 class CNNModel(nn.Module):
-    def __init__(self, _model_id: int=None):
+    def __init__(self, _model_id: int = None):
         self.model_id = _model_id
 
         """Defines the architecture of the network"""
         super(CNNModel, self).__init__()
+        # Convolutional layers
         self.conv1 = nn.Conv2d(in_channels=1, out_channels=32, kernel_size=3)
-        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3)
-        self.fc1 = nn.Linear(in_features=64 * 5 * 5, out_features=128)
+        # self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3)
+
+        # Fully connected layers
+        self.fc1 = nn.Linear(in_features=32 * 13 * 13, out_features=128)
         self.fc2 = nn.Linear(in_features=128, out_features=10)
+
+        # # Fully connected layers
+        # self.fc1 = nn.Linear(in_features=64 * 5 * 5, out_features=128)
+        # self.fc2 = nn.Linear(in_features=128, out_features=10)
+        # self.fc2 = nn.Linear(in_features=128, out_features=64)  # this line is added to experiment layer removal case 4 of FedEx
+        # self.fc3 = nn.Linear(in_features=64, out_features=10)   # this line is added to experiment layer removal case 4 of FedEx
+
+        # Regularization
         self.dropout = nn.Dropout(p=0.5)
 
     def forward(self, x):
         """Describes how input data flows through the network"""
+        # Convolutional feature extractor
         x = torch.relu(self.conv1(x))
         x = torch.max_pool2d(x, kernel_size=2, stride=2)
-        x = torch.relu(self.conv2(x))
-        x = torch.max_pool2d(x, kernel_size=2, stride=2)
-        x = x.view(-1, 64 * 5 * 5)
+        # Flatten
+        x = x.view(-1, 32 * 13 * 13)
+
+        # x = torch.relu(self.conv2(x))
+        # x = torch.max_pool2d(x, kernel_size=2, stride=2)
+        # # Flatten
+        # x = x.view(-1, 64 * 5 * 5)
+
+        # Fully connected classifier
         x = torch.relu(self.fc1(x))
         x = self.dropout(x)
         x = self.fc2(x)
-        # return x
+        # x = torch.relu(self.fc2(x))    # this line is added to experiment layer removal case 4 of FedEx
+        # x = self.fc3(x)    # this line is added to experiment layer removal case 4 of FedEx
+
         return torch.log_softmax(x, dim=1)
 
     def get_model_type(self) -> str:
@@ -87,7 +107,7 @@ class CNNCIFAR10(nn.Module):
     Output: 10-class(CIFAR-10) classification
     """
 
-    def __init__(self, num_classes=10, _model_id: int=None):
+    def __init__(self, num_classes=10, _model_id: int = None):
         self.model_id = _model_id
 
         super(CNNCIFAR10, self).__init__()
@@ -106,6 +126,8 @@ class CNNCIFAR10(nn.Module):
 
         self.fc1 = nn.Linear(64 * 6 * 6, 128)
         self.fc2 = nn.Linear(128, num_classes)
+        # self.fc2 = nn.Linear(in_features=128, out_features=64)  # this line is added to experiment layer removal case 4 of FedEx
+        # self.fc3 = nn.Linear(in_features=64, out_features=num_classes)   # this line is added to experiment layer removal case 4 of FedEx
         self.dropout = nn.Dropout(p=0.5)
 
     def forward(self, x):
@@ -118,12 +140,15 @@ class CNNCIFAR10(nn.Module):
         x = torch.relu(self.fc1(x))
         x = self.dropout(x)
         x = self.fc2(x)
+        # x = torch.relu(self.fc2(x))    # this line is added to experiment layer removal case 4 of FedEx
+        # x = self.fc3(x)    # this line is added to experiment layer removal case 4 of FedEx
 
         return torch.log_softmax(x, dim=1)
 
     def get_model_type(self) -> str:
         """Return the model type as a string."""
         return constants.ModelTypes.CNN_CIFAR_10
+
 
 # for CIFAR 10/CIFAR 100 dataset (32 x 32 dimensional images) in 3 channels
 class CNNCIFAR100(nn.Module):
@@ -133,7 +158,7 @@ class CNNCIFAR100(nn.Module):
     Output: 100-class(CIFAR-100) classification
     """
 
-    def __init__(self, num_classes=100, _model_id: int=None):
+    def __init__(self, num_classes=100, _model_id: int = None):
         self.model_id = _model_id
 
         super(CNNCIFAR100, self).__init__()
@@ -219,6 +244,7 @@ class CNNCIFAR100(nn.Module):
 #         return constants.ModelTypes.CNN_TINY_IMAGENET
 class ResidualBlock(nn.Module):
     """Small ResNet-like block used in a lightweight Tiny ImageNet CNN."""
+
     def __init__(self, in_channels, out_channels, stride=1):
         super().__init__()
 
@@ -272,7 +298,7 @@ class CNNTinyImageNet(nn.Module):
     Output: [B, num_classes] (logits, not log_softmax)
     """
 
-    def __init__(self, num_classes: int = 200, _model_id: int=None):
+    def __init__(self, num_classes: int = 200, _model_id: int = None):
         self.model_id = _model_id
 
         super().__init__()
@@ -280,6 +306,26 @@ class CNNTinyImageNet(nn.Module):
         # Stem: keep it small
         self.stem = nn.Sequential(
             nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=1, bias=False),  # 64x64
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+
+            nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1, bias=False),  # [B, 32, 64, 64]
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+
+            nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1, bias=False),  # [B, 32, 64, 64]
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+
+            nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1, bias=False),  # [B, 32, 64, 64]
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+
+            nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1, bias=False),  # [B, 32, 64, 64]
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+
+            nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1, bias=False),  # [B, 32, 64, 64]
             nn.BatchNorm2d(32),
             nn.ReLU(inplace=True),
         )
@@ -292,6 +338,9 @@ class CNNTinyImageNet(nn.Module):
         self.block2 = ResidualBlock(32, 64, stride=1)
         self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)  # 32x32 -> 16x16
 
+        # self.dropout = nn.Dropout(p=0.5)
+        # self.fc = nn.Linear(64, num_classes)
+
         # Stage 3: 64 -> 128 channels, 16x16 -> 8x8
         self.block3 = ResidualBlock(64, 128, stride=1)
         self.pool3 = nn.MaxPool2d(kernel_size=2, stride=2)  # 16x16 -> 8x8
@@ -302,23 +351,23 @@ class CNNTinyImageNet(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Input: [B, 3, 64, 64]
-        x = self.stem(x)            # [B, 32, 64, 64]
+        x = self.stem(x)  # [B, 32, 64, 64]
 
-        x = self.block1(x)          # [B, 32, 64, 64]
-        x = self.pool1(x)           # [B, 32, 32, 32]
+        x = self.block1(x)  # [B, 32, 64, 64]
+        x = self.pool1(x)  # [B, 32, 32, 32]
 
-        x = self.block2(x)          # [B, 64, 32, 32]
-        x = self.pool2(x)           # [B, 64, 16, 16]
+        x = self.block2(x)  # [B, 64, 32, 32]
+        x = self.pool2(x)  # [B, 64, 16, 16]
 
-        x = self.block3(x)          # [B, 128, 16, 16]
-        x = self.pool3(x)           # [B, 128, 8, 8]
+        x = self.block3(x)  # [B, 128, 16, 16]
+        x = self.pool3(x)  # [B, 128, 8, 8]
 
         # Global average pooling to [B, 128]
         x = F.adaptive_avg_pool2d(x, output_size=1)  # [B, 128, 1, 1]
-        x = torch.flatten(x, 1)                      # [B, 128]
+        x = torch.flatten(x, 1)  # [B, 128]
 
         x = self.dropout(x)
-        x = self.fc(x)                               # [B, num_classes]
+        x = self.fc(x)  # [B, num_classes]
 
         # For CrossEntropyLoss, logits are preferred (no log_softmax here)
         return x
@@ -339,11 +388,52 @@ def split_to_extractor_and_classifier(_model: nn.Module, _model_params: OrderedD
     if _model is not None:
         _model_params = _model.state_dict()
 
+    # # case 1
     # get the extractor parameters (all except fc2 layer)
-    extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if not k.startswith("fc2."))
+    # extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if not k.startswith("fc1."))
+    # # get the extractor parameters (all except fc2 layer)
+    # extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if not k.startswith("fc2."))
+    # # For Tiny ImageNet200 model
+    # extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if not k.startswith("block3."))
+
+    # # case 2
+    # get the extractor parameters (all except fc2 and fc1 layer)
+    extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if
+                                   not (k.startswith("fc1.") or k.startswith("fc2.") or k.startswith('conv2')))
+    # # For Tiny ImageNet200 model
+    # extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if
+    #                                not (k.startswith("block3.") or k.startswith("block2.") or k.startswith("block1.")))
+    # extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if
+    #                                not (k.startswith("block3.") or k.startswith("block2.")))
+
+    # # case 3
+    # # get the extractor parameters (only fc2 layer)
+    # extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if k.startswith("fc2."))
+
+    # # case 4
+    # # No layers are dropped. Layer (fc3.) is added.
+    # extractor_params = OrderedDict((k, v) for k, v in _model_params.items())
+
+    # # case 5
+    # # get the extractor parameters (all except fc3. layer)
+    # extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if not k.startswith("fc3."))
+
+    # # case 6
+    # # get the extractor parameters (only fc3. layer)
+    # extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if k.startswith("fc3."))
+
+    # # case 7
+    # # get the extractor parameters (only fc2. and fc3. layer)
+    # extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if (k.startswith("fc3.") or k.startswith("fc2.")))
+
+    # # case 8
+    # # get the extractor parameters (all except fc2. layer: middle layer), fc1, fc3 remaining.
+    # extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if not k.startswith("fc2."))
 
     # get the classifier parameters (fc2 layer)
-    classifier_params = OrderedDict((k, v) for k, v in _model_params.items() if k.startswith("fc2."))
+    # classifier_params = OrderedDict((k, v) for k, v in _model_params.items() if k.startswith("fc2."))
+    # For Tiny ImageNet200 model
+    classifier_params = OrderedDict((k, v) for k, v in _model_params.items() if k.startswith("block3."))
 
     return extractor_params, classifier_params
 
@@ -624,7 +714,11 @@ def train(_model: nn.Module, _dataset: DataLoader, _epochs: int, verbose=False) 
             outputs = _model(inputs)
 
             # Calculate loss
-            _loss = criterion(outputs, labels)
+            try:
+                _loss = criterion(outputs, labels)
+            except Exception as e:
+                print(f"Error calculating loss: {e}")
+                continue
 
             # Backward pass and optimization
             _loss.backward()
@@ -690,7 +784,43 @@ def set_parameters(_model: nn.Module, parameters: OrderedDict, _strict=True) -> 
     :param _strict: Whether to strictly enforce that the keys in state_dict match the keys returned by the model's
     :return: None
     """
-    missing, unexpected = _model.load_state_dict(parameters, strict=_strict)
+    _, _ = _model.load_state_dict(parameters, strict=_strict)
+
+
+def set_parameters_ema(_model: nn.Module, parameters: OrderedDict, alpha: float, _strict: bool = True) -> None:
+    """
+    Set model parameters using EMA update:
+        new = alpha * old + (1 - alpha) * incoming
+
+    :param _model: Model whose parameters will be updated
+    :param parameters: Incoming parameters (state_dict-like OrderedDict)
+    :param alpha: EMA coefficient (0 <= alpha <= 1)
+    :param _strict: Whether to strictly enforce key matching
+    """
+
+    if not (0.0 <= alpha <= 1.0):
+        raise ValueError(f"alpha must be in [0,1], got {alpha}")
+
+    current_state = _model.state_dict()
+    ema_state = OrderedDict()
+
+    for key in current_state.keys():
+        if key not in parameters:
+            if _strict:
+                raise KeyError(f"Key '{key}' missing in incoming parameters")
+            # keep old parameter if not present
+            ema_state[key] = current_state[key]
+            continue
+
+        # Ensure tensors are on same device / dtype
+        old_param = current_state[key]
+        new_param = parameters[key].to(old_param.device)
+
+        # EMA update
+        ema_state[key] = alpha * old_param + (1.0 - alpha) * new_param
+
+    # Load EMA-updated parameters
+    _, _ = _model.load_state_dict(ema_state, strict=_strict)
 
 
 def get_parameters_as_np_array(_model: nn.Module) -> List[np.ndarray]:

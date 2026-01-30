@@ -8,7 +8,7 @@ Version: 1.0
 import copy
 import random
 from collections import OrderedDict
-from typing import List
+from typing import List, Dict
 
 import torch
 from torch.utils.data import Dataset, Subset, DataLoader
@@ -41,6 +41,7 @@ class Client:
         self.parent_server_id = None  # server ID in the server hierarchy to which the client is connected
         self.auxiliary_classifier_parameters = None  # distance of the client from the server in the server hierarchy
         self.aux_trainloader = None  # dateset with random labels for training the auxiliary classifier in FedAU
+        self.drift_id = None  # drift pattern ID assigned to this client (for clustering-based methods, e.g., or Oracle)
 
         # ===== FedRC specific initializations =====
         if self.drift_recovery_method == constants.RecoveryAlgorithm.FEDRC:
@@ -113,13 +114,14 @@ class Client:
                 train(self.model, self.trainloader, _epochs=self.epochs)
         else:
             # Train the client model using new data and server parameters
-            if drift_recovery_method == constants.RecoveryAlgorithm.FEDAVG or drift_recovery_method == constants.RecoveryAlgorithm.FEDEX:
+            if drift_recovery_method in [constants.RecoveryAlgorithm.FEDAVG, constants.RecoveryAlgorithm.FEDEX,
+                                         constants.RecoveryAlgorithm.ORACLE]:
                 # Adam-based recovery (1st order) + reinitialization of client parameters from the global model from scratch
                 train(self.model, self.trainloader, _epochs=self.epochs)
             elif drift_recovery_method == constants.RecoveryAlgorithm.RRT:
                 # Rapid retraining (2nd order) + reinitialization of client parameters from the global model from scratch
                 rapid_train(self.model, self.trainloader, _epochs=self.epochs, _batch_size=self.mini_batch_size)
-            elif drift_recovery_method == constants.RecoveryAlgorithm.FEDAU or drift_recovery_method == constants.RecoveryAlgorithm.FLUID:
+            elif drift_recovery_method in [constants.RecoveryAlgorithm.FEDAU, constants.RecoveryAlgorithm.FLUID]:
                 # FedAU client side operations
                 self.auxiliary_classifier_parameters = fedau_clientside_train(self.model, self.trainloader,
                                                                               self.aux_trainloader,
@@ -186,15 +188,46 @@ def change_client_drift_recovery_method(clients: List[Client], drift_recovery_me
     :param drift_recovery_method: New drift recovery method to be set
     :param drifted_client_indices: List of client indices that have experienced drift
     """
-    # TODO: here for the FedEx, it has to change for all 3 situations
     if not drift_recovery_method == constants.RecoveryAlgorithm.FEDEX:
         for client in clients:
             if client.client_id in drifted_client_indices:
                 client.drift_recovery_method = drift_recovery_method
-    else:  # for FedEx
+    else:  # for FedEx      # TODO: here for the FedEx, it has to change for all 3 situations
         for client in clients:  # FedEx variant 1
             if client.client_id in drifted_client_indices:
                 client.drift_recovery_method = drift_recovery_method
+
+
+def set_client_drift_ids(clients: List[Client], drifted_client_indices: List[int], unique_drift_ids: List[int],
+                         current_step_drift_patterns: List[int]) -> None:
+    """
+    Sets/changes the drift pattern IDs of the drifted clients.
+    :param clients: List of client instances
+    :param drifted_client_indices: List of drift-affected client indices arranged in clusters (each inner list represents a cluster)
+    :param unique_drift_ids : List of unique drift IDs
+    :param current_step_drift_patterns: List of drift pattern IDs for the current drift timestep
+    :return: None
+    """
+    for client in clients:
+        for idx, cluster in enumerate(drifted_client_indices):
+            if client.client_id in cluster:
+                client.drift_id = current_step_drift_patterns[idx]
+                break
+            else:
+                client.drift_id = unique_drift_ids[0]  # non-drifted clients, drift_ID=0
+
+
+def get_client_by_id(clients: List[Client], client_id: int) -> Client:
+    """
+    Get the client instance by its ID.
+    :param clients: List of client instances
+    :param client_id: Client ID
+    :return: Client instance
+    """
+    for client in clients:
+        if client.client_id == client_id:
+            return client
+    raise ValueError(f"Client with ID {client_id} not found.")
 
 
 def client_fn(client_id: int, if_iid: bool, num_local_epochs: int, mini_batch_size: int,

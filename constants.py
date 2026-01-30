@@ -176,6 +176,7 @@ class Logs:
     # CLIENT_AVG_LOG = 'client_avg_log'
     SERVER_LVL_AVG_LOG = 'server_level_avg_log'
     SERVER_OVERALL_AVG_LOG = 'server_overall_avg_log'
+    DRIFT_SPECS_LOG = 'drift_specs_log'
 
 
 # Drift recovery algorithms
