@@ -17,7 +17,7 @@ from federated_network.client import client_fn, Client, client_initial_training
 from federated_network.server import server_fn, model_aggregation, model_distribution_fedex, \
     server_hierarchy_evaluate, model_distribution_fedrc, model_distribution_hierarchy
 from federated_network.utils import update_progress, link_server_hierarchy, train_client_models, \
-    link_clients_to_servers, handle_drift_for_round
+    link_clients_to_servers, handle_drift_for_round, apply_drift_to_clients
 from log_utils.analysis_functions import compute_client_average_metrics, compute_server_average_metrics, \
     split_clients_loss_and_accuracy, convert_fedrc_metrics_to_pairs
 from log_utils.logging import write_logs
@@ -85,8 +85,13 @@ class FederatedNetwork:
         # Determine the cluster count based on the recovery method
         if self.drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.FEDRC:
             _cluster_count = self.drift_recovery_parameters['fedrc_cluster_count']
-        else:
+        elif self.drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.ORACLE:
             _cluster_count = self.drift_recovery_parameters['cluster_count']
+            server_tree_layout = [
+                _cluster_count]  # Oracle method uses a flat server structure, with each server representing a cluster base
+        else:
+            # For all the other strategies, cluster size is 1, if not specified otherwise
+            _cluster_count = 1
 
         # Create client instances
         self.noniid_clients = [
@@ -97,7 +102,8 @@ class FederatedNetwork:
                 self.minibatch_size,
                 [partitioned_noniid_trainsets[i], partitioned_noniid_testsets[i]],
                 self.drift_recovery_parameters['recovery_method'],
-                _cluster_count,    # for FedRC, each client maintains the same number of local models as the multiple global models the server maintains
+                _cluster_count,
+                # for FedRC, each client maintains the same number of local models as the multiple global models the server maintains
                 dataset_name
             )
             for i in range(num_noniid_client_instances)
@@ -129,6 +135,7 @@ class FederatedNetwork:
                     self.dataset_name,
                     absolute_index + i,
                     self.drift_recovery_parameters['recovery_method'],
+                    self.drift_recovery_parameters['fedex_alpha'],
                     _cluster_count
                 )
                 for i, server_id in enumerate(range(_cluster_count))]
@@ -177,10 +184,11 @@ class FederatedNetwork:
         server_test_set = convert_dataset_to_loader(_dataset=self.testset, _batch_size=self.minibatch_size)
 
         for _round in range(self.num_training_rounds + 1):
-            # Add drift to the clients
+            # 1. Add drift to the clients
             handle_drift_for_round(_round, self.drift, self.server_hierarchy, self.drift_recovery_parameters,
                                    self.clients)
 
+            # 2. Sample clients participating in the current round TODO: transfer the following part ot a separate module
             # Clients sampled for a single round. In this simulation, all clients are sampled, in order (not randomly)
             sampled_clients = self.clients
 
@@ -188,7 +196,7 @@ class FederatedNetwork:
             sampled_client_ids = [client.client_id for client in sampled_clients]
             sampled_clients_in_each_round.append(sampled_client_ids)
 
-            # Server aggregation (upwards): Aggregate client model parameters to the edge model and edge model
+            # 2. Server aggregation (upwards): Aggregate client model parameters to the edge model and edge model
             # parameters to the global model (returns the round_server_loss_and_accuracy, global_avg_loss_and_accuracy
             # after aggregating upwards, before the distribution stage)
             _ = model_aggregation(self.server_hierarchy, server_test_set, sampled_clients, self.drift,
@@ -198,19 +206,20 @@ class FederatedNetwork:
             # If the clients download the model from the leaf servers of the hierarchy
             server_depth = len(self.server_hierarchy) - 1
 
-            # Updating (downwards) & evaluation: update the edge models using the global model parameters. (returns the
+            # 3. Updating (downwards) & evaluation: update the edge models using the global model parameters. (returns the
             # round_server_loss_and_accuracy, global_avg_loss_and_accuracy after both aggregating upwards and
             # distribution stage)
             global_server = self.server_hierarchy[0][
                 0]  # TODO: needs to change in case of a hierarchical server structure
             if global_server.strategy.strategy_name == constants.RecoveryAlgorithm.FEDEX:
                 model_distribution_fedex(self.server_hierarchy[server_depth], self.clients)
+                # model_distribution_hierarchy(self.server_hierarchy)
             elif global_server.strategy.strategy_name == constants.RecoveryAlgorithm.FEDRC:
                 model_distribution_fedrc(self.server_hierarchy[server_depth], sampled_clients)
             else:
                 model_distribution_hierarchy(self.server_hierarchy)
 
-            # Evaluate server loss and accuracy after aggregation and distribution
+            # 4. Evaluate server loss and accuracy after aggregation and distribution
             round_server_loss_and_accuracy = server_hierarchy_evaluate(self.server_hierarchy, server_test_set,
                                                                        self.clients,
                                                                        self.simulation_parameters[
@@ -219,7 +228,7 @@ class FederatedNetwork:
                                                                            'recovery_method'])
             server_loss_and_accuracy.append(round_server_loss_and_accuracy)
 
-            # Update the progress of the simulation
+            # Additional: Update the progress of the simulation
             update_progress(_round=_round, num_training_rounds=self.num_training_rounds)
 
             # Break the federated learning training round.
@@ -231,7 +240,13 @@ class FederatedNetwork:
             if _round == self.num_training_rounds:
                 break
 
-            # Client local training and evaluation
+            # 6. Apply drift to clients before local training
+            apply_drift_to_clients(self.drift, self.clients)
+
+            # 7. set server parameters to clients before local training
+            # TODO: implement this by transferring the part of the code from train_client_models function to here
+
+            # 8. Client local training and evaluation
             round_client_loss_and_accuracy = train_client_models(self.clients,
                                                                  sampled_client_ids,
                                                                  self.server_hierarchy[server_depth],
@@ -245,7 +260,7 @@ class FederatedNetwork:
         minutes, secs = divmod(end_time - start_time, 60)
         print(f"Runtime: {minutes} minutes {secs} seconds")
 
-        if self.drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.FEDRC:
+        if self.drift_recovery_parameters['recovery_method'] in [constants.RecoveryAlgorithm.FEDRC]:
             # ============================
             #          CLIENTS
             # ============================
@@ -377,58 +392,81 @@ class FederatedNetwork:
 
             # ==========LOGGING FUNCTION CALLS==============
             # Split the client performance to drifted and non-drifted clients
-            if self.drift.is_synchronous:
+            if not self.drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.ORACLE:
                 non_drifted_clients_loss_and_accuracy, drifted_clients_loss_and_accuracy = split_clients_loss_and_accuracy(
                     clients_loss_and_accuracy, self.drift.drifted_client_indices, None)
             else:
-                non_drifted_clients_loss_and_accuracy, drifted_clients_loss_and_accuracy = split_clients_loss_and_accuracy(
-                    clients_loss_and_accuracy, self.drift.drifted_client_indices,
-                    self.drift.async_drift_specs['drift_groups'])
+                #TODO: do not implement yet. Implement only if needed
+                pass
+                # non_drifted_clients_loss_and_accuracy, drifted_clients_loss_and_accuracy = split_clients_loss_and_accuracy(
+                #     clients_loss_and_accuracy, self.drift.drifted_client_indices,
+                #     self.drift.async_drift_specs['drift_groups'])
 
             # Get average performance of the clients
-            non_drifted_client_averages = compute_client_average_metrics(non_drifted_clients_loss_and_accuracy)
-            if self.drift.is_synchronous:
-                drifted_client_averages = compute_client_average_metrics(drifted_clients_loss_and_accuracy)
+            if not self.drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.ORACLE:
+                non_drifted_client_averages = compute_client_average_metrics(non_drifted_clients_loss_and_accuracy)
+                if self.drift.is_synchronous:
+                    drifted_client_averages = compute_client_average_metrics(drifted_clients_loss_and_accuracy)
+                else:
+                    drifted_client_averages = []
+                    for drited_groups in drifted_clients_loss_and_accuracy:
+                        drifted_client_averages.append(compute_client_average_metrics(drited_groups))
             else:
-                drifted_client_averages = []
-                for drited_groups in drifted_clients_loss_and_accuracy:
-                    drifted_client_averages.append(compute_client_average_metrics(drited_groups))
+                # TODO: do not implement yet. Implement only if needed
+                # In Oracle (cluster based), we do not separate the drifted from the non-drifted clients. And the
+                # average accuracies of each server is the average accuracies of the clients under that server. So
+                # additional client performance averaging is not needed.
+                pass
+
 
             if log_save_path is None:
                 log_save_path = constants.Paths.LOG_SAVE_PATH
 
             # Log the performance of the clients
-            write_logs(clients_loss_and_accuracy, file_name=log_save_path + constants.Logs.CLIENT_LOG)
-            # Log the performance of the clients separated by drifted and non-drifted
-            write_logs(non_drifted_clients_loss_and_accuracy,
-                       file_name=log_save_path + constants.Logs.NON_DRIFTED_CLIENT_LOG)
-            write_logs(drifted_clients_loss_and_accuracy,
-                       file_name=log_save_path + constants.Logs.DRIFTED_CLIENT_LOG)
-            # Average performance of the clients
-            write_logs(non_drifted_client_averages,
-                       file_name=log_save_path + constants.Logs.NON_DRIFTED_CLIENT_AVG_LOG)
-            write_logs(drifted_client_averages,
-                       file_name=log_save_path + constants.Logs.DRIFTED_CLIENT_AVG_LOG)
-            # write_logs(client_averages, file_name=log_save_path + constants.Logs.CLIENT_AVG_LOG)
+            if not self.drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.ORACLE:
+                write_logs(clients_loss_and_accuracy, file_name=log_save_path + constants.Logs.CLIENT_LOG)
+                # Log the performance of the clients separated by drifted and non-drifted
+                write_logs(non_drifted_clients_loss_and_accuracy,
+                           file_name=log_save_path + constants.Logs.NON_DRIFTED_CLIENT_LOG)
+                write_logs(drifted_clients_loss_and_accuracy,
+                           file_name=log_save_path + constants.Logs.DRIFTED_CLIENT_LOG)
+                # Average performance of the clients
+                write_logs(non_drifted_client_averages,
+                           file_name=log_save_path + constants.Logs.NON_DRIFTED_CLIENT_AVG_LOG)
+                write_logs(drifted_client_averages,
+                           file_name=log_save_path + constants.Logs.DRIFTED_CLIENT_AVG_LOG)
+                # write_logs(client_averages, file_name=log_save_path + constants.Logs.CLIENT_AVG_LOG)
+            else:
+                write_logs(clients_loss_and_accuracy, file_name=log_save_path + constants.Logs.CLIENT_LOG)
 
-            # Get average performance of the servers
-            server_level_averages, server_overall_averages = compute_server_average_metrics(server_loss_and_accuracy)
+            if not self.drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.ORACLE:
+                # Get average performance of the servers
+                server_level_averages, server_overall_averages = compute_server_average_metrics(server_loss_and_accuracy)
 
             # Log the performance of the server hierarchy
             write_logs(server_loss_and_accuracy, file_name=log_save_path + constants.Logs.SERVER_LOG)
-            write_logs(server_level_averages, file_name=log_save_path + constants.Logs.SERVER_LVL_AVG_LOG)
-            write_logs(server_overall_averages, file_name=log_save_path + constants.Logs.SERVER_OVERALL_AVG_LOG)
+            if not self.drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.ORACLE:
+                write_logs(server_level_averages, file_name=log_save_path + constants.Logs.SERVER_LVL_AVG_LOG)
+                write_logs(server_overall_averages, file_name=log_save_path + constants.Logs.SERVER_OVERALL_AVG_LOG)
+
+            # Log drift specifications
+            drift_specs = {
+                "drift_step_rounds": self.drift.drift_step_rounds,
+                "drift_clustered_client_indices": self.drift.drift_clustered_client_indices
+            }
+            write_logs(drift_specs, file_name=log_save_path + constants.Logs.DRIFT_SPECS_LOG)
 
             # =========PLOTTING FUNCTION CALLS==============
-            # Split the average performance of the clients to drifted and non-drifted clients
-            non_drifted_clients_loss_and_accuracy, drifted_clients_loss_and_accuracy = split_clients_loss_and_accuracy(
-                clients_loss_and_accuracy, self.drift.drifted_client_indices)
-            non_drifted_client_averages = compute_client_average_metrics(non_drifted_clients_loss_and_accuracy)
-            drifted_client_averages = compute_client_average_metrics(drifted_clients_loss_and_accuracy)
+            if not self.drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.ORACLE:
+                # Split the average performance of the clients to drifted and non-drifted clients
+                non_drifted_clients_loss_and_accuracy, drifted_clients_loss_and_accuracy = split_clients_loss_and_accuracy(
+                    clients_loss_and_accuracy, self.drift.drifted_client_indices)
+                non_drifted_client_averages = compute_client_average_metrics(non_drifted_clients_loss_and_accuracy)
+                drifted_client_averages = compute_client_average_metrics(drifted_clients_loss_and_accuracy)
 
-            # Plot average performances
-            plot_client_avg_performance_vs_rounds([non_drifted_client_averages, drifted_client_averages],
-                                                  self.drift.is_synchronous,
-                                                  file_save_path=file_save_path)
-            # plot_server_lvl_avg_performance_vs_rounds(server_level_averages, file_save_path=file_save_path)
-            # plot_server_overall_avg_performance_vs_rounds(server_overall_averages, file_save_path=file_save_path)
+                # Plot average performances
+                plot_client_avg_performance_vs_rounds([non_drifted_client_averages, drifted_client_averages],
+                                                      self.drift.is_synchronous,
+                                                      file_save_path=file_save_path)
+                # plot_server_lvl_avg_performance_vs_rounds(server_level_averages, file_save_path=file_save_path)
+                # plot_server_overall_avg_performance_vs_rounds(server_overall_averages, file_save_path=file_save_path)

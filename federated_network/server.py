@@ -18,19 +18,21 @@ from distance_metrics.distance_metrics import compute_euclidean_distance_weights
 from drift_concepts.drift import Drift
 from federated_network.client import DEVICE, Client
 from models.model import SimpleModel, CNNModel, test, split_to_extractor_and_classifier, set_parameters, \
-    CNNTinyImageNet, CNNCIFAR10, CNNCIFAR100
+    CNNTinyImageNet, CNNCIFAR10, CNNCIFAR100, set_parameters_ema
 from strategy.FedRC.fedrc import get_fedrc_client_model_params
 
 
 class Server:
-    def __init__(self, _server_id, _abs_id, _strategy, _model, _cluster_count, _client_ids=None):
+    def __init__(self, _server_id, _abs_id, _strategy, _model, _cluster_count, _fedex_alpha, _client_ids=None):
         self.server_id = _server_id
         self.abs_id = _abs_id  # Absolute ID that keeps a running count of the servers in the server hierarchy
         self.strategy = _strategy
         self.model = _model
+        self.fedex_alpha = _fedex_alpha  # EMA weight (alpha) parameter for the FedEx algorithm
         self.client_ids = []  # List of client IDs the server is connected to in the federated network
         self.child_server_ids = []  # List of child server IDs in the server hierarchy
         self.parent_server_id = None  # Parent server ID in the server hierarchy
+        self.drift_id=None  # For clustering-based methods, the drift pattern ID assigned to this server (e.g., Oracle)
 
         # Create a list of models of size '_cluster_count'
         if self.strategy.strategy_name == constants.RecoveryAlgorithm.FEDRC:
@@ -43,8 +45,8 @@ class Server:
               aux_classifier_parameters: Dict[str, OrderedDict] = None, ema_weight: float = None) -> None:
         """
         Train the server model using the client model parameters.
-        :param client_model_parameters: List of client model parameters
-        :param aux_classifier_parameters: List of auxiliary classifier parameters from drifted clients
+        :param client_model_parameters: Dictionary of client model parameters
+        :param aux_classifier_parameters: Dictionary of auxiliary classifier parameters from drifted clients
         :param ema_weight: EMA weight (alpha) parameter for the FedAU algorithm
         :return: None
         """
@@ -61,8 +63,10 @@ class Server:
         # TODO: remove is_drift to use from the beginning
         elif self.strategy.strategy_name == constants.RecoveryAlgorithm.FEDEX:
             self.strategy.aggregate_models(self.model, client_model_parameters)
-        elif self.strategy.strategy_name in [constants.RecoveryAlgorithm.FEDRC, constants.RecoveryAlgorithm.ORACLE]:
+        elif self.strategy.strategy_name == constants.RecoveryAlgorithm.FEDRC:
             self.strategy.aggregate_models(self.multi_models, client_model_parameters)
+        elif self.strategy.strategy_name == constants.RecoveryAlgorithm.ORACLE:
+            self.strategy.aggregate_models(self.model, client_model_parameters)
         else:
             # FedAvg: For internal servers or when there are no drifted clients
             self.strategy.aggregate_models(self.model, client_model_parameters)
@@ -91,16 +95,16 @@ class Server:
             accuracies.append(float(accuracy))
         return losses, accuracies
 
-    def average_client_evaluation_results(self, all_clients: List[Client]) -> tuple:
+    def average_client_evaluation_results(self, sampled_clients: List[Client]) -> tuple:
         """
         Get the average evaluation performance (accuracy and loss) of the connected clients.
-        :param all_clients: List of all clients
+        :param sampled_clients: List of all clients
         :return: average loss and accuracy of the connected clients to this server
         """
         round_server_loss_and_accuracy = []
 
         # Get the clients connected to this server
-        connected_clients = [client for client in all_clients if client.client_id in self.client_ids]
+        connected_clients = [client for client in sampled_clients if client.client_id in self.client_ids]
 
         for client in connected_clients:
             round_server_loss_and_accuracy.append(client.evaluate())
@@ -128,13 +132,15 @@ def model_aggregation_fedrc(server: Server, sampled_clients: List[Client], verbo
     server.train(client_model_parameters, None, None)
 
 
-def model_aggreagation_oracle(server: Server, sampled_clients: List[Client], verbose=False) -> None:
+def model_aggregation_oracle(server: Server, sampled_clients: List[Client], verbose=False) -> None:
     """
     Aggregate the models of the clients to the server model for Oracle algorithm.
     :param server: Server instance
     :param sampled_clients: List of sampled clients
     :param verbose: Whether to print detailed logs or not
     """
+    client_model_parameters = {}
+
     if sampled_clients:  # Star topology
         # Get model parameters from all participating clients
         client_model_parameters = {client_id: sampled_clients[client_id].model.state_dict()
@@ -144,7 +150,8 @@ def model_aggreagation_oracle(server: Server, sampled_clients: List[Client], ver
         print('aggregate models: server:' + str(server.server_id) + ' -> ' + 'clients:' + str(server.client_ids))
 
     # Aggregate client models
-    server.train(client_model_parameters, None, None)
+    if client_model_parameters: # check to avoid empty dict error
+        server.train(client_model_parameters, None, None)
 
 
 def model_aggregation_fedau_fluid(server: Server, sampled_clients: List[Client], drift: Drift, ema_weight,
@@ -244,6 +251,7 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
     if _is_server_has_test_data and len(server_hierarchy) > 1:
         is_evaluate_server_model = True
 
+    #TODO: refactor: aggregation and evaluation could be separated
     # Aggregate the models of the clients to the server model.Start by aggregating the leaves and move up the hierarchy
     for depth_level in range(len(server_hierarchy) - 1, -1, -1):
         loss_and_accuracy_at_level = []
@@ -252,10 +260,10 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
             if depth_level == len(server_hierarchy) - 1:  # ==== Leaf servers ====
                 # Get client (learning) model parameters
                 if server.strategy.strategy_name == constants.RecoveryAlgorithm.FEDRC:
-                    model_aggregation_fedrc(server, sampled_clients, drift, verbose=verbose)
+                    model_aggregation_fedrc(server, sampled_clients, verbose=verbose)
 
                 elif server.strategy.strategy_name == constants.RecoveryAlgorithm.ORACLE:
-                    model_aggreagation_oracle(server, sampled_clients, drift, verbose=verbose)
+                    model_aggregation_oracle(server, sampled_clients, verbose=verbose)
 
                 elif server.strategy.strategy_name in {constants.RecoveryAlgorithm.FEDAU,
                                                        constants.RecoveryAlgorithm.FLUID}:
@@ -317,9 +325,11 @@ def model_distribution_fedex(servers: List[Server], all_clients: List[Client]) -
         # get the extractor of the server model
         server_extractor, _ = split_to_extractor_and_classifier(server.model, None)
 
-        # Load the composite unlearning model ({E, W_hat}) to the server model
-        set_parameters(client.model, server_extractor, False)
 
+        if server.fedex_alpha:  # if FedEx is used with EMA
+            set_parameters_ema(client.model, server_extractor, server.fedex_alpha, False)
+        else:   # Load the composite unlearning model ({E, W_hat}) to the server model
+            set_parameters(client.model, server_extractor, False)
 
 def model_distribution_fedrc(server_list: List[Server], sampled_clients: List[Client]) -> None:
     """
@@ -357,11 +367,27 @@ def server_hierarchy_evaluate(server_hierarchy: List[Server], server_test_set: D
     global_server = server_hierarchy[0][0]
 
     # TODO: this part has to be refactored
-    if _drift_recovery_method in [constants.RecoveryAlgorithm.FEDRC, constants.RecoveryAlgorithm.ORACLE]:
-        # Evaluate all multiple models in the servers, in clustering-based algorithms (FedRC, Oracle)
+    if _drift_recovery_method == constants.RecoveryAlgorithm.FEDRC:
+        # FEDRC: Evaluate all multiple models in the servers
         losses, accuracies = global_server.evaluate_multi_models(
             server_test_set)  # returns ([loss1, loss2,...], [acc1, acc2,...])
         server_loss_and_accuracy.append((losses, accuracies))
+    elif _drift_recovery_method == constants.RecoveryAlgorithm.ORACLE:
+        # ORACLE: multiple-server, clustering-based
+        if _is_server_has_test_data:
+            for server in server_hierarchy[0]:
+                if server.client_ids:   # to avoid empty server case
+                    loss, accuracy = server.model_evaluate(server_test_set)
+                    server_loss_and_accuracy.append([(loss, accuracy)])
+                else:   # TODO: give a better solution for empty server case
+                    server_loss_and_accuracy.append([(0.0, 0.0)])  # placeholder for empty server
+        else:
+            for server in server_hierarchy[0]:
+                if server.client_ids:   # to avoid empty server case
+                    loss, accuracy = server.average_client_evaluation_results(all_clients)
+                    server_loss_and_accuracy.append([(loss, accuracy)])
+                else:   # TODO: give a better solution for empty server case
+                    server_loss_and_accuracy.append([(0.0, 0.0)])  # placeholder for empty server
     else:
         if _is_server_has_test_data:
             loss, accuracy = global_server.model_evaluate(server_test_set)
@@ -402,26 +428,32 @@ def change_server_aggregation_strategy(server_hierarchy: List[Any], drift_recove
             drift_recovery_method == constants.RecoveryAlgorithm.FLUID):
         for server in server_hierarchy[-1]:  # applied only to leaf servers
             # change the strategy only in the servers where drifted clients are connected
-            drifted = set(drift.drifted_client_indices or [])  # makes sure it's at least an empty set and not None
-            if set(server.client_ids) & drifted:  # checks if there is any intersection
-                server.strategy = strategy.FedAU.aggregator_fn()
+            # drifted = set(drift.drifted_client_indices or [])  # makes sure it's at least an empty set and not None
+            # if set(server.client_ids) & drifted:  # checks if there is any intersection
+            server.strategy = strategy.FedAU.aggregator_fn()
+
     elif drift_recovery_method == constants.RecoveryAlgorithm.FEDEX:
         # TODO: implement for (1) drifted clients + during drift, (2) all clients + during drift (3) all clients +all times
         for server in server_hierarchy[-1]:  # applied only to leaf servers
-            # change the strategy only in the servers where drifted clients are connected
-            drifted = set(drift.drifted_client_indices or [])  # makes sure it's at least an empty set and not None
-            if set(server.client_ids) & drifted:  # checks if there is any intersection
-                server.strategy = strategy.FedEx.aggregator_fn()
-    elif drift_recovery_method == constants.RecoveryAlgorithm.FEDRC:
-        pass
+            # # change the strategy only in the servers where drifted clients are connected
+            # drifted = set(drift.drifted_client_indices or [])  # makes sure it's at least an empty set and not None
+            # if set(server.client_ids) & drifted:  # checks if there is any intersection
+            server.strategy = strategy.FedEx.aggregator_fn()
+
+    elif drift_recovery_method == constants.RecoveryAlgorithm.ORACLE:
+        for idx, server in enumerate(server_hierarchy[-1]):  # applied only to leaf servers
+            # assign drift_pattern ID for each server, so the clients with same drift pattern are connected to it.
+            server.drift_id = drift.unique_drift_ids[idx]
+            server.strategy = strategy.Oracle.aggregator_fn()
+
     else:
         # if the drift is ended, change the strategy back to FedAvg
         for server in server_hierarchy[-1]:
             server.strategy = strategy.FedAvg.aggregator_fn()
 
 
-def server_fn(server_id: int, dataset_name: str, server_abs_id: int, drift_recovery_method: str,
-              cluster_count: int) -> Server:
+def server_fn(server_id: int, dataset_name: str, server_abs_id: int, drift_recovery_method: str,  cluster_count: int,
+              fedex_alpha: float,) -> Server:
     """
     Create a server instances on demand for the optimal use of resources.
     :param server_id: Server ID
@@ -429,12 +461,15 @@ def server_fn(server_id: int, dataset_name: str, server_abs_id: int, drift_recov
     :param server_abs_id: Absolute server ID; a running count of all the servers created
     :param drift_recovery_method: Drift recovery method to be used by the client
     :param cluster_count: number of models (clusters) in the server (for multi-global-model methods, e.g.FedRC, Oracle)
+    :param fedex_alpha: EMA weight (alpha) parameter for the FedEx algorithm
     :returns Server: A Server instance.
     """
     if drift_recovery_method == constants.RecoveryAlgorithm.FEDRC:
         aggregator_strategy = strategy.FedRC.aggregator_fn()
     elif drift_recovery_method == constants.RecoveryAlgorithm.ORACLE:
         aggregator_strategy = strategy.Oracle.aggregator_fn()
+    elif drift_recovery_method == constants.RecoveryAlgorithm.FEDEX:    #TODO: remove after testing
+        aggregator_strategy = strategy.FedEx.aggregator_fn()    #TODO: remove after testing
     else:
         aggregator_strategy = strategy.FedAvg.aggregator_fn()
 
@@ -451,4 +486,4 @@ def server_fn(server_id: int, dataset_name: str, server_abs_id: int, drift_recov
         raise ValueError("Unsupported dataset name")
 
     return Server(_server_id=server_id, _abs_id=server_abs_id, _strategy=aggregator_strategy, _model=model,
-                  _cluster_count=cluster_count)
+                  _cluster_count=cluster_count, _fedex_alpha=fedex_alpha)

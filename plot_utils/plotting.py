@@ -88,7 +88,6 @@ def plot_server_performance_vs_rounds(loss_and_accuracy: List[List[Tuple]], file
     LOSS_INDEX = 0
     ACCURACY_INDEX = 1
 
-    # Get the number of server tree hierarchy levels
     num_levels = len(loss_and_accuracy[0])
 
     # Collect losses for each client across all rounds. Note: Here client_id = index of the client in the list
@@ -145,23 +144,13 @@ def plot_client_avg_performance_vs_rounds(loss_and_accuracy: List[List[Tuple]], 
     non_drifted_client_avg_accuracies = [x[0] for x in loss_and_accuracy[0]]
     non_drifted_client_avg_losses = [x[1] for x in loss_and_accuracy[0]]
 
-    if is_synchronous:
-        drifted_client_avg_accuracies = [x[0] for x in loss_and_accuracy[1]]
-        drifted_client_avg_losses = [x[1] for x in loss_and_accuracy[1]]
-    else:
-        early_drifted_client_avg_accuracies = [x[0] for x in loss_and_accuracy[1][0]]
-        early_drifted_client_avg_losses = [x[1] for x in loss_and_accuracy[1][0]]
-        late_drifted_client_avg_accuracies = [x[0] for x in loss_and_accuracy[1][1]]
-        late_drifted_client_avg_losses = [x[1] for x in loss_and_accuracy[1][1]]
+    drifted_client_avg_accuracies = [x[0] for x in loss_and_accuracy[1]]
+    drifted_client_avg_losses = [x[1] for x in loss_and_accuracy[1]]
 
     # Plot the average loss of the clients against the number of rounds
     plt.figure()  # Create a new figure for loss
     plt.plot(non_drifted_client_avg_losses, label='Average Client Loss')
-    if is_synchronous:
-        plt.plot(drifted_client_avg_losses, label='Average Drifted Client Loss')
-    else:
-        plt.plot(early_drifted_client_avg_losses, label='Average Early Drifted Client Loss')
-        plt.plot(late_drifted_client_avg_losses, label='Average Late Drifted Client Loss')
+    plt.plot(drifted_client_avg_losses, label='Average Drifted Client Loss')
 
     if file_save_path is None:
         file_save_path = constants.Paths.PLOT_SAVE_PATH
@@ -173,11 +162,7 @@ def plot_client_avg_performance_vs_rounds(loss_and_accuracy: List[List[Tuple]], 
     # Plot the average accuracy of the clients against the number of rounds
     plt.figure()  # Create a new figure for accuracy
     plt.plot(non_drifted_client_avg_accuracies, label='Average Client Accuracy')
-    if is_synchronous:
-        plt.plot(drifted_client_avg_accuracies, label='Average Drifted Client Accuracy')
-    else:
-        plt.plot(early_drifted_client_avg_accuracies, label='Average Early Drifted Client Accuracy')
-        plt.plot(late_drifted_client_avg_accuracies, label='Average Late Drifted Client Accuracy')
+    plt.plot(drifted_client_avg_accuracies, label='Average Drifted Client Accuracy')
 
     configure_and_save_plot(plt, constants.Plots.NUMBER_OF_ROUNDS, constants.Plots.ACCURACY,
                             constants.Plots.CLIENT_AVG_ACCURACY_VS_ROUNDS_TITLE,
@@ -350,6 +335,10 @@ def configure_and_save_plot(_plt, _x_label, _y_label, _title, _file_path, _legen
     # Save the plot as a PDF
     pdf_path = f"{_file_path}.pdf"
     _plt.savefig(pdf_path, format="pdf")
+    #
+    # # Save PGF (LaTeX-friendly vector format)
+    # pgf_path = f"{_file_path}.pgf"
+    # _plt.savefig(pgf_path, format="pgf")
 
     # Display the plot
     # _plt.show()

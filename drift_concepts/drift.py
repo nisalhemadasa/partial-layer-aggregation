@@ -19,13 +19,18 @@ from torch.utils.data import Dataset
 import constants
 from data.utils import get_num_classes_from_dataset, get_random_labels, convert_dataset_to_loader
 from drift_concepts.drift_scenarios import transpose_drift_pattern, read_drift_pattern_from_csv
-from federated_network.client import Client
+from drift_concepts.utils import cluster_client_indices_by_drift_patterns, get_clients_indices_with_drift
+from federated_network.client import Client, get_client_by_id
+
+
+# TODO: restructure the Drift class to multiple handler and util files, for improved readability
 
 
 class Drift:
     def __init__(self, drifted_clients_fraction, drift_group_proportions, is_synchronous, is_random, async_drift_specs,
                  drift_mode, drift_start_round, drift_end_round, drift_step_rounds, num_client_instances, max_rotation,
-                 class_pairs_to_swap, async_class_pairs_to_swap , label_swap_percentage_steps, current_drift_step):
+                 class_pairs_to_swap, drift_pattern_id_map, drift_patterns_over_time, label_swap_percentage_steps,
+                 current_drift_step):
         # Number of clients to be applied with drifted data
         self.num_drifted_clients = int(drifted_clients_fraction * num_client_instances)
 
@@ -65,10 +70,8 @@ class Drift:
         # List of clients that have drifted data
         self.drifted_client_indices = get_clients_indices_with_drift(num_client_instances,
                                                                      self.num_drifted_clients,
-                                                                     self.drift_group_sizes,
                                                                      self.is_synchronous,
-                                                                     self.is_random,
-                                                                     self.async_drift_specs)
+                                                                     self.is_random)
         print("Drifted clients: ", self.drifted_client_indices)
 
         # Maximum rotation angle for the drift created by rotations
@@ -76,9 +79,6 @@ class Drift:
 
         # Classes to be swapped in the label-swapping drift method
         self.class_pairs_to_swap = class_pairs_to_swap
-
-        # Classes to be swapped in the label-swapping drift method for asynchronous drift, with multiple drift groups
-        self.async_class_pairs_to_swap = async_class_pairs_to_swap
 
         # Current round of the federated training
         self.current_round = 0
@@ -97,6 +97,29 @@ class Drift:
 
         # Current drift step (used internally during simulation)
         self.current_drift_step = current_drift_step
+
+        # -----------------------
+        # for asynchronous-clustering based drift patterns
+        # -----------------------
+        # Map defining which swap pattern to be applied at each drift step
+        self.drift_pattern_id_map = drift_pattern_id_map
+
+        # List defining the swap patterns over time
+        self.drift_patterns_over_time = drift_patterns_over_time
+
+        # Get unique drift IDs including the no-drift ID (0)
+        unique_drift_ids = {0} | {drift_id for timestep in drift_patterns_over_time for drift_id in timestep}
+        self.unique_drift_ids = sorted(unique_drift_ids)  # convert to sorted list
+
+        # Get clusters-wise client indices based on the drift patterns
+        self.drift_clustered_client_indices = cluster_client_indices_by_drift_patterns(num_client_instances,
+                                                                                       self.num_drifted_clients,
+                                                                                       self.drift_group_sizes,
+                                                                                       self.is_synchronous,
+                                                                                       self.async_drift_specs)
+
+        # initialize the drifted_client_indices to the first-timestep's drifted client indices
+        self.drifted_client_indices = self.drift_clustered_client_indices[0]
 
     def rotate_images_gradually_incrementally(self, clients: List[Client]) -> List[Client]:
         """
@@ -149,6 +172,13 @@ class Drift:
 
         # Check if there are drifted clients
         if self.drifted_client_indices:
+            # TODO: uncomment the following part and modify the implementation to apply drift to each drifted client separately
+            # for idx in self.drifted_client_indices:
+            #     # get client with matching client_id (drifted client)
+            #     client = get_client_by_id(clients, idx)
+            #     # Duplicate a copy of the client (not the reference)
+            #     drifted_client_copy = copy.deepcopy(client)
+
             # Identify the first drifted client to process the dataset and duplicate a copy (not the reference)
             first_drifted_client = copy.deepcopy(clients[self.drifted_client_indices[0]])
 
@@ -174,7 +204,7 @@ class Drift:
     def rotate_images_gradually(self, clients: List[Client]) -> List[Client]:
         """
         Apply rotation drift to the images of the client dataset. The rotation is applied to all the samples (images) of
-         the drifted clients consistantly
+         the drifted clients consistently
         constant with the number of federated training rounds.
         :param clients: List of Client objects
         :return: List of Client objects with the rotated images in their datasets
@@ -210,6 +240,13 @@ class Drift:
 
         # Check if there are drifted clients
         if self.drifted_client_indices:
+            # TODO: uncomment the following part and modify the implementation to apply drift to each drifted client separately
+            # for idx in self.drifted_client_indices:
+            #     # get client with matching client_id (drifted client)
+            #     client = get_client_by_id(clients, idx)
+            #     # Duplicate a copy of the client (not the reference)
+            #     drifted_client_copy = copy.deepcopy(client)
+
             # Identify the first drifted client to process the dataset and duplicate a copy (not the reference)
             first_drifted_client = copy.deepcopy(clients[self.drifted_client_indices[0]])
 
@@ -293,83 +330,42 @@ class Drift:
 
         # Check if there are drifted clients
         if self.drifted_client_indices:
-            # Assign the updated datasets to all drifted clients, since they share the same data
             for idx in self.drifted_client_indices:
-                # Identify the first drifted client to process the dataset and duplicate a copy (not the reference)
-                first_drifted_client = copy.deepcopy(clients[idx])
-                # first_drifted_client_1 = copy.deepcopy(clients[idx])
+                # get client with matching client_id (drifted client)
+                client = get_client_by_id(clients, idx)
+                # Duplicate a copy of the client (not the reference)
+                drifted_client_copy = copy.deepcopy(client)
 
                 # FedAU & FLUID: create dataset with the swapped samples assigning random labels for training the auxiliary model
-                if (clients[idx].drift_recovery_method == constants.RecoveryAlgorithm.FEDAU or
-                        clients[idx].drift_recovery_method == constants.RecoveryAlgorithm.FLUID):
-                    aux_dataset = create_auxiliary_dataset(first_drifted_client.local_trainset.dataset,
+                if (client.drift_recovery_method == constants.RecoveryAlgorithm.FEDAU or
+                        client.drift_recovery_method == constants.RecoveryAlgorithm.FLUID):
+                    aux_dataset = create_auxiliary_dataset(drifted_client_copy.local_trainset.dataset,
                                                            class_pair_to_swap)
-                    clients[idx].aux_trainloader = convert_dataset_to_loader(aux_dataset, clients[idx].mini_batch_size)
+                    client.aux_trainloader = convert_dataset_to_loader(aux_dataset, client.mini_batch_size)
 
                 # Process training dataset
-                train_images, train_labels = swap_labels_in_dataset(first_drifted_client.local_trainset.dataset,
+                train_images, train_labels = swap_labels_in_dataset(drifted_client_copy.local_trainset.dataset,
                                                                     class_pair_to_swap)
-                first_drifted_client.local_trainset.dataset.data = train_images
-                first_drifted_client.local_trainset.dataset.targets = train_labels
+                drifted_client_copy.local_trainset.dataset.data = train_images
+                drifted_client_copy.local_trainset.dataset.targets = train_labels
 
                 # Process testing dataset
-                test_images, test_labels = swap_labels_in_dataset(first_drifted_client.testset.dataset,
+                test_images, test_labels = swap_labels_in_dataset(drifted_client_copy.testset.dataset,
                                                                   class_pair_to_swap)
-                first_drifted_client.testset.dataset.data = test_images
-                first_drifted_client.testset.dataset.targets = test_labels
+                drifted_client_copy.testset.dataset.data = test_images
+                drifted_client_copy.testset.dataset.targets = test_labels
 
-                clients[idx].local_trainset.dataset = first_drifted_client.local_trainset.dataset
-                clients[idx].testset.dataset = first_drifted_client.testset.dataset
+                client.local_trainset.dataset = drifted_client_copy.local_trainset.dataset
+                client.testset.dataset = drifted_client_copy.testset.dataset
 
                 if verbose:
-                    print(f"client {idx} train_dataset_id: {id(clients[idx].local_trainset.dataset)}")
+                    print(f"client {idx} train_dataset_id: {id(client.local_trainset.dataset)}")
 
         if verbose:
             for i, c in enumerate(clients):
                 print(f"client {i} train_dataset_id: {id(c.local_trainset.dataset)}")
 
         return clients
-
-
-def get_clients_indices_with_drift(_num_client_instances: int, _num_drifted_clients: int,
-                                   drift_group_sizes: list[list[int]], is_synchronous: bool, is_random: bool,
-                                   async_drift_specs: Dict) -> list:
-    """
-    Get the list of clients that have drifted data.
-    :param _num_client_instances: Total number of client instances in the federated network
-    :param _num_drifted_clients: Number of client undergoing drift
-    :param drift_group_sizes: Sizes of the drift affected client groups at each drift_step_rounds
-            - outer list : timesteps (len(drift_group_sizes) -> number of timesteps)
-            - inner list : sizes of drift groups (len(drift_group_sizes[0]) ->sequence of drifted client group sizes)
-    :param is_synchronous: Boolean indicating if the drift is synchronous or asynchronous
-    :param is_random: Boolean indicating if the drifted clients are selected randomly at the beginning
-    :param async_drift_specs: Dictionary containing the specifications for asynchronous drift
-    :return: Indices of clients with drifted data
-    """
-    if is_random and is_synchronous:  # only for the synchronous drift case
-        # get random permutation of client indices undergoing drift
-        client_indices = torch.randperm(_num_client_instances).tolist()
-        drifted_clients_indices = client_indices[:_num_drifted_clients]
-        return drifted_clients_indices
-    elif not is_synchronous:  # only for asynchronous drift cases
-        # get the first N clients as undergoing drift
-        drifted_clients_indices = []
-
-        for drift_timestep in drift_group_sizes:
-            current_group = []
-            client_idx = 1  # restart counting for each timestep
-
-            for group_size in drift_timestep:
-                # get consecutive client indices for the current drift group
-                current_group.append(list(range(client_idx, client_idx + group_size)))
-                client_idx += group_size
-
-            drifted_clients_indices.append(current_group)
-
-        async_drift_specs['drift_groups'] = drifted_clients_indices
-        return drifted_clients_indices
-    else:
-        raise ValueError("Synchronous non-random drift case is not implemented yet.")
 
 
 def modify_drifted_client_groups(drift: Drift, _round: int) -> None:
@@ -402,15 +398,6 @@ def drift_fn(num_client_instances: int, num_training_rounds: int, drift_specs: D
     print("Drift start round: ", drift_start_round)
     print("Drift end round: ", drift_end_round)
 
-    # # The round which the drift starts to affect on the second group of drifted clients in asynchronous case
-    # if not drift_specs['is_synchronous']:
-    #     # If Asynchronous drift patterns are custom defined using the parameters
-    #     drift_duration = drift_end_round - drift_start_round  # Duration of the drift in rounds
-    #     drift_split_round = math.ceil(
-    #         drift_start_round + drift_specs['async_drift_specs']['drift_split_round'] * drift_duration)
-    #     print("Async drift split round: ", drift_split_round)
-    #     drift_specs['async_drift_specs']['drift_split_round'] = drift_split_round
-
     return Drift(drifted_clients_fraction=drift_specs['clients_fraction'],
                  drift_group_proportions=drift_specs['drift_group_proportions'],
                  is_synchronous=drift_specs['is_synchronous'],
@@ -423,7 +410,8 @@ def drift_fn(num_client_instances: int, num_training_rounds: int, drift_specs: D
                  num_client_instances=num_client_instances,
                  max_rotation=drift_specs['max_rotation'],
                  class_pairs_to_swap=drift_specs['class_pairs_to_swap'],
-                 async_class_pairs_to_swap=drift_specs['async_class_pairs_to_swap'],
+                 drift_pattern_id_map=drift_specs['drift_pattern_id_map'],
+                 drift_patterns_over_time=drift_specs['drift_patterns_over_time'],
                  label_swap_percentage_steps=drift_specs['label_swap_percentage_steps'],
                  current_drift_step=drift_specs['current_drift_step'])
 
@@ -446,30 +434,40 @@ def apply_drift(clients: List[Client], drift: Drift) -> List[Client]:
             return clients
 
     elif drift.drift_mode == constants.DriftMode.LABEL_SWAP_INCREMENTAL_STEPS:
-        # for idx in range(len(drift.class_pairs_to_swap)):   # There are multiple sets of pairs to swap, at different steps
-        #     class_pair_to_swap = drift.class_pairs_to_swap[idx]
-        #     drift.swap_labels(clients, class_pair_to_swap)
-
         if not drift.is_already_applied:
             drift.is_already_applied = True
-            class_pair_to_swap = drift.class_pairs_to_swap[drift.current_drift_step]
-            drift.swap_labels(clients, class_pair_to_swap)
+            if drift.is_synchronous:
+                # SYNCHRONOUS: apply drift to all drifted clients based on the current drift step
+                class_pair_to_swap = drift.class_pairs_to_swap[drift.current_drift_step]
+                drift.swap_labels(clients, class_pair_to_swap)
+            else:
+                # ORACLE: apply drift to clusters of clients based on the drift patterns defined over time
+                original_drifted_client_indices = drift.drifted_client_indices  # save original drifted client indices
 
+                for idx, (_drift_id, _drift_class_pairs_to_swap) in enumerate(drift.drift_pattern_id_map.items()):
+                    # drift.drifted_client_indices = original_drifted_client_indices[idx]
+                    drift_clustered_clients = [client for client in clients if client.drift_id == _drift_id]
+                    drift.drifted_client_indices = [client.client_id for client in drift_clustered_clients]
+                    drift.swap_labels(drift_clustered_clients, _drift_class_pairs_to_swap)
+
+                drift.drifted_client_indices = original_drifted_client_indices  # restore original drifted client indices
         return clients
 
     elif drift.drift_mode == constants.DriftMode.ROTATION_GRADUAL_INCREMENTAL:
         # Incremental (angle & samples) drift happens at every round
         return drift.rotate_images_gradually_incrementally(clients)
+
     elif drift.drift_mode == constants.DriftMode.ROTATION_GRADUAL:
         # Gradual (angle) drift happens at every round
         return drift.rotate_images_gradually(clients)
+
     elif drift.drift_mode == constants.DriftMode.ROTATION_STEP_INCREMENTAL:
         # Incremental (angle & samples) drift happens at the defined drift steps
         if not drift.is_already_applied:
             drift.is_already_applied = True
             return drift.rotate_images_gradually_incrementally(clients)
-
         return clients
+
     else:
         print("Drift method not recognized. No drift applied.")
         return clients

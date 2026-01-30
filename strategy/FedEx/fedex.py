@@ -13,11 +13,15 @@ from torch import nn
 
 import constants
 from models.model import split_to_extractor_and_classifier, set_parameters
+from strategy.FedAvg import FedAvg
 
 
 class FedEx:
     def __init__(self, strategy_name: str):
         self.strategy_name = strategy_name
+
+        # Inside the clusters, Oracle uses FedAvg to aggregate its cluster-member client models
+        self.fedavg = FedAvg(constants.RecoveryAlgorithm.FEDAVG)
 
     def aggregate_models(self, server_model: nn.Module, client_model_params_dict: Dict[str, OrderedDict]) -> OrderedDict:
         """
@@ -27,6 +31,8 @@ class FedEx:
         :return: unlearning_composite_params: The parameters of aggregated composite unlearning model {E, W_hat}
         """
         extractors_params_list = []
+
+        # self.fedavg.aggregate_models(server_model, client_model_params_dict, None)
 
         for client_id, client_model_params in client_model_params_dict.items():
             # To all clients: split learning model to extractor and classifier parameters
@@ -48,7 +54,7 @@ def average_model_parameters(model_params_list: List[OrderedDict]) -> OrderedDic
     model_keys = model_params_list[0].keys()
 
     # Simple averaging of weights
-    averaged_model_params = model_params_list[0].copy()
+    averaged_model_params = model_params_list[0].copy() # TODO: what you add here server model params?
     for i in model_keys:
         averaged_model_params[i] = torch.stack(
             [model_params[i].float() for model_params in model_params_list], 0).mean(0)

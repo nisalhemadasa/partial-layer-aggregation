@@ -9,8 +9,8 @@ import copy
 from typing import List, OrderedDict, Dict, Any
 
 import constants
-from drift_concepts.drift import Drift, apply_drift
-from federated_network.client import set_parameters, Client, change_client_drift_recovery_method
+from drift_concepts.drift import apply_drift, Drift
+from federated_network.client import set_parameters, Client, change_client_drift_recovery_method, set_client_drift_ids
 from federated_network.server import Server, change_server_aggregation_strategy
 from strategy.FedRC import fedrc
 
@@ -27,6 +27,16 @@ def equal_distribution(num_clients: int, num_servers: int) -> List[int]:
 
     # Distribute extra clients to the first few servers
     return [base_clients + (1 if i < extra_clients else 0) for i in range(num_servers)]
+
+
+def first_server_lead_distribution(num_clients: int, num_servers: int) -> List[int]:
+    """
+    The 0th indexed (first server) get all the clients, others get none.
+    :param num_clients: Number of clients.
+    :param num_servers: Number of servers.
+    :return: List of integers representing the number of clients assigned to each server.
+    """
+    return [num_clients] + [0] * (num_servers - 1)
 
 
 def link_server_hierarchy(server_hierarchy: List[List[Server]]) -> None:
@@ -68,9 +78,10 @@ def link_clients_to_servers(leaf_servers: List[Server], clients: List[List[Clien
     # Distribute the clients to the servers according to a given ratio (e.g., equally, etc.)
     num_servers = len(leaf_servers)
 
-    for _clients in filter(len, clients):  # Skip empty client lists
+    for _clients in list(filter(len, clients)):  # Skip empty client lists
         # Get the distribution based on the strategy
-        client_distribution = equal_distribution(len(_clients), num_servers)
+        # client_distribution = equal_distribution(len(_clients), num_servers)
+        client_distribution = first_server_lead_distribution(len(_clients), num_servers)
 
         if sum(client_distribution) != len(_clients):
             raise ValueError("The distribution strategy must allocate all clients.")
@@ -97,6 +108,29 @@ def link_clients_to_servers(leaf_servers: List[Server], clients: List[List[Clien
             linked_client_count += client_distribution[i]
 
 
+def apply_drift_to_clients(drift: Drift, all_clients: list[Client]) -> None:
+    """
+    #TODO: this function could be moved to drift_concepts/utils.py
+    #TODO: to do that, a proper planning of package imports needs to be done
+    Apply drift to the selected clients in the network if necessary.
+    :param drift: Drift instance
+    :param all_clients: List of all client instances
+    :return: None
+    """
+    # Apply drift to the clients
+    if drift.is_drift:
+        # Sample data from the drift applied datasets
+        _ = apply_drift(all_clients, drift)
+
+        # TODO: the following needs to add the sampling refresh after drift
+        for client in all_clients:
+            client.sample_data()  # refresh loaders from drifted datasets
+    else:
+        for client in all_clients:
+            # Sample data from the original datasets
+            client.sample_data()
+
+
 def train_client_models(all_clients, sampled_client_ids, servers: List[Server], drift: Drift,
                         simulation_parameters: Dict, drift_recovery_method: str, verbose: bool = False) -> List:
     """
@@ -116,19 +150,6 @@ def train_client_models(all_clients, sampled_client_ids, servers: List[Server], 
     if verbose:
         print("Training client models...")
 
-    # Apply drift to the clients
-    if drift.is_drift:
-        # Sample data from the drift applied datasets
-        _ = apply_drift(all_clients, drift)
-
-        # TODO: the following needs to add the sampling refresh after drift
-        for client in all_clients:
-            client.sample_data()  # refresh loaders from drifted datasets
-    else:
-        for client in all_clients:
-            # Sample data from the original datasets
-            client.sample_data()
-
     for client in all_clients:
         # Get the server to which the client is connected
         server = servers[client.parent_server_id]
@@ -144,7 +165,9 @@ def train_client_models(all_clients, sampled_client_ids, servers: List[Server], 
                 round_client_loss_and_accuracy.append(client.evaluate())
 
             # Download the server model parameters to the client.
-            if not server.strategy.strategy_name in [constants.RecoveryAlgorithm.FEDEX, constants.RecoveryAlgorithm.FEDRC, constants.RecoveryAlgorithm.FEDAU]:
+            if not server.strategy.strategy_name in [constants.RecoveryAlgorithm.FEDEX,
+                                                     constants.RecoveryAlgorithm.FEDRC,
+                                                     constants.RecoveryAlgorithm.FEDAU]:
                 # FedRC and FedEx strategies have already done this in network.model_distribution_fedex and
                 # network.model_distribution_fedrc functions.
                 # FedAU does this inside the client.fit() function.
@@ -167,7 +190,7 @@ def train_client_models(all_clients, sampled_client_ids, servers: List[Server], 
 
         if not is_server_adaptability:
             if drift_recovery_method == constants.RecoveryAlgorithm.FEDRC:
-                losses, accuracies = client.evaluate_fedrc_models() # returns ([loss1, loss2,...], [acc1, acc2,...])
+                losses, accuracies = client.evaluate_fedrc_models()  # returns ([loss1, loss2,...], [acc1, acc2,...])
                 round_client_loss_and_accuracy.append((losses, accuracies))
             else:
                 # Evaluate the adaptability of the client models to the data
@@ -189,13 +212,97 @@ def update_progress(_round, num_training_rounds, verbose=True) -> None:
         print(f"\rSimulation Percentage completed: {progress:.2f}%", end="")
 
 
+def link_clients_to_servers_by_drift_id(clients: List[Client], server_hierarchy: List[Any]) -> None:
+    """
+    Clustering clients to servers based on their drift IDs.
+    :param clients: List of client instances
+    :param server_hierarchy: List of servers in the hierarchy
+    :return: None
+    """
+    for server in server_hierarchy:
+        server.client_ids = []  # reset the server's client IDs
+
+        for client in clients:
+            if client.drift_id == server.drift_id:
+                client.parent_server_id = server.server_id
+                server.client_ids.append(client.client_id)
+
+
+def handle_after_drift_configurations(drift: Drift, server_hierarchy: List[Any], drift_recovery_parameters: Dict,
+                                      clients: List[Client]) -> None:
+    """
+    Set parameter configurations for the operations after the drift ends.
+    :param drift: Drift instance
+    :param server_hierarchy: List of servers in the hierarchy
+    :param drift_recovery_parameters: Parameters specifying the drift recovery strategies
+    :param clients: List of client instances
+    :return: None
+    """
+    if drift.is_drift:  # execute only once: after the drift period ends
+        if not drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.FEDRC:
+            # Change the aggregation strategy back to FedAvg outside the drift window
+            change_server_aggregation_strategy(server_hierarchy, constants.RecoveryAlgorithm.FEDAVG, drift)
+
+            if not drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.FLUID:
+                # Change the clients' (all of them) drift recovery method
+                change_client_drift_recovery_method(clients, drift_recovery_parameters['base_aggregation_method'],
+                                                    drift.drifted_client_indices)
+            else:
+                # FLUID
+                # Change the clients' (only the drift affected clients) drift recovery method
+                change_client_drift_recovery_method(clients, constants.RecoveryAlgorithm.FLUID,
+                                                    drift.drifted_client_indices)
+
+        drift.is_drift = False
+
+
+def handle_in_drift_configurations(drift: Drift, server_hierarchy: List[Any], drift_recovery_parameters: Dict,
+                                   clients: List[Client]) -> None:
+    """
+    Set parameter configurations for the operations happening during the drift periods.
+    :param drift: Drift instance
+    :param server_hierarchy: List of servers in the hierarchy
+    :param drift_recovery_parameters: Parameters specifying the drift recovery strategies
+    :param clients: List of client instances
+    :return: None
+    """
+    if not drift.is_drift:  # execute only once: at the beginning of the drift step
+        # The server aggregation strategy needs to change for the FedAU's case, at the start of the drift step.
+        change_server_aggregation_strategy(server_hierarchy, drift_recovery_parameters['recovery_method'],
+                                           drift)
+
+        # Change the clients' (all of them) drift recovery method. (This is not needed for Oracle.)
+        change_client_drift_recovery_method(clients, drift_recovery_parameters['recovery_method'],
+                                            drift.drifted_client_indices)
+
+        drift.is_drift = True  # Drift occurs in the current step
+
+    drift.current_drift_step += 1  # Move to the next drift step
+
+    # For Oracle: Assign each drift affected client a drift group
+    if not drift.is_synchronous:
+        # set the drifted_client_indices to the current_drift_step's drifted client indices
+        drift.drifted_client_indices = drift.drift_clustered_client_indices[drift.current_drift_step]
+
+        set_client_drift_ids(clients, drift.drifted_client_indices, drift.unique_drift_ids,
+                             drift.drift_patterns_over_time[drift.current_drift_step])
+        if drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.ORACLE:
+            # Cluster clients to servers based on their drift IDs
+            link_clients_to_servers_by_drift_id(clients, server_hierarchy[-1])
+            p=0
+
+    # should not happen in LABEL_SWAP_ONCE's case, because apply_drift() is called once in that case
+    if not drift.drift_mode == constants.DriftMode.LABEL_SWAP_ONCE:
+        drift.is_already_applied = False  # Reset the flag to apply drift again in the next step
+
+
 def handle_drift_for_round(round_idx: int, drift: Drift, server_hierarchy: List[Any],
                            drift_recovery_parameters: Dict, clients: List[Client]) -> None:
     """
     Update drift state for the given round and switch server aggregation when needed.
     Mutates `drift.is_drift` and `drift.current_drift_step` and calls `change_aggregation_strategy` when
     entering/exiting drift steps.
-    By default, the initial server aggregation strategy is FedAvg.
+    By default, the initial server aggregation strategy is FedAvg for non-clustering approaches (else Oracle or FedRC).
     :param round_idx: Current training round index
     :param drift: Drift instance
     :param server_hierarchy: List of servers in the hierarchy
@@ -207,44 +314,15 @@ def handle_drift_for_round(round_idx: int, drift: Drift, server_hierarchy: List[
 
     # Outside the global drift window
     if round_idx < drift.drift_start_round or round_idx >= drift.drift_end_round:
-        if drift.is_drift:  # execute only once: after the drift period ends
-            if not drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.FEDRC:
-                # Change the aggregation strategy back to FedAvg outside the drift window
-                change_server_aggregation_strategy(server_hierarchy, constants.RecoveryAlgorithm.FEDAVG, drift)
-
-                if not drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.FLUID:
-                    # Change the clients' (all of them) drift recovery method
-                    change_client_drift_recovery_method(clients, drift_recovery_parameters['base_aggregation_method'],
-                                                        drift.drifted_client_indices)
-                else:
-                    # FLUID
-                    # Change the clients' (only the drift affected clients) drift recovery method
-                    change_client_drift_recovery_method(clients, constants.RecoveryAlgorithm.FLUID,
-                                                        drift.drifted_client_indices)
-
-            drift.is_drift = False
+        # parameter updates for the operations after the drift ends
+        handle_after_drift_configurations(drift, server_hierarchy, drift_recovery_parameters, clients)
 
         # Mark the end of the drift (in contrast to the before the drift starts), only once
         if round_idx >= drift.drift_end_round and not drift.is_drift_end:
             drift.is_drift_end = True
         return
-
-    else:
+    else:  # Inside the global drift window
         next_drift_step_round = drift.drift_step_rounds[drift.current_drift_step + 1]
         if round_idx >= next_drift_step_round:
-            if not drift.is_drift:  # execute only once: at the beginning of the drift step
-                # The server aggregation strategy needs to change for the FedAU's case, at the start of the drift step.
-                change_server_aggregation_strategy(server_hierarchy, drift_recovery_parameters['recovery_method'],
-                                                   drift)
-
-                # Change the clients' (all of them) drift recovery method
-                change_client_drift_recovery_method(clients, drift_recovery_parameters['recovery_method'],
-                                                    drift.drifted_client_indices)
-
-                drift.is_drift = True  # Drift occurs in the current step
-
-            drift.current_drift_step += 1  # Move to the next drift step
-
-            # should not happen in LABEL_SWAP_ONCE's case, because apply_drift() is called once in that case
-            if not drift.drift_mode == constants.DriftMode.LABEL_SWAP_ONCE:
-                drift.is_already_applied = False  # Reset the flag to apply drift again in the next step
+            # parameter updates for the next drift step
+            handle_in_drift_configurations(drift, server_hierarchy, drift_recovery_parameters, clients)
