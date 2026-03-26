@@ -28,8 +28,8 @@ from plot_utils.plotting import plot_client_performance_vs_rounds, plot_server_p
 
 class FederatedNetwork:
     def __init__(self, num_iid_client_instances, num_noniid_client_instances, server_tree_layout, num_training_rounds,
-                 dataset_name, drift_specs, simulation_parameters, drift_recovery_parameters,
-                 client_select_fraction=0.5, minibatch_size=128, num_local_epochs=3):
+                 dataset_name, noniid_partitioning_strategy, drift_specs, simulation_parameters,
+                 drift_recovery_parameters, client_select_fraction=0.5, minibatch_size=128, num_local_epochs=3):
         # Dataset name
         self.dataset_name = dataset_name
 
@@ -56,9 +56,15 @@ class FederatedNetwork:
         # Load the dataset
         self.trainset, self.testset = load_datasets(dataset_name)
 
-        # Partition the data set into subsets for each client
-        partitioned_noniid_trainsets = split_noniid_dataset(self.trainset, self.num_client_instances)
-        partitioned_noniid_testsets = split_noniid_dataset(self.testset, self.num_client_instances)
+        # Partition the data set into subsets for each client, following a distribution strategy
+        # For Personalized FL, we want to know how well does each client's model perform on data it would actually see.
+        # Giving each client a local test split that mirrors its training distribution achieves this (Hussaini et al. 2025, Jiang & Lin 2022, Lee et al. 2025)
+        # For performance measures on single global model-global ground truth performance measures:  want to know how
+        # good is this model overall. Keep the test set IID/global achieves this (Zhao et al. 2028, Li at al. 2021).
+        partitioned_noniid_trainsets = split_noniid_dataset(self.trainset, self.num_client_instances,
+                                                            noniid_partitioning_strategy)
+        partitioned_noniid_testsets = split_noniid_dataset(self.testset, self.num_client_instances,
+                                                           noniid_partitioning_strategy)
         partitioned_iid_trainsets = split_iid_dataset(self.trainset, self.num_client_instances)
         partitioned_iid_testsets = split_iid_dataset(self.testset, self.num_client_instances)
 
@@ -396,7 +402,7 @@ class FederatedNetwork:
                 non_drifted_clients_loss_and_accuracy, drifted_clients_loss_and_accuracy = split_clients_loss_and_accuracy(
                     clients_loss_and_accuracy, self.drift.drifted_client_indices, None)
             else:
-                #TODO: do not implement yet. Implement only if needed
+                # TODO: do not implement yet. Implement only if needed
                 pass
                 # non_drifted_clients_loss_and_accuracy, drifted_clients_loss_and_accuracy = split_clients_loss_and_accuracy(
                 #     clients_loss_and_accuracy, self.drift.drifted_client_indices,
@@ -417,7 +423,6 @@ class FederatedNetwork:
                 # average accuracies of each server is the average accuracies of the clients under that server. So
                 # additional client performance averaging is not needed.
                 pass
-
 
             if log_save_path is None:
                 log_save_path = constants.Paths.LOG_SAVE_PATH
@@ -441,7 +446,8 @@ class FederatedNetwork:
 
             if not self.drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.ORACLE:
                 # Get average performance of the servers
-                server_level_averages, server_overall_averages = compute_server_average_metrics(server_loss_and_accuracy)
+                server_level_averages, server_overall_averages = compute_server_average_metrics(
+                    server_loss_and_accuracy)
 
             # Log the performance of the server hierarchy
             write_logs(server_loss_and_accuracy, file_name=log_save_path + constants.Logs.SERVER_LOG)

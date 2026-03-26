@@ -141,24 +141,25 @@ def main():
 
     # Create a federated network
     fed_net = FederatedNetwork(
-        num_iid_client_instances=10,  # Number of IID clients in the federated network
+        num_iid_client_instances=0,  # Number of IID clients in the federated network
         # num_iid_client_instances=100,  # Suggested at FLTA
-        num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
+        num_noniid_client_instances=10,  # Number of non-IID clients in the federated network
         server_tree_layout=[1],
         # Number of servers at each level of the server tree of depth n = [n, n-1,..., 1]
         # num_training_rounds=100,  # In literature, over 50 rounds are trained. FLUID trains 100 rounds
         num_training_rounds=50,  # Number of training rounds (in literature, over 50 rounds are trained.)
         dataset_name=constants.DatasetNames.MNIST,  # Name of the dataset
+        noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
         drift_specs=drift_specifications,  # Drift specifications
         simulation_parameters=simulation_parameters,  # Parameters specifying the simulation scenarios
         client_select_fraction=1,  # Fraction of clients to be selected for each round
         drift_recovery_parameters=drift_recovery_parameters,  # Drift recovery algorithm related parameters
     )
 
-    # # Running the simulation
-    # fed_net.run_simulation(
-    #     file_save_path='plots/swap/test/saved_plots_fedex/',
-    #     log_save_path='logs/swap/test/saved_logs_fedex/')
+    # Running the simulation
+    fed_net.run_simulation(
+        file_save_path='plots/swap/test/saved_plots_fedex/',
+        log_save_path='logs/swap/test/saved_logs_fedex/')
 
     # # # # 000000000000000000000000000000000000000000000
     # # # Paper 1 - layer removal experiments

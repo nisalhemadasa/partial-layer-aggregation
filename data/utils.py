@@ -122,12 +122,28 @@ def split_iid_dataset(_dataset: Dataset, _num_partitions: int) -> List[Subset]:
     return [Subset(_dataset, indices) for indices in client_indices]
 
 
-def split_noniid_dataset(dataset: Dataset, num_partitions: int) -> List[Subset]:
+
+def split_noniid_dataset(dataset: Dataset, num_partitions: int, distribution: str) -> List[Subset]:
     """
-    Splits the dataset into non-IID partitions by first sorting by class label, then
+    Split the dataset into a selected noon-IID distribution.
+    :param dataset: The full dataset to split (e.g., FMNIST or MNIST training set)
+    :param num_partitions: Number of clients to split the dataset into
+    :param distribution: The type of non-IID distribution to create (e.g., "Pathological", "Dirichlet")
+    :return: A list of torch.utils.data.Subset objects, one per client
+    """
+    if distribution == constants.DatasetPartitionDistribution.PATHOLOGICAL:
+        return split_noniid_pathological(dataset, num_partitions)
+    elif distribution == constants.DatasetPartitionDistribution.DIRICHLET:
+        return split_noniid_dirichlet(dataset, num_partitions)
+    else:
+        raise ValueError(f"Unsupported non-IID distribution type: {distribution}")
+
+
+def split_noniid_pathological(dataset: Dataset, num_partitions: int) -> List[Subset]:
+    """
+    Splits the dataset into Pathological non-IID partitions by first sorting by class label, then
     dividing the sorted data into disjoint chunks. Each client gets data from a limited
     number of classes.
-
     :param dataset: The full dataset to split (e.g., FMNIST or MNIST training set)
     :param num_partitions: Number of clients to split the dataset into
     :return: A list of torch.utils.data.Subset objects, one per client
@@ -151,6 +167,53 @@ def split_noniid_dataset(dataset: Dataset, num_partitions: int) -> List[Subset]:
 
     # Create subsets for each partition
     partitioned_datasets = [Subset(dataset, indices.tolist()) for indices in partition_indices]
+
+    # for debug purposes
+    _unique_labels = get_unique_labels_per_subset(dataset, partitioned_datasets)
+
+    return partitioned_datasets
+
+
+def split_noniid_dirichlet(dataset: Dataset, num_partitions: int, alpha: float = 1) -> List[Subset]:
+    """
+    Splits the dataset into non-IID partitions using a Dirichlet distribution. Each client gets a mixture of classes,
+    with the degree of non-IID-ness controlled by the alpha parameter.
+    :param dataset: The full dataset to split (e.g., FMNIST or MNIST training set)
+    :param num_partitions: Number of clients to split the dataset into
+    :param alpha: Concentration parameter for the Dirichlet distribution (smaller alpha -> more non-IID). Guo et al. 2024 in FedRC has used alpha=1 for their experiments.
+    :return: A list of torch.utils.data.Subset objects, one per client
+    """
+    # Extract labels
+    labels = dataset.targets.numpy() if hasattr(dataset.targets, 'numpy') else np.array(dataset.targets)
+    indices = np.arange(len(labels))
+
+    # Get unique class labels and their corresponding indices
+    unique_labels = np.unique(labels)
+    label_indices = {label: indices[labels == label] for label in unique_labels}
+
+    # Create empty lists to hold the indices for each partition
+    partition_indices = [[] for _ in range(num_partitions)]
+
+    # For each class, distribute its samples among the partitions according to a Dirichlet distribution
+    for label in unique_labels:
+        class_indices = label_indices[label]
+        np.random.shuffle(class_indices)  # Shuffle class indices
+
+        # Sample proportions for this class from a Dirichlet distribution
+        proportions = np.random.dirichlet(alpha * np.ones(num_partitions))
+
+        # Calculate the number of samples for each partition based on the proportions
+        num_samples_per_partition = (proportions * len(class_indices)).astype(int)
+
+        # Distribute samples to partitions
+        start_idx = 0
+        for i in range(num_partitions):
+            end_idx = start_idx + num_samples_per_partition[i]
+            partition_indices[i].extend(class_indices[start_idx:end_idx])
+            start_idx = end_idx
+
+    # Create subsets for each partition
+    partitioned_datasets = [Subset(dataset, indices) for indices in partition_indices]
 
     # for debug purposes
     _unique_labels = get_unique_labels_per_subset(dataset, partitioned_datasets)

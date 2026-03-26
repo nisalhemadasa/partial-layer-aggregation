@@ -185,13 +185,12 @@ class RecoveryAlgorithm:
     FEDAVG = 'fedavg'  # Adam-based training
     # Server-side only algorithms
     RRT = 'rrt'
-    ORACLE = 'oracle'   # Clustering-based
+    ORACLE = 'oracle'  # Clustering-based
     # Both client-side and server-side algorithms
     FEDAU = 'fedau'
     FLUID = 'fluid'
     FEDEX = 'fedex'
-    FEDRC = 'fedrc' # Clustering-based
-
+    FEDRC = 'fedrc'  # Clustering-based
 
 
 # Types of models used in the project
@@ -201,3 +200,10 @@ class ModelTypes:
     CNN_CIFAR_10 = 'CNNCIFAR10'
     CNN_CIFAR_100 = 'CNNCIFAR100'
     CNN_TINY_IMAGENET = 'CNNTinyImageNet'
+
+
+# Types of dataset partitioning for simulating different client data distributions
+class DatasetPartitionDistribution:
+    PATHOLOGICAL = 'pathological'
+    DIRICHLET = 'dirichlet'
+    IID = 'iid'
