@@ -17,7 +17,7 @@ import strategy
 from distance_metrics.distance_metrics import compute_euclidean_distance_weights
 from drift_concepts.drift import Drift
 from federated_network.client import DEVICE, Client
-from models.model import SimpleModel, CNNModel, test, split_to_extractor_and_classifier, set_parameters, \
+from models.utils import SimpleModel, CNNModel, test, split_to_extractor_and_classifier, set_parameters, \
     CNNTinyImageNet, CNNCIFAR10, CNNCIFAR100, set_parameters_ema, TabularAdultModel
 from strategy.FedRC.fedrc import get_fedrc_client_model_params
 

@@ -15,7 +15,7 @@ from torch.utils.data import Dataset, Subset, DataLoader
 
 import constants
 from data.utils import convert_dataset_to_loader, get_num_classes_from_dataset
-from models.model import train, test, CNNModel, rapid_train, fedau_clientside_train, set_parameters, \
+from models.utils import train, test, CNNModel, rapid_train, fedau_clientside_train, set_parameters, \
     CNNTinyImageNet, CNNCIFAR10, CNNCIFAR100, TabularAdultModel
 from strategy.FedRC import fedrc
 

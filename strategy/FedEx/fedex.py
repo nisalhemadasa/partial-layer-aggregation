@@ -12,7 +12,7 @@ import torch
 from torch import nn
 
 import constants
-from models.model import split_to_extractor_and_classifier, set_parameters
+from models.utils import split_to_extractor_and_classifier, set_parameters
 from strategy.FedAvg import FedAvg
 
 

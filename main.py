@@ -165,7 +165,7 @@ def main():
 
     # # # # 000000000000000000000000000000000000000000000
     # # # Paper 1 - layer removal experiments
-    # # For these experiments, please refer to the modifications done inside the fedex.py amd model.py files
+    # # For these experiments, please refer to the modifications done inside the fedex.py amd utils.py files
     # # Only CIFAR-10 and MNIST dataset is used for these experiments
     # # # 00000000000000000000000000000000000000000000000
     # #00000000000000 MNIST 0000000000000000000000

@@ -12,7 +12,7 @@ from torch import nn
 
 import constants
 from distance_metrics.distance_metrics import compute_euclidean_distance_weights
-from models.model import set_parameters
+from models.utils import set_parameters
 
 
 class FedAvg:

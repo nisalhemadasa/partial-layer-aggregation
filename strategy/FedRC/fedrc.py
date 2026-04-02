@@ -18,7 +18,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 import constants
-from models.model import set_parameters
+from models.utils import set_parameters
 
 DEVICE = torch.device("cuda")  # Try "cuda" to train on GPU
 print(
