@@ -48,6 +48,33 @@ class SimpleModel(nn.Module):
         return constants.ModelTypes.SIMPLE_MODEL
 
 
+class TabularAdultModel(nn.Module):
+    """Simple MLP for tabular Adult dataset.
+
+    Architecture: Linear(in_dim -> hidden) -> ReLU -> Dropout -> Linear(hidden -> num_classes).
+    in_dim: in_dim of ADULT dataset is 108 after one-hot encoding and normalization.
+    Layer names use fc1 and fc2 so the existing parameter-splitting utilities can extract classifier params.
+    """
+    def __init__(self, _model_id: int = None):
+        super().__init__()
+        self.model_id = _model_id
+        self.fc1 = nn.Linear(in_features=104, out_features=128)
+        self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(0.5)
+        self.fc2 = nn.Linear(in_features=128, out_features=2)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: [B, features]
+        x = self.fc1(x)
+        x = self.relu(x)
+        x = self.dropout(x)
+        x = self.fc2(x)
+        return torch.log_softmax(x, dim=1)
+
+    def get_model_type(self) -> str:
+        return constants.ModelTypes.TABULAR_ADULT
+
+
 # for MNIST and F_MNIST dataset (28 x 28 dimensional images)
 class CNNModel(nn.Module):
     def __init__(self, _model_id: int = None):
@@ -510,6 +537,9 @@ def auxiliary_model_train(_model: nn.Module, _aux_dataset: DataLoader, _server_m
         aux_model = CNNCIFAR100().to(DEVICE)
     elif model_type == constants.ModelTypes.CNN_TINY_IMAGENET:
         aux_model = CNNTinyImageNet().to(DEVICE)
+    elif model_type == constants.ModelTypes.TABULAR_ADULT:
+        # New branch for TabularAdultModel
+        aux_model = TabularAdultModel().to(DEVICE)
     else:
         raise ValueError(f"Unsupported model type for auxiliary model training: {model_type}")
 

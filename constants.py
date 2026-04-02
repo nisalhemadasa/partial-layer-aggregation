@@ -37,6 +37,7 @@ class DatasetNames:
     CIFAR_10 = 'cifar-10-batches-py'
     CIFAR_100 = 'cifar-100-python'
     TINY_IMAGENET_200 = 'tiny-imagenet-200'
+    ADULT = 'adult'
 
 
 class DatasetFileNames:
@@ -200,6 +201,8 @@ class ModelTypes:
     CNN_CIFAR_10 = 'CNNCIFAR10'
     CNN_CIFAR_100 = 'CNNCIFAR100'
     CNN_TINY_IMAGENET = 'CNNTinyImageNet'
+    # Tabular / Adult dataset model
+    TABULAR_ADULT = 'TabularAdultModel'
 
 
 # Types of dataset partitioning for simulating different client data distributions

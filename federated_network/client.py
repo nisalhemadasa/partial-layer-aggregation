@@ -16,7 +16,7 @@ from torch.utils.data import Dataset, Subset, DataLoader
 import constants
 from data.utils import convert_dataset_to_loader, get_num_classes_from_dataset
 from models.model import train, test, CNNModel, rapid_train, fedau_clientside_train, set_parameters, \
-    CNNTinyImageNet, CNNCIFAR10, CNNCIFAR100
+    CNNTinyImageNet, CNNCIFAR10, CNNCIFAR100, TabularAdultModel
 from strategy.FedRC import fedrc
 
 DEVICE = torch.device("cuda")  # Try "cuda" to train on GPU
@@ -255,6 +255,8 @@ def client_fn(client_id: int, if_iid: bool, num_local_epochs: int, mini_batch_si
         _model = CNNCIFAR100()
     elif dataset_name == constants.DatasetNames.TINY_IMAGENET_200:
         _model = CNNTinyImageNet()
+    elif dataset_name == constants.DatasetNames.ADULT:
+        _model = TabularAdultModel()
     else:
         raise ValueError("Unsupported dataset name")
 

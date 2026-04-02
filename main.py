@@ -148,7 +148,7 @@ def main():
         # Number of servers at each level of the server tree of depth n = [n, n-1,..., 1]
         # num_training_rounds=100,  # In literature, over 50 rounds are trained. FLUID trains 100 rounds
         num_training_rounds=20,  # Number of training rounds (in literature, over 50 rounds are trained.)
-        dataset_name=constants.DatasetNames.MNIST,  # Name of the dataset
+        dataset_name=constants.DatasetNames.ADULT,  # Name of the dataset
         noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
         drift_specs=drift_specifications,  # Drift specifications
         simulation_parameters=simulation_parameters,  # Parameters specifying the simulation scenarios
