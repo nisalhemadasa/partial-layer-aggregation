@@ -15,7 +15,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 import constants
-from models import CNNModel, CNNCIFAR10, CNNCIFAR100, CNNTinyImageNet, TabularAdultModel
+from models import SimpleModel, CNNModel, CNNCIFAR10, CNNCIFAR100, TabularAdultModel, ConvNeXtTinyImageNet
 
 DEVICE = torch.device("cuda")  # Try "cuda" to train on GPU
 print(
@@ -155,7 +155,7 @@ def auxiliary_model_train(_model: nn.Module, _aux_dataset: DataLoader, _server_m
     elif model_type == constants.ModelTypes.CNN_CIFAR_100:
         aux_model = CNNCIFAR100().to(DEVICE)
     elif model_type == constants.ModelTypes.CNN_TINY_IMAGENET:
-        aux_model = CNNTinyImageNet().to(DEVICE)
+        aux_model = ConvNeXtTinyImageNet.to(DEVICE)
     elif model_type == constants.ModelTypes.TABULAR_ADULT:
         # New branch for TabularAdultModel
         aux_model = TabularAdultModel().to(DEVICE)
@@ -319,7 +319,7 @@ def rapid_train(_model: nn.Module, _dataset: DataLoader, _epochs: int, _batch_si
             print(f"Train Epoch {epoch + 1}: train loss {epoch_loss}, accuracy {epoch_acc}")
 
 
-def train(_model: nn.Module, _dataset: DataLoader, _epochs: int, verbose=False) -> None:
+def train(_model: nn.Module, _dataset: DataLoader, _epochs: int, verbose: bool = False) -> None:
     """
     Train the network on the training set.
     :param _model: The model to train
@@ -328,60 +328,129 @@ def train(_model: nn.Module, _dataset: DataLoader, _epochs: int, verbose=False) 
     :param verbose: Whether to print training progress
     :return: None
     """
-    # criterion = nn.BCEWithLogitsLoss()
-    # criterion = nn.BCELoss()
-    criterion = nn.CrossEntropyLoss()
-    _optimizer = torch.optim.Adam(_model.parameters(), lr=0.001)
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
 
     _model = _model.to(DEVICE)
-    _model.train()
+
+    optimizer = torch.optim.AdamW(
+        _model.parameters(),
+        lr=3e-4,
+        weight_decay=5e-2
+    )
+
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer,
+        T_max=_epochs,
+        eta_min=1e-6
+    )
+
+    use_amp = torch.cuda.is_available()
+    scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
 
     for epoch in range(_epochs):
-        correct, total, epoch_loss = 0, 0, 0.0
-        # this loop is added because _dataset is dictionary like and torch.from_numpy() expects only Dataloader types.
-        # Also takes batches of data from the dataset and trains the model
+        _model.train()
 
-        # Define the maximum number of batches to use per epoch
-        max_batches_per_epoch = 10
+        correct = 0
+        total = 0
+        epoch_loss = 0.0
+        num_batches = 0
 
-        # Limit the loop to a fixed number of batches
-        for batch_idx, (_x, _y) in enumerate(_dataset):
-            if batch_idx >= max_batches_per_epoch:
-                break
+        for _x, _y in _dataset:
+            inputs = _x.to(DEVICE, non_blocking=True)
+            labels = _y.to(DEVICE, non_blocking=True)
 
-            # inputs = _x.unsqueeze(1).float()  # Ensure images are in the right format and shape to feed to the model
-            inputs = _x
-            labels = _y
+            optimizer.zero_grad(set_to_none=True)
 
-            inputs = inputs.to(DEVICE)  # move inputs to device
-            labels = labels.to(DEVICE)  # move labels to device
+            with torch.cuda.amp.autocast(enabled=use_amp):
+                outputs = _model(inputs)
+                loss = criterion(outputs, labels)
 
-            # Clear gradients for each batch
-            _optimizer.zero_grad()
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
 
-            # Forward pass
-            outputs = _model(inputs)
-
-            # Calculate loss
-            try:
-                _loss = criterion(outputs, labels)
-            except Exception as e:
-                print(f"Error calculating loss: {e}")
-                continue
-
-            # Backward pass and optimization
-            _loss.backward()
-            _optimizer.step()
-
-            # Metrics
-            epoch_loss += _loss.item()
+            epoch_loss += loss.item()
+            num_batches += 1
             total += labels.size(0)
-            correct += (torch.max(outputs.data, 1)[1] == labels).sum().item()
+            correct += (outputs.argmax(dim=1) == labels).sum().item()
 
-        epoch_loss /= len(_dataset)
+        scheduler.step()
+
+        epoch_loss /= num_batches
         epoch_acc = correct / total
+
         if verbose:
-            print(f"Train Epoch {epoch + 1}: train loss {epoch_loss}, accuracy {epoch_acc}")
+            current_lr = scheduler.get_last_lr()[0]
+            print(
+                f"Train Epoch {epoch + 1}: "
+                f"train loss {epoch_loss:.4f}, "
+                f"accuracy {epoch_acc:.4f}, "
+                f"lr {current_lr:.6f}"
+            )
+
+# def train(_model: nn.Module, _dataset: DataLoader, _epochs: int, verbose=False) -> None:
+#     """
+#     Train the network on the training set.
+#     :param _model: The model to train
+#     :param _dataset: The dataloader containing training dataset
+#     :param _epochs: The number of epochs to train for
+#     :param verbose: Whether to print training progress
+#     :return: None
+#     """
+#     # criterion = nn.BCEWithLogitsLoss()
+#     # criterion = nn.BCELoss()
+#     criterion = nn.CrossEntropyLoss()
+#     _optimizer = torch.optim.Adam(_model.parameters(), lr=0.001)
+#
+#     _model = _model.to(DEVICE)
+#     _model.train()
+#
+#     for epoch in range(_epochs):
+#         correct, total, epoch_loss = 0, 0, 0.0
+#         # this loop is added because _dataset is dictionary like and torch.from_numpy() expects only Dataloader types.
+#         # Also takes batches of data from the dataset and trains the model
+#
+#         # Define the maximum number of batches to use per epoch
+#         max_batches_per_epoch = 10
+#
+#         # Limit the loop to a fixed number of batches
+#         for batch_idx, (_x, _y) in enumerate(_dataset):
+#             if batch_idx >= max_batches_per_epoch:
+#                 break
+#
+#             # inputs = _x.unsqueeze(1).float()  # Ensure images are in the right format and shape to feed to the model
+#             inputs = _x
+#             labels = _y
+#
+#             inputs = inputs.to(DEVICE)  # move inputs to device
+#             labels = labels.to(DEVICE)  # move labels to device
+#
+#             # Clear gradients for each batch
+#             _optimizer.zero_grad()
+#
+#             # Forward pass
+#             outputs = _model(inputs)
+#
+#             # Calculate loss
+#             try:
+#                 _loss = criterion(outputs, labels)
+#             except Exception as e:
+#                 print(f"Error calculating loss: {e}")
+#                 continue
+#
+#             # Backward pass and optimization
+#             _loss.backward()
+#             _optimizer.step()
+#
+#             # Metrics
+#             epoch_loss += _loss.item()
+#             total += labels.size(0)
+#             correct += (torch.max(outputs.data, 1)[1] == labels).sum().item()
+#
+#         epoch_loss /= len(_dataset)
+#         epoch_acc = correct / total
+#         if verbose:
+#             print(f"Train Epoch {epoch + 1}: train loss {epoch_loss}, accuracy {epoch_acc}")
 
 
 def test(_model: nn.Module, _dataset: DataLoader) -> tuple[float, float]:

@@ -15,6 +15,8 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset, TensorDataset
 from torchvision import datasets, transforms
 from ucimlrepo import fetch_ucirepo
+from torchvision.transforms import Compose, Resize, RandomHorizontalFlip, RandomResizedCrop
+from torchvision.transforms import ToTensor, Normalize, InterpolationMode
 
 import constants
 
@@ -38,9 +40,38 @@ def load_datasets(_dataset_name: str, verbose: bool = False) -> list[Dataset]:
     transform_cifar = transforms.Compose([transforms.ToTensor(),
                                           transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
-    transform_tiny_imagenet = transforms.Compose([transforms.ToTensor(),
-                                                  transforms.Normalize((0.5, 0.5, 0.5),
-                                                                       (0.5, 0.5, 0.5))])
+    # For TinyImageNet-200
+    # transform_tiny_imagenet = transforms.Compose([transforms.ToTensor(),
+    #                                               transforms.Normalize((0.5, 0.5, 0.5),
+    #                                                                    (0.5, 0.5, 0.5))])
+    mean = [0.485, 0.456, 0.406]
+    std = [0.229, 0.224, 0.225]
+
+    transform_train = Compose([
+        RandomResizedCrop(64, scale=(0.8, 1.0), interpolation=InterpolationMode.BICUBIC),
+        RandomHorizontalFlip(),
+        ToTensor(),
+        Normalize(mean, std),
+    ])
+
+    transform_val = Compose([
+        Resize((64, 64), interpolation=InterpolationMode.BICUBIC),
+        ToTensor(),
+        Normalize(mean, std),
+    ])
+
+    # deterministic transforms only for cached .data / .targets
+    cache_transform_train = Compose([
+        Resize((64, 64), interpolation=InterpolationMode.BICUBIC),
+        ToTensor(),
+        Normalize(mean, std),
+    ])
+
+    cache_transform_val = Compose([
+        Resize((64, 64), interpolation=InterpolationMode.BICUBIC),
+        ToTensor(),
+        Normalize(mean, std),
+    ])
 
     # =====================================================================
     # MNIST
@@ -122,7 +153,10 @@ def load_datasets(_dataset_name: str, verbose: bool = False) -> list[Dataset]:
     # Tiny-ImageNet-200 (custom loader)
     # =====================================================================
     elif _dataset_name == constants.DatasetNames.TINY_IMAGENET_200:
-        trainset, testset = getTinyImageNet(_dataset_name, transform_tiny_imagenet, verbose)
+        trainset, testset = getTinyImageNet(_dataset_name, _transform_tiny_imagenet_train=transform_train,
+                                            _transform_tiny_imagenet_val=transform_val,
+                                            _cache_transform_train=cache_transform_train,
+                                            _cache_transform_val=cache_transform_val, verbose=verbose)
 
     # =====================================================================
     # Adult (custom loader)
@@ -135,7 +169,6 @@ def load_datasets(_dataset_name: str, verbose: bool = False) -> list[Dataset]:
             transform=None,
             verbose=verbose
         )
-        p=0
 
     # =====================================================================
     else:
