@@ -201,6 +201,7 @@ class ModelTypes:
     CNN_CIFAR_10 = 'CNNCIFAR10'
     CNN_CIFAR_100 = 'CNNCIFAR100'
     CNN_TINY_IMAGENET = 'CNNTinyImageNet'
+    CONVNET_TINY_IMAGENET = 'ConvNeXtTinyImageNet'
     # Tabular / Adult dataset model
     TABULAR_ADULT = 'TabularAdultModel'
 

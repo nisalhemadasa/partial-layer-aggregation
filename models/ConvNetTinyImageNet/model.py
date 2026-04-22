@@ -3,6 +3,9 @@ from typing import List
 import torch
 import torch.nn as nn
 
+import constants
+
+
 class LayerNorm2d(nn.Module):
     """
     LayerNorm over channel dimension for NCHW tensors.
@@ -169,4 +172,4 @@ class ConvNeXtTinyImageNet(nn.Module):
         return x
 
     def get_model_type(self) -> str:
-        return "ConvNeXtTinyImageNet"
+        return constants.ModelTypes.CONVNET_TINY_IMAGENET

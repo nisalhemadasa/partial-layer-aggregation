@@ -23,7 +23,8 @@ print(
 )
 
 
-def split_to_extractor_and_classifier(_model: nn.Module, _model_params: OrderedDict) -> tuple[OrderedDict, OrderedDict]:
+def split_to_extractor_and_classifier(_model: nn.Module, _model_params: OrderedDict, model_type: str) -> tuple[
+    OrderedDict, OrderedDict]:
     """
     Split the model/model parameters into feature extractor and classifier parts. The feature extractor includes all layers except the
     final fully connected layer (fc2), while the classifier includes only the final fully connected layer.
@@ -34,52 +35,25 @@ def split_to_extractor_and_classifier(_model: nn.Module, _model_params: OrderedD
     if _model is not None:
         _model_params = _model.state_dict()
 
-    # # case 1
-    # get the extractor parameters (all except fc2 layer)
-    # extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if not k.startswith("fc1."))
-    # # get the extractor parameters (all except fc2 layer)
-    # extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if not k.startswith("fc2."))
-    # # For Tiny ImageNet200 model
-    # extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if not k.startswith("block3."))
-
-    # # case 2
     # get the extractor parameters (all except fc2 and fc1 layer)
-    extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if
-                                   not (k.startswith("fc1.") or k.startswith("fc2.") or k.startswith('conv2')))
-    # # For Tiny ImageNet200 model
-    # extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if
-    #                                not (k.startswith("block3.") or k.startswith("block2.") or k.startswith("block1.")))
-    # extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if
-    #                                not (k.startswith("block3.") or k.startswith("block2.")))
+    if model_type is not constants.ModelTypes.CONVNET_TINY_IMAGENET:
+        # extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if
+        #                                not (k.startswith("fc1.") or k.startswith("fc2.") or k.startswith('conv2')))
+        extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if
+                                       not (k.startswith("fc1.") or k.startswith("fc2.")))
+    else:
+        # For Tiny ImageNet200 model
+        extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if
+                                       not (k.startswith("head.")))  # extractor layers start with as 'norm.'
 
-    # # case 3
-    # # get the extractor parameters (only fc2 layer)
-    # extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if k.startswith("fc2."))
-
-    # # case 4
-    # # No layers are dropped. Layer (fc3.) is added.
-    # extractor_params = OrderedDict((k, v) for k, v in _model_params.items())
-
-    # # case 5
-    # # get the extractor parameters (all except fc3. layer)
-    # extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if not k.startswith("fc3."))
-
-    # # case 6
-    # # get the extractor parameters (only fc3. layer)
-    # extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if k.startswith("fc3."))
-
-    # # case 7
-    # # get the extractor parameters (only fc2. and fc3. layer)
-    # extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if (k.startswith("fc3.") or k.startswith("fc2.")))
-
-    # # case 8
-    # # get the extractor parameters (all except fc2. layer: middle layer), fc1, fc3 remaining.
-    # extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if not k.startswith("fc2."))
-
-    # get the classifier parameters (fc2 layer)
-    # classifier_params = OrderedDict((k, v) for k, v in _model_params.items() if k.startswith("fc2."))
-    # For Tiny ImageNet200 model
-    classifier_params = OrderedDict((k, v) for k, v in _model_params.items() if k.startswith("block3."))
+    if model_type is not constants.ModelTypes.CONVNET_TINY_IMAGENET:
+        # get the classifier parameters (fc2 layer)
+        # classifier_params = OrderedDict((k, v) for k, v in _model_params.items() if k.startswith("fc2."))
+        classifier_params = OrderedDict((k, v) for k, v in _model_params.items() if
+                                        (k.startswith("fc1.") or k.startswith("fc2.")))
+    else:
+        # For Tiny ImageNet200 model
+        classifier_params = OrderedDict((k, v) for k, v in _model_params.items() if k.startswith("head."))
 
     return extractor_params, classifier_params
 
@@ -172,7 +146,7 @@ def auxiliary_model_train(_model: nn.Module, _aux_dataset: DataLoader, _server_m
     train(aux_model, _aux_dataset, _epochs=_epochs, verbose=_verbose)
 
     # get the classifier of the auxiliary module
-    _, _auxiliary_classifier_params = split_to_extractor_and_classifier(aux_model, None)
+    _, _auxiliary_classifier_params = split_to_extractor_and_classifier(aux_model, None, aux_model.get_model_type())
 
     return _auxiliary_classifier_params
 
@@ -387,6 +361,7 @@ def train(_model: nn.Module, _dataset: DataLoader, _epochs: int, verbose: bool =
                 f"accuracy {epoch_acc:.4f}, "
                 f"lr {current_lr:.6f}"
             )
+
 
 # def train(_model: nn.Module, _dataset: DataLoader, _epochs: int, verbose=False) -> None:
 #     """
