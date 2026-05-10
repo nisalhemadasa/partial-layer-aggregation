@@ -16,6 +16,7 @@ from torch.utils.data import Dataset, Subset, DataLoader
 import constants
 from data.utils import convert_dataset_to_loader, get_num_classes_from_dataset
 from models import ConvNeXtTinyImageNet
+from models.CNNCIFAR100.model import ResNet18CIFAR100, ShallowResNetCIFAR100
 from models.CNNTinyImageNet.model import ResNet18TinyImageNet, ConvNeXtTinyTinyImageNet
 from models.utils import train, test, CNNModel, rapid_train, fedau_clientside_train, set_parameters, \
     CNNCIFAR10, CNNCIFAR100, TabularAdultModel
@@ -254,7 +255,9 @@ def client_fn(client_id: int, if_iid: bool, num_local_epochs: int, mini_batch_si
     elif dataset_name == constants.DatasetNames.CIFAR_10:
         _model = CNNCIFAR10()
     elif dataset_name == constants.DatasetNames.CIFAR_100:
-        _model = CNNCIFAR100()
+        # _model = ShallowResNetCIFAR100()
+        _model = ResNet18CIFAR100()
+        # _model = CNNCIFAR100()
     elif dataset_name == constants.DatasetNames.TINY_IMAGENET_200:
         _model = ConvNeXtTinyImageNet()
     elif dataset_name == constants.DatasetNames.ADULT:

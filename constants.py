@@ -203,7 +203,7 @@ class ModelTypes:
     CNN_TINY_IMAGENET = 'CNNTinyImageNet'
     CONVNET_TINY_IMAGENET = 'ConvNeXtTinyImageNet'
     # Tabular / Adult dataset model
-    TABULAR_ADULT = 'TabularAdultModel'
+    ADULT_CLASSIFIER = 'AdultClassifierModel'
 
 
 # Types of dataset partitioning for simulating different client data distributions

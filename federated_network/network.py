@@ -29,7 +29,7 @@ from plot_utils.plotting import plot_client_performance_vs_rounds, plot_server_p
 class FederatedNetwork:
     def __init__(self, num_iid_client_instances, num_noniid_client_instances, server_tree_layout, num_training_rounds,
                  dataset_name, noniid_partitioning_strategy, drift_specs, simulation_parameters,
-                 drift_recovery_parameters, client_select_fraction=0.5, minibatch_size=128, num_local_epochs=3):
+                 drift_recovery_parameters, client_select_fraction=0.5, minibatch_size=128, num_local_epochs=5):
         # Dataset name
         self.dataset_name = dataset_name
 

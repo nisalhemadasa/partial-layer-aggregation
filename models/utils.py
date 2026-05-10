@@ -16,6 +16,7 @@ from torch.utils.data import DataLoader
 
 import constants
 from models import SimpleModel, CNNModel, CNNCIFAR10, CNNCIFAR100, TabularAdultModel, ConvNeXtTinyImageNet
+from models.CNNCIFAR100.model import ResNet18CIFAR100, ShallowResNetCIFAR100
 
 DEVICE = torch.device("cuda")  # Try "cuda" to train on GPU
 print(
@@ -37,10 +38,20 @@ def split_to_extractor_and_classifier(_model: nn.Module, _model_params: OrderedD
 
     # get the extractor parameters (all except fc2 and fc1 layer)
     if model_type is not constants.ModelTypes.CONVNET_TINY_IMAGENET:
+        # For Deep CNNS
+        classifier_params = OrderedDict((k, v) for k, v in _model_params.items() if
+                                        k.startswith("fc1.") or k.startswith("fc2.") or k.startswith("fc3.") or k.startswith("fc4."))
+        # classifier_params = OrderedDict((k, v) for k, v in _model_params.items() if
+        #                                 k.startswith("fc4.") )
+
+        # For simple CNNs
         # extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if
         #                                not (k.startswith("fc1.") or k.startswith("fc2.") or k.startswith('conv2')))
+
+        # For ResNet like
         extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if
-                                       not (k.startswith("fc1.") or k.startswith("fc2.")))
+                                       not (k.startswith("fc1.") or k.startswith("fc2.") or
+                                            k.startswith("layer4.") or k.startswith("layer3.")))
     else:
         # For Tiny ImageNet200 model
         extractor_params = OrderedDict((k, v) for k, v in _model_params.items() if
@@ -48,9 +59,20 @@ def split_to_extractor_and_classifier(_model: nn.Module, _model_params: OrderedD
 
     if model_type is not constants.ModelTypes.CONVNET_TINY_IMAGENET:
         # get the classifier parameters (fc2 layer)
-        # classifier_params = OrderedDict((k, v) for k, v in _model_params.items() if k.startswith("fc2."))
+
+        # For Deep CNNS
         classifier_params = OrderedDict((k, v) for k, v in _model_params.items() if
-                                        (k.startswith("fc1.") or k.startswith("fc2.")))
+                                        k.startswith("fc1.") or k.startswith("fc2.") or k.startswith("fc3.") or k.startswith("fc4."))
+        # classifier_params = OrderedDict((k, v) for k, v in _model_params.items() if
+        #                                 k.startswith("fc4.") )
+
+        # For ResNet like
+        # classifier_params = OrderedDict((k, v) for k, v in _model_params.items() if
+        #                                 k.startswith("fc2.") or k.startswith("layer4.") or k.startswith("layer3."))
+
+        # For simple CNN
+        # classifier_params = OrderedDict((k, v) for k, v in _model_params.items() if
+        #                                 (k.startswith("fc1.") or k.startswith("fc2.")))
     else:
         # For Tiny ImageNet200 model
         classifier_params = OrderedDict((k, v) for k, v in _model_params.items() if k.startswith("head."))
@@ -127,7 +149,9 @@ def auxiliary_model_train(_model: nn.Module, _aux_dataset: DataLoader, _server_m
     elif model_type == constants.ModelTypes.CNN_CIFAR_10:
         aux_model = CNNCIFAR10().to(DEVICE)
     elif model_type == constants.ModelTypes.CNN_CIFAR_100:
-        aux_model = CNNCIFAR100().to(DEVICE)
+        # aux_model = ShallowResNetCIFAR100().to(DEVICE)
+        aux_model = ResNet18CIFAR100().to(DEVICE)
+        # aux_model = CNNCIFAR100().to(DEVICE)
     elif model_type == constants.ModelTypes.CNN_TINY_IMAGENET:
         aux_model = ConvNeXtTinyImageNet.to(DEVICE)
     elif model_type == constants.ModelTypes.TABULAR_ADULT:
@@ -302,24 +326,45 @@ def train(_model: nn.Module, _dataset: DataLoader, _epochs: int, verbose: bool =
     :param verbose: Whether to print training progress
     :return: None
     """
-    criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
+    # # For generic trainng
+    # criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
+    #
+    # _model = _model.to(DEVICE)
+    #
+    # optimizer = torch.optim.AdamW(
+    #     _model.parameters(),
+    #     lr=3e-4,
+    #     weight_decay=5e-2
+    # )
+    #
+    # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+    #     optimizer,
+    #     T_max=_epochs,
+    #     eta_min=1e-6
+    # )
+    #
+    # use_amp = torch.cuda.is_available()
+    # scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
 
-    _model = _model.to(DEVICE)
+    # For CIFAR-10 Boosting
+    criterion = nn.NLLLoss()
+    _model = _model.to(DEVICE).float()
 
-    optimizer = torch.optim.AdamW(
+    optimizer = torch.optim.SGD(
         _model.parameters(),
-        lr=3e-4,
-        weight_decay=5e-2
+        lr=0.01,
+        momentum=0.9,
+        weight_decay=5e-4
     )
 
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(
         optimizer,
-        T_max=_epochs,
-        eta_min=1e-6
+        milestones=[60, 120, 160],
+        gamma=0.2
     )
 
-    use_amp = torch.cuda.is_available()
-    scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
+    use_amp = False
+    scaler = torch.cuda.amp.GradScaler(enabled=False)
 
     for epoch in range(_epochs):
         _model.train()
@@ -330,8 +375,8 @@ def train(_model: nn.Module, _dataset: DataLoader, _epochs: int, verbose: bool =
         num_batches = 0
 
         for _x, _y in _dataset:
-            inputs = _x.to(DEVICE, non_blocking=True)
-            labels = _y.to(DEVICE, non_blocking=True)
+            inputs = _x.to(DEVICE, non_blocking=True).float()
+            labels = _y.to(DEVICE, non_blocking=True).long()
 
             optimizer.zero_grad(set_to_none=True)
 

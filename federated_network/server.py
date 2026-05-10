@@ -18,6 +18,7 @@ from distance_metrics.distance_metrics import compute_euclidean_distance_weights
 from drift_concepts.drift import Drift
 from federated_network.client import DEVICE, Client
 from models import ResNet18TinyImageNet
+from models.CNNCIFAR100.model import ResNet18CIFAR100, ShallowResNetCIFAR100
 from models.utils import SimpleModel, CNNModel, test, split_to_extractor_and_classifier, set_parameters, \
     CNNCIFAR10, CNNCIFAR100, set_parameters_ema, TabularAdultModel, ConvNeXtTinyImageNet
 from strategy.FedRC.fedrc import get_fedrc_client_model_params
@@ -480,7 +481,9 @@ def server_fn(server_id: int, dataset_name: str, server_abs_id: int, drift_recov
     elif dataset_name == constants.DatasetNames.CIFAR_10:
         model = CNNCIFAR10().to(DEVICE)
     elif dataset_name == constants.DatasetNames.CIFAR_100:
-        model = CNNCIFAR100().to(DEVICE)
+        # model = ShallowResNetCIFAR100().to(DEVICE)
+        model = ResNet18CIFAR100().to(DEVICE)
+        # model = CNNCIFAR100().to(DEVICE)
     elif dataset_name == constants.DatasetNames.TINY_IMAGENET_200:
         model = ConvNeXtTinyImageNet().to(DEVICE)
     elif dataset_name == constants.DatasetNames.ADULT:

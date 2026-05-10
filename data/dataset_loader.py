@@ -37,8 +37,18 @@ def load_datasets(_dataset_name: str, verbose: bool = False) -> list[Dataset]:
     transform_mnist = transforms.Compose([transforms.ToTensor(),
                                           transforms.Normalize((0.5,), (0.5,))])
 
-    transform_cifar = transforms.Compose([transforms.ToTensor(),
-                                          transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+    # For CIFAR
+    # transform_cifar = transforms.Compose([transforms.ToTensor(),
+    #                                       transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+    transform_cifar = transforms.Compose([
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize(
+            mean=(0.4914, 0.4822, 0.4465),
+            std=(0.2470, 0.2435, 0.2616)
+        )
+    ])
 
     # For TinyImageNet-200
     # transform_tiny_imagenet = transforms.Compose([transforms.ToTensor(),
