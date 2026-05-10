@@ -37,6 +37,7 @@ class DatasetNames:
     CIFAR_10 = 'cifar-10-batches-py'
     CIFAR_100 = 'cifar-100-python'
     TINY_IMAGENET_200 = 'tiny-imagenet-200'
+    ADULT = 'adult'
 
 
 class DatasetFileNames:
@@ -185,13 +186,12 @@ class RecoveryAlgorithm:
     FEDAVG = 'fedavg'  # Adam-based training
     # Server-side only algorithms
     RRT = 'rrt'
-    ORACLE = 'oracle'   # Clustering-based
+    ORACLE = 'oracle'  # Clustering-based
     # Both client-side and server-side algorithms
     FEDAU = 'fedau'
     FLUID = 'fluid'
     FEDEX = 'fedex'
-    FEDRC = 'fedrc' # Clustering-based
-
+    FEDRC = 'fedrc'  # Clustering-based
 
 
 # Types of models used in the project
@@ -201,3 +201,13 @@ class ModelTypes:
     CNN_CIFAR_10 = 'CNNCIFAR10'
     CNN_CIFAR_100 = 'CNNCIFAR100'
     CNN_TINY_IMAGENET = 'CNNTinyImageNet'
+    CONVNET_TINY_IMAGENET = 'ConvNeXtTinyImageNet'
+    # Tabular / Adult dataset model
+    ADULT_CLASSIFIER = 'AdultClassifierModel'
+
+
+# Types of dataset partitioning for simulating different client data distributions
+class DatasetPartitionDistribution:
+    PATHOLOGICAL = 'pathological'
+    DIRICHLET = 'dirichlet'
+    IID = 'iid'

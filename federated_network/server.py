@@ -17,8 +17,10 @@ import strategy
 from distance_metrics.distance_metrics import compute_euclidean_distance_weights
 from drift_concepts.drift import Drift
 from federated_network.client import DEVICE, Client
-from models.model import SimpleModel, CNNModel, test, split_to_extractor_and_classifier, set_parameters, \
-    CNNTinyImageNet, CNNCIFAR10, CNNCIFAR100, set_parameters_ema
+from models import ResNet18TinyImageNet
+from models.CNNCIFAR100.model import ResNet18CIFAR100, ShallowResNetCIFAR100
+from models.utils import SimpleModel, CNNModel, test, split_to_extractor_and_classifier, set_parameters, \
+    CNNCIFAR10, CNNCIFAR100, set_parameters_ema, TabularAdultModel, ConvNeXtTinyImageNet
 from strategy.FedRC.fedrc import get_fedrc_client_model_params
 
 
@@ -32,7 +34,7 @@ class Server:
         self.client_ids = []  # List of client IDs the server is connected to in the federated network
         self.child_server_ids = []  # List of child server IDs in the server hierarchy
         self.parent_server_id = None  # Parent server ID in the server hierarchy
-        self.drift_id=None  # For clustering-based methods, the drift pattern ID assigned to this server (e.g., Oracle)
+        self.drift_id = None  # For clustering-based methods, the drift pattern ID assigned to this server (e.g., Oracle)
 
         # Create a list of models of size '_cluster_count'
         if self.strategy.strategy_name == constants.RecoveryAlgorithm.FEDRC:
@@ -150,7 +152,7 @@ def model_aggregation_oracle(server: Server, sampled_clients: List[Client], verb
         print('aggregate models: server:' + str(server.server_id) + ' -> ' + 'clients:' + str(server.client_ids))
 
     # Aggregate client models
-    if client_model_parameters: # check to avoid empty dict error
+    if client_model_parameters:  # check to avoid empty dict error
         server.train(client_model_parameters, None, None)
 
 
@@ -251,7 +253,7 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
     if _is_server_has_test_data and len(server_hierarchy) > 1:
         is_evaluate_server_model = True
 
-    #TODO: refactor: aggregation and evaluation could be separated
+    # TODO: refactor: aggregation and evaluation could be separated
     # Aggregate the models of the clients to the server model.Start by aggregating the leaves and move up the hierarchy
     for depth_level in range(len(server_hierarchy) - 1, -1, -1):
         loss_and_accuracy_at_level = []
@@ -323,13 +325,13 @@ def model_distribution_fedex(servers: List[Server], all_clients: List[Client]) -
         # Get the server to which the client is connected
         server = servers[client.parent_server_id]
         # get the extractor of the server model
-        server_extractor, _ = split_to_extractor_and_classifier(server.model, None)
-
+        server_extractor, _ = split_to_extractor_and_classifier(server.model, None, server.model.get_model_type())
 
         if server.fedex_alpha:  # if FedEx is used with EMA
             set_parameters_ema(client.model, server_extractor, server.fedex_alpha, False)
-        else:   # Load the composite unlearning model ({E, W_hat}) to the server model
+        else:  # Load the composite unlearning model ({E, W_hat}) to the server model
             set_parameters(client.model, server_extractor, False)
+
 
 def model_distribution_fedrc(server_list: List[Server], sampled_clients: List[Client]) -> None:
     """
@@ -376,17 +378,17 @@ def server_hierarchy_evaluate(server_hierarchy: List[Server], server_test_set: D
         # ORACLE: multiple-server, clustering-based
         if _is_server_has_test_data:
             for server in server_hierarchy[0]:
-                if server.client_ids:   # to avoid empty server case
+                if server.client_ids:  # to avoid empty server case
                     loss, accuracy = server.model_evaluate(server_test_set)
                     server_loss_and_accuracy.append([(loss, accuracy)])
-                else:   # TODO: give a better solution for empty server case
+                else:  # TODO: give a better solution for empty server case
                     server_loss_and_accuracy.append([(0.0, 0.0)])  # placeholder for empty server
         else:
             for server in server_hierarchy[0]:
-                if server.client_ids:   # to avoid empty server case
+                if server.client_ids:  # to avoid empty server case
                     loss, accuracy = server.average_client_evaluation_results(all_clients)
                     server_loss_and_accuracy.append([(loss, accuracy)])
-                else:   # TODO: give a better solution for empty server case
+                else:  # TODO: give a better solution for empty server case
                     server_loss_and_accuracy.append([(0.0, 0.0)])  # placeholder for empty server
     else:
         if _is_server_has_test_data:
@@ -452,8 +454,8 @@ def change_server_aggregation_strategy(server_hierarchy: List[Any], drift_recove
             server.strategy = strategy.FedAvg.aggregator_fn()
 
 
-def server_fn(server_id: int, dataset_name: str, server_abs_id: int, drift_recovery_method: str,  cluster_count: int,
-              fedex_alpha: float,) -> Server:
+def server_fn(server_id: int, dataset_name: str, server_abs_id: int, drift_recovery_method: str, cluster_count: int,
+              fedex_alpha: float, ) -> Server:
     """
     Create a server instances on demand for the optimal use of resources.
     :param server_id: Server ID
@@ -468,8 +470,8 @@ def server_fn(server_id: int, dataset_name: str, server_abs_id: int, drift_recov
         aggregator_strategy = strategy.FedRC.aggregator_fn()
     elif drift_recovery_method == constants.RecoveryAlgorithm.ORACLE:
         aggregator_strategy = strategy.Oracle.aggregator_fn()
-    elif drift_recovery_method == constants.RecoveryAlgorithm.FEDEX:    #TODO: remove after testing
-        aggregator_strategy = strategy.FedEx.aggregator_fn()    #TODO: remove after testing
+    elif drift_recovery_method == constants.RecoveryAlgorithm.FEDEX:  # TODO: remove after testing
+        aggregator_strategy = strategy.FedEx.aggregator_fn()  # TODO: remove after testing
     else:
         aggregator_strategy = strategy.FedAvg.aggregator_fn()
 
@@ -479,9 +481,13 @@ def server_fn(server_id: int, dataset_name: str, server_abs_id: int, drift_recov
     elif dataset_name == constants.DatasetNames.CIFAR_10:
         model = CNNCIFAR10().to(DEVICE)
     elif dataset_name == constants.DatasetNames.CIFAR_100:
-        model = CNNCIFAR100().to(DEVICE)
+        # model = ShallowResNetCIFAR100().to(DEVICE)
+        model = ResNet18CIFAR100().to(DEVICE)
+        # model = CNNCIFAR100().to(DEVICE)
     elif dataset_name == constants.DatasetNames.TINY_IMAGENET_200:
-        model = CNNTinyImageNet().to(DEVICE)
+        model = ConvNeXtTinyImageNet().to(DEVICE)
+    elif dataset_name == constants.DatasetNames.ADULT:
+        model = TabularAdultModel().to(DEVICE)
     else:
         raise ValueError("Unsupported dataset name")
 

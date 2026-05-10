@@ -12,7 +12,7 @@ import torch
 from torch import nn
 
 import constants
-from models.model import split_to_extractor_and_classifier, set_parameters
+from models.utils import split_to_extractor_and_classifier, set_parameters
 
 
 class FedAU:
@@ -37,7 +37,8 @@ class FedAU:
             # To all clients: split learning model to extractor and classifier parameters
             extractor_params, _learning_classifier_params = split_to_extractor_and_classifier(None,
                                                                                               client_model_params_dict[
-                                                                                                  client_id])
+                                                                                                  client_id],
+                                                                                              server_model.get_model_type())
             if auxiliary_classifier_params_dict[client_id] is not None:  # Drifted clients
 
                 # Get auxiliary classifier parameters of the drifted client

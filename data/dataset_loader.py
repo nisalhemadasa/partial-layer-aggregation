@@ -7,18 +7,23 @@ Version: 1.0
 """
 import os
 import sys
-import urllib
-import zipfile
 from typing import List
 
-from urllib.request import urlretrieve
-
+from sklearn.preprocessing import StandardScaler
 import torch
-from torch.utils.data import Dataset, DataLoader
+from sklearn.model_selection import train_test_split
+from torch.utils.data import Dataset, TensorDataset
 from torchvision import datasets, transforms
-from torchvision.datasets import ImageFolder
+from ucimlrepo import fetch_ucirepo
+from torchvision.transforms import Compose, Resize, RandomHorizontalFlip, RandomResizedCrop
+from torchvision.transforms import ToTensor, Normalize, InterpolationMode
 
 import constants
+
+import numpy as np
+import pandas as pd
+
+from data.data_classes import getAdult, getTinyImageNet
 
 
 def load_datasets(_dataset_name: str, verbose: bool = False) -> list[Dataset]:
@@ -32,12 +37,51 @@ def load_datasets(_dataset_name: str, verbose: bool = False) -> list[Dataset]:
     transform_mnist = transforms.Compose([transforms.ToTensor(),
                                           transforms.Normalize((0.5,), (0.5,))])
 
-    transform_cifar = transforms.Compose([transforms.ToTensor(),
-                                          transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+    # For CIFAR
+    # transform_cifar = transforms.Compose([transforms.ToTensor(),
+    #                                       transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+    transform_cifar = transforms.Compose([
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize(
+            mean=(0.4914, 0.4822, 0.4465),
+            std=(0.2470, 0.2435, 0.2616)
+        )
+    ])
 
-    transform_tiny_imagenet = transforms.Compose([transforms.ToTensor(),
-                                                  transforms.Normalize((0.5, 0.5, 0.5),
-                                                                       (0.5, 0.5, 0.5))])
+    # For TinyImageNet-200
+    # transform_tiny_imagenet = transforms.Compose([transforms.ToTensor(),
+    #                                               transforms.Normalize((0.5, 0.5, 0.5),
+    #                                                                    (0.5, 0.5, 0.5))])
+    mean = [0.485, 0.456, 0.406]
+    std = [0.229, 0.224, 0.225]
+
+    transform_train = Compose([
+        RandomResizedCrop(64, scale=(0.8, 1.0), interpolation=InterpolationMode.BICUBIC),
+        RandomHorizontalFlip(),
+        ToTensor(),
+        Normalize(mean, std),
+    ])
+
+    transform_val = Compose([
+        Resize((64, 64), interpolation=InterpolationMode.BICUBIC),
+        ToTensor(),
+        Normalize(mean, std),
+    ])
+
+    # deterministic transforms only for cached .data / .targets
+    cache_transform_train = Compose([
+        Resize((64, 64), interpolation=InterpolationMode.BICUBIC),
+        ToTensor(),
+        Normalize(mean, std),
+    ])
+
+    cache_transform_val = Compose([
+        Resize((64, 64), interpolation=InterpolationMode.BICUBIC),
+        ToTensor(),
+        Normalize(mean, std),
+    ])
 
     # =====================================================================
     # MNIST
@@ -119,92 +163,22 @@ def load_datasets(_dataset_name: str, verbose: bool = False) -> list[Dataset]:
     # Tiny-ImageNet-200 (custom loader)
     # =====================================================================
     elif _dataset_name == constants.DatasetNames.TINY_IMAGENET_200:
-        file_path = os.path.join(constants.Paths.DATASET, _dataset_name)
-        files_exist = os.path.exists(file_path)
+        trainset, testset = getTinyImageNet(_dataset_name, _transform_tiny_imagenet_train=transform_train,
+                                            _transform_tiny_imagenet_val=transform_val,
+                                            _cache_transform_train=cache_transform_train,
+                                            _cache_transform_val=cache_transform_val, verbose=verbose)
 
-        if not files_exist:
-            url = "http://cs231n.stanford.edu/tiny-imagenet-200.zip"
-            zip_path = os.path.join(constants.Paths.DATASET, "tiny-imagenet-200.zip")
-
-            if verbose:
-                print("Downloading Tiny ImageNet-200...")
-
-            urllib.request.urlretrieve(url, zip_path)
-
-            if verbose:
-                print("Extracting...")
-
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                zip_ref.extractall(constants.Paths.DATASET)
-            os.remove(zip_path)
-
-        # Load using ImageFolder
-        train_dir = os.path.join(file_path, "train")
-        val_dir = os.path.join(file_path, "val")
-
-        # Tiny ImageNet validation folder needs restructuring
-        val_images_dir = os.path.join(val_dir, "images")
-        val_annotations = os.path.join(val_dir, "val_annotations.txt")
-
-        # Fix Tiny ImageNet validation folder structure if needed
-        if os.path.exists(val_annotations):
-            with open(val_annotations, "r") as f:
-                for line in f:
-                    parts = line.split()
-                    img = parts[0]
-                    cls = parts[1]
-                    img_src = os.path.join(val_images_dir, img)
-                    cls_dir = os.path.join(val_dir, cls)
-                    os.makedirs(cls_dir, exist_ok=True)
-                    img_dst = os.path.join(cls_dir, img)
-                    if os.path.exists(img_src):
-                        os.rename(img_src, img_dst)
-
-            # Remove original val/images folder
-            if os.path.exists(val_images_dir):
-                os.rmdir(val_images_dir)
-
-        trainset = ImageFolder(train_dir, transform=transform_tiny_imagenet)
-        testset = ImageFolder(val_dir, transform=transform_tiny_imagenet)
-
-        # --------- FAST bulk conversion to .data and .targets using DataLoader ----------
-        # ---------- tainset -------------
-        if verbose:
-            print("Converting Tiny ImageNet trainset to tensors (data, targets)...")
-
-        num_workers = min(8, os.cpu_count() or 1)
-
-        train_loader = DataLoader(trainset, batch_size=512, shuffle=False, num_workers=num_workers, pin_memory=True)
-
-        train_images = []
-        train_labels = []
-        for imgs, labels in train_loader:
-            train_images.append(imgs)
-            train_labels.append(labels)
-
-        trainset.data = torch.cat(train_images, dim=0)          # [N_train, 3, 64, 64]
-        trainset.targets = torch.cat(train_labels, dim=0)
-
-        # ---------- testset -------------
-        if verbose:
-            print("Converting Tiny ImageNet testset to tensors (data, targets)...")
-
-        test_loader = DataLoader(
-            testset,
-            batch_size=512,
-            shuffle=False,
-            num_workers=num_workers,
-            pin_memory=True,
+    # =====================================================================
+    # Adult (custom loader)
+    # =====================================================================
+    elif _dataset_name == constants.DatasetNames.ADULT:
+        trainset, testset = getAdult(
+            _dataset_name=_dataset_name,
+            test_size=0.2,
+            random_state=42,
+            transform=None,
+            verbose=verbose
         )
-
-        test_images = []
-        test_labels = []
-        for imgs, labels in test_loader:
-            test_images.append(imgs)
-            test_labels.append(labels)
-
-        testset.data = torch.cat(test_images, dim=0)  # [N_test, 3, 64, 64]
-        testset.targets = torch.cat(test_labels, dim=0)  # [N_test]
 
     # =====================================================================
     else:
@@ -212,7 +186,8 @@ def load_datasets(_dataset_name: str, verbose: bool = False) -> list[Dataset]:
         sys.exit()
 
     # Convert targets of CIFAR 10/100 and Tiny-ImageNet to tensors for consistency
-    if _dataset_name in [constants.DatasetNames.CIFAR_10, constants.DatasetNames.CIFAR_100, constants.DatasetNames.TINY_IMAGENET_200]:
+    if _dataset_name in [constants.DatasetNames.CIFAR_10, constants.DatasetNames.CIFAR_100,
+                         constants.DatasetNames.TINY_IMAGENET_200]:
         trainset.targets = torch.Tensor(trainset.targets).to(torch.int64)
         testset.targets = torch.Tensor(testset.targets).to(torch.int64)
 
