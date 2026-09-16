@@ -6,10 +6,26 @@ Date: 10-01-2025
 Version: 1.0
 """
 import csv
+import os
 import pickle
 from typing import List, Tuple, Dict, Any
 
 import constants
+
+
+def write_structured_log(data: Any, file_name: str) -> None:
+    """
+    Write pickle-serializable structured diagnostic data.
+    :param data: Structured diagnostic object.
+    :param file_name: Output path without extension.
+    :return: None
+    """
+    output_path = file_name + constants.FileExtentions.PKL
+    output_dir = os.path.dirname(output_path)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+    with open(output_path, 'wb') as file:
+        pickle.dump(data, file)
 
 
 def write_logs(loss_and_accuracy: List[any], file_name: str) -> None:

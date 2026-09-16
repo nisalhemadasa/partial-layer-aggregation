@@ -38,6 +38,8 @@ Their instances should be created in a similar way to the existing ones (e.g., O
 - Use existing constants from `constants.py` instead of adding duplicate string literals.
 - Helper functions should be added in a cleaner way, i.e., use `utils.py` whenever possible, and keep the main logic in the core modules.
 - Keep dataset handling inside `data/` and drift-specific behavior inside `drift_concepts/`.
+- Model-distance diagnostics use `ModelDistanceHistory` and are captured after aggregation and before distribution. Preserve this timing and structure because future FedEx optimization will consume it. Whole-model distance must remain true Euclidean L2 over all included tensors; do not replace it with a sum of layer norms.
+- Preserve `client_log.pkl` as post-training local-model metrics. Staged evaluation uses `evaluation_log.pkl`; `global_after_download` evaluates assigned server models without mutating `client.model`. Drifted-class metrics apply only to label-swap drift and must record the matching test-sample count. `server_metric_weighting` changes reported client-derived server metrics only, never aggregation weights.
 - Use `device_utils.get_device()` for device placement. Configure `auto`, `cpu`, or `cuda` through `configure_device()` before constructing models and optimizers; do not introduce fixed import-time CUDA devices. Auto mode falls back to CPU, while explicit unavailable CUDA raises an error. Do not change devices during an existing experiment.
 - Use the existing multiline docstring style for functions and methods: start with a short description, then list `:param ...:` entries and `:return:` when applicable.
 - Keep the existing vertical spacing style between functions: two blank lines between top-level functions and one blank line between class methods.
@@ -78,6 +80,10 @@ Before running, inspect all active `FederatedNetwork(...)` constructors and `fed
 ## Testing and Verification
 
 Focused device/training regression checks are in `tests/test_device.py`; run `python -m unittest discover -s tests -p test_device.py` with project dependencies installed. For changes to simulation behavior, also use the smallest feasible experiment configuration in `main.py` and run `python main.py` on the selected device. A comprehensive simulation test suite is not yet available.
+
+Focused model-distance checks are in `tests/test_model_distance_diagnostics.py`.
+
+Focused staged-evaluation checks are in `tests/test_evaluation.py`.
 
 For documentation-only changes, read the edited Markdown file back after writing it.
 

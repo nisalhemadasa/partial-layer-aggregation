@@ -178,6 +178,11 @@ class Logs:
     SERVER_LVL_AVG_LOG = 'server_level_avg_log'
     SERVER_OVERALL_AVG_LOG = 'server_overall_avg_log'
     DRIFT_SPECS_LOG = 'drift_specs_log'
+    MODEL_DISTANCES_LOG = 'model_distances_log'
+    LAYER_DISTANCES_LOG = 'layer_distances_log'
+    EVALUATION_LOG = 'evaluation_log'
+    DOWNLOADED_GLOBAL_CLIENT_LOG = 'downloaded_global_client_log'
+    DRIFTED_CLASS_LOG = 'drifted_class_log'
 
 
 # Drift recovery algorithms

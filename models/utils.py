@@ -18,10 +18,7 @@ import constants
 from models import SimpleModel, CNNModel, CNNCIFAR10, CNNCIFAR100, TabularAdultModel, ConvNeXtTinyImageNet
 from models.CNNCIFAR100.model import ResNet18CIFAR100, ShallowResNetCIFAR100
 
-DEVICE = torch.device("cuda")  # Try "cuda" to train on GPU
-print(
-    f"Training on {DEVICE} using PyTorch {torch.__version__}"
-)
+from device_utils import get_device
 
 
 def split_to_extractor_and_classifier(_model: nn.Module, _model_params: OrderedDict, model_type: str) -> tuple[
@@ -84,9 +81,9 @@ def fedau_clientside_train(_model: nn.Module, _dataset: DataLoader, _aux_dataset
                            _server_model_params: OrderedDict, _drifted_client_indices: List[int], _client_id,
                            _epochs: int, _mini_batch_size: int) -> OrderedDict:
     """
-    Performs clients dei training operations of the FedAU algorithm, following [2]. 
+    Performs clients dei training operations of the FedAU algorithm, following [2].
     This includes training the (1) learning module and (2) auxiliary module
-    
+
     [2] Implementation of FedAU algorithm following the paper: [2]H. Gu, G. Zhu, J. Zhang, X. Zhao, Y. Han, L. Fan and
     Q. Yang, “Unlearning during Learning: An Efficient Federated Machine Unlearning Method,” in
     Proceedings of the 33rd International Joint Conference on Artificial Intelligence (IJCAI-24)
@@ -145,18 +142,18 @@ def auxiliary_model_train(_model: nn.Module, _aux_dataset: DataLoader, _server_m
     # Initialize the auxiliary model (similar to learning module architecture)
     model_type = _model.get_model_type()
     if model_type == constants.ModelTypes.CNN_MODEL:
-        aux_model = CNNModel().to(DEVICE)
+        aux_model = CNNModel().to(get_device())
     elif model_type == constants.ModelTypes.CNN_CIFAR_10:
-        aux_model = CNNCIFAR10().to(DEVICE)
+        aux_model = CNNCIFAR10().to(get_device())
     elif model_type == constants.ModelTypes.CNN_CIFAR_100:
-        # aux_model = ShallowResNetCIFAR100().to(DEVICE)
-        aux_model = ResNet18CIFAR100().to(DEVICE)
-        # aux_model = CNNCIFAR100().to(DEVICE)
+        # aux_model = ShallowResNetCIFAR100().to(get_device())
+        aux_model = ResNet18CIFAR100().to(get_device())
+        # aux_model = CNNCIFAR100().to(get_device())
     elif model_type == constants.ModelTypes.CNN_TINY_IMAGENET:
-        aux_model = ConvNeXtTinyImageNet.to(DEVICE)
+        aux_model = ConvNeXtTinyImageNet.to(get_device())
     elif model_type == constants.ModelTypes.TABULAR_ADULT:
         # New branch for TabularAdultModel
-        aux_model = TabularAdultModel().to(DEVICE)
+        aux_model = TabularAdultModel().to(get_device())
     else:
         raise ValueError(f"Unsupported model type for auxiliary model training: {model_type}")
 
@@ -242,7 +239,7 @@ def rapid_train(_model: nn.Module, _dataset: DataLoader, _epochs: int, _batch_si
 
     criterion = nn.CrossEntropyLoss()
 
-    _model = _model.to(DEVICE)
+    _model = _model.to(get_device())
     _model.train()
     for epoch in range(_epochs):
         correct, total, epoch_loss = 0, 0, 0.0
@@ -266,8 +263,8 @@ def rapid_train(_model: nn.Module, _dataset: DataLoader, _epochs: int, _batch_si
             inputs = _x
             labels = _y
 
-            inputs = inputs.to(DEVICE)  # move inputs to device
-            labels = labels.to(DEVICE)  # move labels to device
+            inputs = inputs.to(get_device())  # move inputs to device
+            labels = labels.to(get_device())  # move labels to device
 
             # Clear gradients for each batch
             _model.zero_grad()
@@ -329,7 +326,7 @@ def train(_model: nn.Module, _dataset: DataLoader, _epochs: int, verbose: bool =
     # # For generic trainng
     # criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
     #
-    # _model = _model.to(DEVICE)
+    # _model = _model.to(get_device())
     #
     # optimizer = torch.optim.AdamW(
     #     _model.parameters(),
@@ -348,7 +345,7 @@ def train(_model: nn.Module, _dataset: DataLoader, _epochs: int, verbose: bool =
 
     # For CIFAR-10 Boosting
     criterion = nn.NLLLoss()
-    _model = _model.to(DEVICE).float()
+    _model = _model.to(get_device()).float()
 
     optimizer = torch.optim.SGD(
         _model.parameters(),
@@ -363,8 +360,7 @@ def train(_model: nn.Module, _dataset: DataLoader, _epochs: int, verbose: bool =
         gamma=0.2
     )
 
-    use_amp = False
-    scaler = torch.cuda.amp.GradScaler(enabled=False)
+    # Training remains full precision on both CPU and CUDA (AMP was previously disabled).
 
     for epoch in range(_epochs):
         _model.train()
@@ -375,18 +371,16 @@ def train(_model: nn.Module, _dataset: DataLoader, _epochs: int, verbose: bool =
         num_batches = 0
 
         for _x, _y in _dataset:
-            inputs = _x.to(DEVICE, non_blocking=True).float()
-            labels = _y.to(DEVICE, non_blocking=True).long()
+            inputs = _x.to(get_device(), non_blocking=True).float()
+            labels = _y.to(get_device(), non_blocking=True).long()
 
             optimizer.zero_grad(set_to_none=True)
 
-            with torch.cuda.amp.autocast(enabled=use_amp):
-                outputs = _model(inputs)
-                loss = criterion(outputs, labels)
+            outputs = _model(inputs)
+            loss = criterion(outputs, labels)
 
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
+            loss.backward()
+            optimizer.step()
 
             epoch_loss += loss.item()
             num_batches += 1
@@ -422,7 +416,7 @@ def train(_model: nn.Module, _dataset: DataLoader, _epochs: int, verbose: bool =
 #     criterion = nn.CrossEntropyLoss()
 #     _optimizer = torch.optim.Adam(_model.parameters(), lr=0.001)
 #
-#     _model = _model.to(DEVICE)
+#     _model = _model.to(get_device())
 #     _model.train()
 #
 #     for epoch in range(_epochs):
@@ -442,8 +436,8 @@ def train(_model: nn.Module, _dataset: DataLoader, _epochs: int, verbose: bool =
 #             inputs = _x
 #             labels = _y
 #
-#             inputs = inputs.to(DEVICE)  # move inputs to device
-#             labels = labels.to(DEVICE)  # move labels to device
+#             inputs = inputs.to(get_device())  # move inputs to device
+#             labels = labels.to(get_device())  # move labels to device
 #
 #             # Clear gradients for each batch
 #             _optimizer.zero_grad()
@@ -484,7 +478,7 @@ def test(_model: nn.Module, _dataset: DataLoader) -> tuple[float, float]:
     criterion = nn.CrossEntropyLoss()
     correct, total, loss = 0, 0, 0.0
 
-    _model = _model.to(DEVICE)
+    _model = _model.to(get_device())
     _model.eval()
 
     with torch.no_grad():
@@ -494,8 +488,8 @@ def test(_model: nn.Module, _dataset: DataLoader) -> tuple[float, float]:
             inputs = _x
             labels = _y
 
-            inputs = inputs.to(DEVICE)  # move inputs to device
-            labels = labels.to(DEVICE)  # move labels to device
+            inputs = inputs.to(get_device())  # move inputs to device
+            labels = labels.to(get_device())  # move labels to device
 
             # forward pass
             outputs = _model(inputs)
@@ -512,6 +506,43 @@ def test(_model: nn.Module, _dataset: DataLoader) -> tuple[float, float]:
     loss /= len(_dataset)
     accuracy = correct / total
     return loss, accuracy
+
+
+def test_subset_classes(_model: nn.Module, _dataset: DataLoader, target_classes: set[int]) -> tuple[float | None, float | None, int]:
+    """
+    Evaluate a model using only samples from the requested classes.
+    :param _model: The model to evaluate.
+    :param _dataset: The evaluation DataLoader.
+    :param target_classes: Class labels to include.
+    :return: Loss, accuracy, and evaluated sample count; loss and accuracy are None when no samples match.
+    """
+    if not target_classes:
+        return None, None, 0
+
+    criterion = nn.CrossEntropyLoss(reduction='sum')
+    correct = 0
+    total = 0
+    loss = 0.0
+    target_tensor = torch.tensor(sorted(target_classes), device=get_device())
+
+    _model = _model.to(get_device())
+    _model.eval()
+    with torch.no_grad():
+        for _x, _y in _dataset:
+            inputs = _x.to(get_device())
+            labels = _y.to(get_device())
+            mask = torch.isin(labels, target_tensor)
+            if not mask.any():
+                continue
+            outputs = _model(inputs)[mask]
+            selected_labels = labels[mask]
+            loss += criterion(outputs, selected_labels).item()
+            correct += (outputs.argmax(dim=1) == selected_labels).sum().item()
+            total += selected_labels.size(0)
+
+    if total == 0:
+        return None, None, 0
+    return loss / total, correct / total, total
 
 
 def set_parameters(_model: nn.Module, parameters: OrderedDict, _strict=True) -> None:

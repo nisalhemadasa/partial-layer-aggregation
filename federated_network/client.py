@@ -18,14 +18,11 @@ from data.utils import convert_dataset_to_loader, get_num_classes_from_dataset
 from models import ConvNeXtTinyImageNet
 from models.CNNCIFAR100.model import ResNet18CIFAR100, ShallowResNetCIFAR100
 from models.CNNTinyImageNet.model import ResNet18TinyImageNet, ConvNeXtTinyTinyImageNet
-from models.utils import train, test, CNNModel, rapid_train, fedau_clientside_train, set_parameters, \
+from models.utils import train, test, test_subset_classes, CNNModel, rapid_train, fedau_clientside_train, set_parameters, \
     CNNCIFAR10, CNNCIFAR100, TabularAdultModel
 from strategy.FedRC import fedrc
 
-DEVICE = torch.device("cuda")  # Try "cuda" to train on GPU
-print(
-    f"Training on {DEVICE} using PyTorch {torch.__version__}"
-)
+from device_utils import get_device
 
 
 class Client:
@@ -33,6 +30,7 @@ class Client:
                  drift_recovery_method, fedrc_cluster_count):
         self.client_id = client_id
         self.iid = if_iid  # whether the client has IID data or not
+        model = model.to(get_device())
         self.model = model
         self.epochs = epochs
         self.mini_batch_size = mini_batch_size
@@ -57,10 +55,10 @@ class Client:
             self.model = None
 
             # Cluster weights for client i and cluster K (initialized to 1/K, according to the original paper)
-            self.omega_i_k = torch.full((fedrc_cluster_count,), 1.0 / fedrc_cluster_count, device=DEVICE)
+            self.omega_i_k = torch.full((fedrc_cluster_count,), 1.0 / fedrc_cluster_count, device=get_device())
 
             # Sample weights for client i, sample j, and cluster K (initialized to 1/K, according to the original paper)
-            self.gamma_i_j_k = torch.full((fedrc_cluster_count,), 1.0 / fedrc_cluster_count, device=DEVICE)
+            self.gamma_i_j_k = torch.full((fedrc_cluster_count,), 1.0 / fedrc_cluster_count, device=get_device())
 
             # Original paper does not mention the initialization of C_y_k.
             # Following, I(x,y;theta_k) = exp(-f(x,y;theta_k))/C_y_k, we approximate C_y_k to 1.0 initially, since,
@@ -69,7 +67,7 @@ class Client:
             # Therefore, we start with uniform C_y,k = 1.0 for all labels/clusters
             self.num_classes = get_num_classes_from_dataset(self.local_trainset.dataset)
             # How much of cluster k is made up of label y
-            self.C_y_k = torch.ones(self.num_classes, fedrc_cluster_count, device=DEVICE)
+            self.C_y_k = torch.ones(self.num_classes, fedrc_cluster_count, device=get_device())
         else:
             self.fedrc_models = None
 
@@ -138,10 +136,25 @@ class Client:
                                                        self.omega_i_k, self.C_y_k,
                                                        self.num_classes)
 
-    def evaluate(self):
-        """ Evaluate the client model on the validation data and return the loss and accuracy """
-        loss, accuracy = test(self.model, self.testloader)
+    def evaluate(self, model=None):
+        """
+        Evaluate a client or supplied server model on this client's validation data.
+        :param model: Model to evaluate; defaults to the client's local model.
+        :return: Loss and accuracy.
+        """
+        model = self.model if model is None else model
+        loss, accuracy = test(model, self.testloader)
         return float(loss), float(accuracy)
+
+    def evaluate_drifted_classes(self, target_classes: set[int], model=None) -> tuple[float | None, float | None, int]:
+        """
+        Evaluate a model on drifted classes in this client's validation data.
+        :param target_classes: Labels affected by the active drift specification.
+        :param model: Model to evaluate; defaults to the client's local model.
+        :return: Loss, accuracy, and matching test-sample count.
+        """
+        model = self.model if model is None else model
+        return test_subset_classes(model, self.testloader, target_classes)
 
     def evaluate_fedrc_models(self):
         """ Evaluate all FedRC models in the client on the validation data and return the loss and accuracy """

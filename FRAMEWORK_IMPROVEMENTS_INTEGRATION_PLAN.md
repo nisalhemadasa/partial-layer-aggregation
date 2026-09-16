@@ -1,6 +1,6 @@
 # Framework improvements integration plan
 
-Status: Phases A and B implemented and CPU-validated; CUDA execution remains unverified. Phases C-G remain planned.
+Status: Phases A, B, E, and F implemented; Phase B is CPU-validated while CUDA execution remains unverified. Phases C and D were deferred. Phase G remains planned.
 
 Scope: PGF plotting, client participation, diagnostic logging, model-distance diagnostics, evaluation, drift controls, and CPU fallback.
 
@@ -221,8 +221,8 @@ Recommended order: A (PGF) and B (CPU), then C (participation contract), D (logg
 - [x] Implement and validate device selection without changing training behavior (CPU validated; CUDA hardware check unavailable).
 - [ ] Implement participant selection and verify upload/training event association.
 - [ ] Add truthful structured diagnostics and stable schema metadata.
-- [ ] Add parent-aware model distances with explicit collection timing.
-- [ ] Add evaluation stages, class metrics, and optional server-metric weighting.
+- [x] Add parent-aware model distances with explicit collection timing.
+- [x] Add evaluation stages, class metrics, and optional server-metric weighting.
 - [ ] Add isolated partial drift and adoption/rejection behavior.
 - [ ] Run one integrated small experiment: a few clients, a few rounds, partial participation, one drift transition, diagnostics enabled, and CPU execution.
 - [ ] Run a full-participation compatibility check with new behavioral options disabled or at compatibility defaults.
@@ -248,3 +248,18 @@ Use focused behavioral checks for simulation changes, not tests that merely repe
 - Ran the real simulation constructor and unchanged loop for two synthetic MNIST-shaped clients and two rounds with Oracle/FedAvg aggregation; plotting and pickle logging completed. Only dataset loading was substituted, and PGF was disabled for this CPU smoke run. Drift was scheduled beyond the smoke-run window.
 - CUDA auto-selection and forced-CPU precedence were checked with mocked availability; actual CUDA training was unavailable. Validation does not cover every dataset/model/strategy combination or active drift. The missing `ucimlrepo` dependency was installed only into an ignored workspace validation directory.
 - Updated `README.md`, `AGENTS.md`, and `DEV_PROG.md` with implemented behavior and validation limits.
+
+### Phase E completion record
+
+- Added a versioned `ModelDistanceHistory` data structure retained on `FederatedNetwork`, with canonical records keyed by aggregation round, phase, leaf server identity, strategy, model identity, and client. It exposes the latest record and a compact primary-model client-distance mapping for future FedEx optimization.
+- Added true whole-model Euclidean distance (`sqrt(sum(diff^2))`) plus per-state-tensor distances. Diagnostics include integer buffers after safe floating-point conversion, validate keys and shapes, and do not mutate tensors, gradients, or RNG state.
+- Collection occurs after aggregation and before distribution, defaults to every round, and is controlled by `model_distance_logging_enabled` and `model_distance_interval` in `simulation_parameters`. FedRC corresponding models are recorded separately; Oracle clients use their assigned flat server.
+- Added narrow structured-pickle persistence for `model_distances_log.pkl` and `layer_distances_log.pkl`. Broader Phase D diagnostic logging remains deferred.
+- Four focused checks passed for exact geometry, parent-server mapping, integer buffers, FedRC identities/views, mismatches, and non-mutation. A two-client/two-round CPU integration run produced three aggregation records and both readable logs.
+
+### Phase F completion record
+
+- Added `local_before_download`, `global_after_download`, and `local_after_training` staged evaluation. `client_log.pkl` remains the legacy post-training local-model log; selected stage records are retained in `FederatedNetwork.evaluation_history` and persisted to `evaluation_log.pkl`.
+- Added direct assigned-server evaluation without overwriting a client's model, plus `downloaded_global_client_log.pkl` for the global-after-download stage. Records include client/server identity, model role, participation status, and metrics. FedRC records corresponding model identities.
+- Added label-swap subset loss, accuracy, and sample counts in `drifted_class_log.pkl`; rotation-only drift produces zero matching samples. Added uniform/train-sample weighting for client-derived server metrics without changing aggregation.
+- Eight focused checks passed for class filtering, empty subsets, stage/model identity, non-mutation, rotation handling, server metric weighting, FedRC-compatible diagnostic shape, and distance diagnostics. A synthetic two-client/two-round CPU simulation wrote evaluation/class logs and preserved the legacy client log.

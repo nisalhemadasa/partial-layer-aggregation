@@ -6,6 +6,8 @@ Date: 29-04-2025
 Version: 1.0
 """
 from collections import defaultdict, Counter
+import os
+import warnings
 from typing import List, Tuple, Dict
 
 import matplotlib
@@ -301,9 +303,10 @@ def plot_client_layer_distance_vs_rounds(client_layer_distance: List[Dict[int, D
 
 
 def configure_and_save_plot(_plt, _x_label, _y_label, _title, _file_path, _legend_handles=None,
-                            _label_rotate=None, _if_grid=None) -> None:
+                            _label_rotate=None, _if_grid=None, plot_formats=('png', 'pdf', 'pgf'),
+                            pgf_strict=False) -> None:
     """
-    Add labels, title, legend and save the plot and displays it.
+    Configure and save the plot, then close it. PGF export requires a working LaTeX installation.
     :param _plt: The matplotlib pyplot object.
     :param _x_label: The label for the x - axis.
     :param _y_label: The label for the y - axis.
@@ -312,8 +315,14 @@ def configure_and_save_plot(_plt, _x_label, _y_label, _title, _file_path, _legen
     :param _legend_handles: The legend handles to be displayed.
     :param _label_rotate: Rotation angle for x-axis labels.
     :param _if_grid: Boolean to indicate whether to show grid or not.
+    :param plot_formats: Output formats to save: png, pdf, and/or pgf.
+    :param pgf_strict: Whether a PGF export failure should raise instead of warning.
     :return: None
     """
+    plot_formats = tuple(plot_formats)
+    if not plot_formats or any(plot_format not in ('png', 'pdf', 'pgf') for plot_format in plot_formats):
+        raise ValueError("plot_formats must contain png, pdf, and/or pgf.")
+
     _plt.xlabel(_x_label)
     _plt.ylabel(_y_label)
     # _plt.title(_title)
@@ -328,21 +337,28 @@ def configure_and_save_plot(_plt, _x_label, _y_label, _title, _file_path, _legen
         _plt.xticks(rotation=_label_rotate, ha='right')  # test is horizontally aligned to right
         _plt.tight_layout()  # Automatically adjusts subplot margins so labels fit inside the figure.
 
-    # Save the plot as a high-quality PNG
-    png_path = f"{_file_path}.png"
-    _plt.savefig(png_path, dpi=300)  # Increase DPI for higher resolution
+    try:
+        save_dir = os.path.dirname(_file_path)
+        if save_dir:
+            os.makedirs(save_dir, exist_ok=True)
 
-    # Save the plot as a PDF
-    pdf_path = f"{_file_path}.pdf"
-    _plt.savefig(pdf_path, format="pdf")
-    #
-    # # Save PGF (LaTeX-friendly vector format)
-    # pgf_path = f"{_file_path}.pgf"
-    # _plt.savefig(pgf_path, format="pgf")
-
-    # Display the plot
-    # _plt.show()
-    _plt.close()
+        # Save PNG/PDF first so a missing LaTeX installation cannot prevent their export.
+        if 'png' in plot_formats:
+            _plt.savefig(f"{_file_path}.png", dpi=300)
+        if 'pdf' in plot_formats:
+            _plt.savefig(f"{_file_path}.pdf", format="pdf")
+        if 'pgf' in plot_formats:
+            pgf_path = f"{_file_path}.pgf"
+            try:
+                _plt.savefig(pgf_path, format="pgf")
+            except Exception as exc:
+                if pgf_strict:
+                    raise
+                warnings.warn(f"PGF export failed for {pgf_path}: {exc}. "
+                              "Check that the LaTeX engine selected by Matplotlib's pgf.texsystem "
+                              "is installed and available on PATH.", RuntimeWarning, stacklevel=2)
+    finally:
+        _plt.close()
 
 
 def plot_dataset_distribution(clients_list: List[Client], _dataset_name: str,

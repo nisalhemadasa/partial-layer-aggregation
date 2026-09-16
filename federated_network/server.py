@@ -16,7 +16,8 @@ import constants
 import strategy
 from distance_metrics.distance_metrics import compute_euclidean_distance_weights
 from drift_concepts.drift import Drift
-from federated_network.client import DEVICE, Client
+from federated_network.client import Client
+from device_utils import get_device
 from models import ResNet18TinyImageNet
 from models.CNNCIFAR100.model import ResNet18CIFAR100, ShallowResNetCIFAR100
 from models.utils import SimpleModel, CNNModel, test, split_to_extractor_and_classifier, set_parameters, \
@@ -97,23 +98,31 @@ class Server:
             accuracies.append(float(accuracy))
         return losses, accuracies
 
-    def average_client_evaluation_results(self, sampled_clients: List[Client]) -> tuple:
+    def average_client_evaluation_results(self, sampled_clients: List[Client], weighting: str = 'uniform') -> tuple:
         """
         Get the average evaluation performance (accuracy and loss) of the connected clients.
         :param sampled_clients: List of all clients
-        :return: average loss and accuracy of the connected clients to this server
+        :param weighting: uniform or train_samples weighting for connected client metrics.
+        :return: Average loss and accuracy of the connected clients to this server.
         """
         round_server_loss_and_accuracy = []
 
         # Get the clients connected to this server
         connected_clients = [client for client in sampled_clients if client.client_id in self.client_ids]
 
+        if weighting not in {'uniform', 'train_samples'}:
+            raise ValueError("server metric weighting must be 'uniform' or 'train_samples'.")
+        if not connected_clients:
+            return 0.0, 0.0
+
+        weights = []
         for client in connected_clients:
             round_server_loss_and_accuracy.append(client.evaluate())
+            weights.append(len(client.local_trainset) if weighting == 'train_samples' else 1)
 
         # Position-wise average server loss and accuracy. i.e., take the average loss of all clients (likewise in accuracy)
         arr = np.array(round_server_loss_and_accuracy)  # shape (N, 2)
-        return tuple(arr.mean(axis=0))
+        return tuple(np.average(arr, axis=0, weights=weights))
 
 
 def model_aggregation_fedrc(server: Server, sampled_clients: List[Client], verbose=False) -> None:
@@ -349,7 +358,8 @@ def model_distribution_fedrc(server_list: List[Server], sampled_clients: List[Cl
 
 def server_hierarchy_evaluate(server_hierarchy: List[Server], server_test_set: DataLoader,
                               all_clients: List[Client],
-                              _is_server_has_test_data: bool, _drift_recovery_method: str) -> List:
+                              _is_server_has_test_data: bool, _drift_recovery_method: str,
+                              server_metric_weighting: str = 'uniform') -> List:
     """
     The aggregated models are distributed to the client models.
     :param server_hierarchy: List of servers
@@ -359,6 +369,7 @@ def server_hierarchy_evaluate(server_hierarchy: List[Server], server_test_set: D
     evaluations after client model aggregation. Else, the average of client evaluation results will be used as server
     evaluation performance.
     :param _drift_recovery_method: Drift recovery method
+    :param server_metric_weighting: Weighting used for client-derived server metrics.
     :return: None
     """
     # Store the loss and accuracy at each level of the server model hierarchy
@@ -386,7 +397,7 @@ def server_hierarchy_evaluate(server_hierarchy: List[Server], server_test_set: D
         else:
             for server in server_hierarchy[0]:
                 if server.client_ids:  # to avoid empty server case
-                    loss, accuracy = server.average_client_evaluation_results(all_clients)
+                    loss, accuracy = server.average_client_evaluation_results(all_clients, server_metric_weighting)
                     server_loss_and_accuracy.append([(loss, accuracy)])
                 else:  # TODO: give a better solution for empty server case
                     server_loss_and_accuracy.append([(0.0, 0.0)])  # placeholder for empty server
@@ -394,7 +405,7 @@ def server_hierarchy_evaluate(server_hierarchy: List[Server], server_test_set: D
         if _is_server_has_test_data:
             loss, accuracy = global_server.model_evaluate(server_test_set)
         else:
-            loss, accuracy = global_server.average_client_evaluation_results(all_clients)
+            loss, accuracy = global_server.average_client_evaluation_results(all_clients, server_metric_weighting)
 
         # Store the loss and accuracy of the global server model
         server_loss_and_accuracy.append([(loss, accuracy)])
@@ -409,7 +420,7 @@ def server_hierarchy_evaluate(server_hierarchy: List[Server], server_test_set: D
             if _is_server_has_test_data:
                 loss, accuracy = server.model_evaluate(server_test_set)
             else:
-                loss, accuracy = server.average_client_evaluation_results(all_clients)
+                loss, accuracy = server.average_client_evaluation_results(all_clients, server_metric_weighting)
 
             loss_and_accuracy_at_level.append((loss, accuracy))
 
@@ -475,19 +486,19 @@ def server_fn(server_id: int, dataset_name: str, server_abs_id: int, drift_recov
     else:
         aggregator_strategy = strategy.FedAvg.aggregator_fn()
 
-    # model = SimpleModel().to(DEVICE)
+    # model = SimpleModel().to(get_device())
     if dataset_name == constants.DatasetNames.MNIST or dataset_name == constants.DatasetNames.F_MNIST:
-        model = CNNModel().to(DEVICE)
+        model = CNNModel().to(get_device())
     elif dataset_name == constants.DatasetNames.CIFAR_10:
-        model = CNNCIFAR10().to(DEVICE)
+        model = CNNCIFAR10().to(get_device())
     elif dataset_name == constants.DatasetNames.CIFAR_100:
-        # model = ShallowResNetCIFAR100().to(DEVICE)
-        model = ResNet18CIFAR100().to(DEVICE)
-        # model = CNNCIFAR100().to(DEVICE)
+        # model = ShallowResNetCIFAR100().to(get_device())
+        model = ResNet18CIFAR100().to(get_device())
+        # model = CNNCIFAR100().to(get_device())
     elif dataset_name == constants.DatasetNames.TINY_IMAGENET_200:
-        model = ConvNeXtTinyImageNet().to(DEVICE)
+        model = ConvNeXtTinyImageNet().to(get_device())
     elif dataset_name == constants.DatasetNames.ADULT:
-        model = TabularAdultModel().to(DEVICE)
+        model = TabularAdultModel().to(get_device())
     else:
         raise ValueError("Unsupported dataset name")
 

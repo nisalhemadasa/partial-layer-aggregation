@@ -10,6 +10,7 @@ import time
 from typing import List
 
 import constants
+from distance_metrics.distance_metrics import ModelDistanceHistory, collect_model_distance_diagnostics
 from data.dataset_loader import load_datasets
 from data.utils import convert_dataset_to_loader, split_iid_dataset, split_noniid_dataset, get_unique_labels_per_subset
 from drift_concepts.drift import drift_fn
@@ -17,10 +18,10 @@ from federated_network.client import client_fn, Client, client_initial_training
 from federated_network.server import server_fn, model_aggregation, model_distribution_fedex, \
     server_hierarchy_evaluate, model_distribution_fedrc, model_distribution_hierarchy
 from federated_network.utils import update_progress, link_server_hierarchy, train_client_models, \
-    link_clients_to_servers, handle_drift_for_round, apply_drift_to_clients
+    link_clients_to_servers, handle_drift_for_round, apply_drift_to_clients, evaluate_clients_for_stage
 from log_utils.analysis_functions import compute_client_average_metrics, compute_server_average_metrics, \
     split_clients_loss_and_accuracy, convert_fedrc_metrics_to_pairs
-from log_utils.logging import write_logs
+from log_utils.logging import write_logs, write_structured_log
 from plot_utils.plotting import plot_client_performance_vs_rounds, plot_server_performance_vs_rounds, \
     plot_dataset_distribution, \
     plot_client_avg_performance_vs_rounds
@@ -159,6 +160,9 @@ class FederatedNetwork:
 
         # Combine all clients into a single list
         self.clients = self.noniid_clients + self.iid_clients
+        # Retained in memory so diagnostics and future FedEx optimization can consume the same structured history.
+        self.model_distance_history = ModelDistanceHistory()
+        self.evaluation_history = []
 
     def sample_clients(self) -> List[Client]:
         """ Sample clients from the client pool and returns a list of client instances """
@@ -174,8 +178,26 @@ class FederatedNetwork:
         clients_loss_and_accuracy = []  # Store the loss and accuracy of the all the clients at each round
         sampled_clients_in_each_round = []  # To keep track of the client IDs sampled in each round
         server_loss_and_accuracy = []  # Store the loss and accuracy at each level of the server hierarchy
-        client_model_distance = []  # Store the model distances of the clients at each round
-        client_layer_distance = []  # Store the model distances of the clients at each round
+        self.model_distance_history = ModelDistanceHistory()
+        self.evaluation_history = []
+        model_distance_logging_enabled = self.simulation_parameters.get('model_distance_logging_enabled', True)
+        model_distance_interval = self.simulation_parameters.get('model_distance_interval', 1)
+        if not isinstance(model_distance_interval, int) or model_distance_interval <= 0:
+            raise ValueError("model_distance_interval must be a positive integer.")
+        evaluation_stage = self.simulation_parameters.get(
+            'client_evaluation_stage',
+            'local_before_download' if self.simulation_parameters.get('is_server_adaptability', False)
+            else 'local_after_training')
+        if evaluation_stage not in {'local_before_download', 'global_after_download', 'local_after_training'}:
+            raise ValueError("client_evaluation_stage must be local_before_download, global_after_download, "
+                             "or local_after_training.")
+        drifted_class_metrics_enabled = self.simulation_parameters.get('drifted_class_metrics_enabled', False)
+        server_metric_weighting = self.simulation_parameters.get('server_metric_weighting', 'uniform')
+        if server_metric_weighting not in {'uniform', 'train_samples'}:
+            raise ValueError("server_metric_weighting must be uniform or train_samples.")
+        training_simulation_parameters = dict(self.simulation_parameters)
+        # `client_log.pkl` remains post-training local-model metrics independently of the selected diagnostic stage.
+        training_simulation_parameters['is_server_adaptability'] = False
 
         # Start the timer
         start_time = time.time()
@@ -202,6 +224,11 @@ class FederatedNetwork:
             sampled_client_ids = [client.client_id for client in sampled_clients]
             sampled_clients_in_each_round.append(sampled_client_ids)
 
+            if evaluation_stage == 'local_before_download':
+                self.evaluation_history.append(evaluate_clients_for_stage(
+                    self.clients, self.server_hierarchy[-1], _round, sampled_client_ids, evaluation_stage,
+                    self.drift, drifted_class_metrics_enabled))
+
             # 2. Server aggregation (upwards): Aggregate client model parameters to the edge model and edge model
             # parameters to the global model (returns the round_server_loss_and_accuracy, global_avg_loss_and_accuracy
             # after aggregating upwards, before the distribution stage)
@@ -211,6 +238,13 @@ class FederatedNetwork:
 
             # If the clients download the model from the leaf servers of the hierarchy
             server_depth = len(self.server_hierarchy) - 1
+
+            # Capture client-to-assigned-server L2 distances after aggregation and before distribution. The retained
+            # history is intentionally available to future FedEx optimization as well as diagnostic logging.
+            if model_distance_logging_enabled and _round % model_distance_interval == 0:
+                distance_record = collect_model_distance_diagnostics(
+                    self.server_hierarchy[server_depth], self.clients, _round, sampled_client_ids)
+                self.model_distance_history.append(distance_record)
 
             # 3. Updating (downwards) & evaluation: update the edge models using the global model parameters. (returns the
             # round_server_loss_and_accuracy, global_avg_loss_and_accuracy after both aggregating upwards and
@@ -225,13 +259,18 @@ class FederatedNetwork:
             else:
                 model_distribution_hierarchy(self.server_hierarchy)
 
+            if evaluation_stage == 'global_after_download':
+                self.evaluation_history.append(evaluate_clients_for_stage(
+                    self.clients, self.server_hierarchy[server_depth], _round, sampled_client_ids, evaluation_stage,
+                    self.drift, drifted_class_metrics_enabled))
+
             # 4. Evaluate server loss and accuracy after aggregation and distribution
             round_server_loss_and_accuracy = server_hierarchy_evaluate(self.server_hierarchy, server_test_set,
                                                                        self.clients,
                                                                        self.simulation_parameters[
                                                                            'servers_have_test_data'],
-                                                                       self.drift_recovery_parameters[
-                                                                           'recovery_method'])
+                                                                       self.drift_recovery_parameters['recovery_method'],
+                                                                       server_metric_weighting)
             server_loss_and_accuracy.append(round_server_loss_and_accuracy)
 
             # Additional: Update the progress of the simulation
@@ -257,14 +296,44 @@ class FederatedNetwork:
                                                                  sampled_client_ids,
                                                                  self.server_hierarchy[server_depth],
                                                                  self.drift,
-                                                                 self.simulation_parameters,
+                                                                 training_simulation_parameters,
                                                                  self.drift_recovery_parameters['recovery_method'])
             clients_loss_and_accuracy.append(round_client_loss_and_accuracy)
+            if evaluation_stage == 'local_after_training':
+                self.evaluation_history.append(evaluate_clients_for_stage(
+                    self.clients, self.server_hierarchy[server_depth], _round, sampled_client_ids, evaluation_stage,
+                    self.drift, drifted_class_metrics_enabled))
 
         # Stop the timer
         end_time = time.time()
         minutes, secs = divmod(end_time - start_time, 60)
         print(f"Runtime: {minutes} minutes {secs} seconds")
+
+        if model_distance_logging_enabled:
+            distance_log_save_path = log_save_path if log_save_path is not None else constants.Paths.LOG_SAVE_PATH
+            write_structured_log(self.model_distance_history.model_log(),
+                                 distance_log_save_path + constants.Logs.MODEL_DISTANCES_LOG)
+            write_structured_log(self.model_distance_history.layer_log(),
+                                 distance_log_save_path + constants.Logs.LAYER_DISTANCES_LOG)
+
+        evaluation_log_save_path = log_save_path if log_save_path is not None else constants.Paths.LOG_SAVE_PATH
+        write_structured_log({'schema_version': 1, 'records': self.evaluation_history},
+                             evaluation_log_save_path + constants.Logs.EVALUATION_LOG)
+        if evaluation_stage == 'global_after_download':
+            write_structured_log({'schema_version': 1, 'records': self.evaluation_history},
+                                 evaluation_log_save_path + constants.Logs.DOWNLOADED_GLOBAL_CLIENT_LOG)
+        if drifted_class_metrics_enabled:
+            class_records = []
+            for record in self.evaluation_history:
+                class_records.append({
+                    'round': record['round'],
+                    'stage': record['stage'],
+                    'clients': [{'client_id': client['client_id'], 'model_id': client['model_id'],
+                                 'metrics': client['drifted_class_metrics']}
+                                for client in record['clients']]
+                })
+            write_structured_log({'schema_version': 1, 'records': class_records},
+                                 evaluation_log_save_path + constants.Logs.DRIFTED_CLASS_LOG)
 
         if self.drift_recovery_parameters['recovery_method'] in [constants.RecoveryAlgorithm.FEDRC]:
             # ============================

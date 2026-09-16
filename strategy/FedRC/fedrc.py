@@ -20,10 +20,7 @@ from torch.utils.data import DataLoader
 import constants
 from models.utils import set_parameters
 
-DEVICE = torch.device("cuda")  # Try "cuda" to train on GPU
-print(
-    f"Training on {DEVICE} using PyTorch {torch.__version__}"
-)
+from device_utils import get_device
 
 
 class FedRC:
@@ -122,12 +119,12 @@ def fit(fedrc_models: List[nn.Module], _dataset: DataLoader, fedrc_optimizers: L
     num_clusters = len(fedrc_models)  # List[nn.Module], length K
     fedrc_optimizers = fedrc_optimizers  # Optimizers for weights train of the fedrc_models
 
-    prev_omega = old_omega_i_k.to(DEVICE)  # [K]
-    prev_C = old_C_y_k.to(DEVICE)  # [num_classes, K]
+    prev_omega = old_omega_i_k.to(get_device())  # [K]
+    prev_C = old_C_y_k.to(get_device())  # [num_classes, K]
 
     # Initiate variables to hold the values of numerator and denominator of Eq. (E)
-    sum_gamma_per_cluster = torch.zeros(num_clusters, device=DEVICE)  # ∑_j γ_{i,j;k} --- from denominator of (E)
-    label_gamma = torch.zeros(num_classes, num_clusters, device=DEVICE)  # ∑_j 1{y_j=y} γ_{i,j;k} ---- from numerator of (E). Shape: [num_classes, K]
+    sum_gamma_per_cluster = torch.zeros(num_clusters, device=get_device())  # ∑_j γ_{i,j;k} --- from denominator of (E)
+    label_gamma = torch.zeros(num_classes, num_clusters, device=get_device())  # ∑_j 1{y_j=y} γ_{i,j;k} ---- from numerator of (E). Shape: [num_classes, K]
     num_samples = 0
 
     # Constant EPS: For EPS, a very small value (1e-12), which is achievable in data type floating point precisions, is chosen
@@ -138,17 +135,17 @@ def fit(fedrc_models: List[nn.Module], _dataset: DataLoader, fedrc_optimizers: L
     # In the paper, one sample at a time is used, but here we use minibatches for efficiency (faster on GPU), but
     # is mathematically equivalent (just vectorized).
     for x, y in _dataset:
-        x = x.to(DEVICE)
-        y = y.to(DEVICE)  # B = batch size -> Label vector y is a 1D tensor of length [B]. This is equal to the 'minibatch_size' given in network.py.
+        x = x.to(get_device())
+        y = y.to(get_device())  # B = batch size -> Label vector y is a 1D tensor of length [B]. This is equal to the 'minibatch_size' given in network.py.
         batch_size = y.size(0)  # y.size(0) == B
         num_samples += batch_size
 
         # Compute per-sample loss for each cluster model
         # losses_all: [B, K]
-        losses_all = torch.empty(batch_size, num_clusters, device=DEVICE)
+        losses_all = torch.empty(batch_size, num_clusters, device=get_device())
 
         for k, model_k in enumerate(fedrc_models):
-            model_k.to(DEVICE)
+            model_k.to(get_device())
             model_k.eval()  # we only evaluate here
 
             with torch.no_grad():
@@ -212,7 +209,7 @@ def fit(fedrc_models: List[nn.Module], _dataset: DataLoader, fedrc_optimizers: L
         # ========================================================================
         # Now we need gradients, so we re-forward with grad on
         for k, model_k in enumerate(fedrc_models):
-            model_k.to(DEVICE)
+            model_k.to(get_device())
             model_k.train()
             optimizer_k = fedrc_optimizers[k]
             optimizer_k.zero_grad()

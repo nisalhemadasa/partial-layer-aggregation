@@ -131,6 +131,79 @@ def apply_drift_to_clients(drift: Drift, all_clients: list[Client]) -> None:
             client.sample_data()
 
 
+def get_drifted_classes(drift: Drift) -> set[int]:
+    """
+    Return labels referenced by the configured label-drift patterns.
+    :param drift: Drift instance containing pattern specifications.
+    :return: Set of affected labels; empty for non-label drift configurations.
+    """
+    if drift.drift_mode not in {constants.DriftMode.LABEL_SWAP_ONCE,
+                                constants.DriftMode.LABEL_SWAP_INCREMENTAL_STEPS}:
+        return set()
+    if not drift.drift_pattern_id_map:
+        return set()
+    return {label for class_pairs in drift.drift_pattern_id_map.values()
+            for class_pair in class_pairs for label in class_pair}
+
+
+def evaluate_clients_for_stage(all_clients: List[Client], servers: List[Server], round_idx: int,
+                               sampled_client_ids: List[int], stage: str, drift: Drift,
+                               include_drifted_classes: bool = False) -> Dict:
+    """
+    Evaluate local or assigned-server models without changing persistent client model state.
+    :param all_clients: All clients, returned in stable client-ID order.
+    :param servers: Leaf servers used to resolve each client's assigned server model.
+    :param round_idx: Current aggregation round.
+    :param sampled_client_ids: IDs associated with this round's aggregation event.
+    :param stage: local_before_download, global_after_download, or local_after_training.
+    :param drift: Drift metadata used for optional class-subset evaluation.
+    :param include_drifted_classes: Whether to include drifted-class metrics.
+    :return: Structured evaluation record.
+    """
+    valid_stages = {'local_before_download', 'global_after_download', 'local_after_training'}
+    if stage not in valid_stages:
+        raise ValueError(f"Unsupported client evaluation stage: {stage}")
+    server_map = {server.server_id: server for server in servers}
+    sampled_ids = set(sampled_client_ids)
+    target_classes = get_drifted_classes(drift) if include_drifted_classes else set()
+    records = []
+
+    for client in sorted(all_clients, key=lambda item: item.client_id):
+        server = server_map[client.parent_server_id]
+        if client.fedrc_models is not None:
+            model_pairs = []
+            for model_id, local_model in enumerate(client.fedrc_models):
+                model = server.multi_models[model_id] if stage == 'global_after_download' else local_model
+                model_pairs.append((model_id, model))
+        else:
+            model = server.model if stage == 'global_after_download' else client.model
+            model_pairs = [('primary', model)]
+
+        for model_id, model in model_pairs:
+            loss, accuracy = client.evaluate(model)
+            record = {
+                'client_id': client.client_id,
+                'parent_server_id': server.server_id,
+                'server_abs_id': server.abs_id,
+                'model_id': model_id,
+                'model_role': 'assigned_server' if stage == 'global_after_download' else 'local_client',
+                'participated': client.client_id in sampled_ids,
+                'loss': loss,
+                'accuracy': accuracy
+            }
+            if include_drifted_classes:
+                class_loss, class_accuracy, sample_count = client.evaluate_drifted_classes(target_classes, model)
+                record['drifted_class_metrics'] = {
+                    'classes': sorted(target_classes),
+                    'loss': class_loss,
+                    'accuracy': class_accuracy,
+                    'sample_count': sample_count
+                }
+            records.append(record)
+
+    return {'round': round_idx, 'stage': stage, 'clients': records}
+
+
 def train_client_models(all_clients, sampled_client_ids, servers: List[Server], drift: Drift,
                         simulation_parameters: Dict, drift_recovery_method: str, verbose: bool = False) -> List:
     """

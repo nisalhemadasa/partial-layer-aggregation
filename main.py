@@ -6,6 +6,7 @@ Date: 02-04-2025
 Version: 2.0
 """
 import constants
+from device_utils import configure_device, get_device
 from federated_network.network import FederatedNetwork
 
 import os
@@ -21,14 +22,17 @@ def seed_everything(seed: int = 42):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+    if get_device().type == 'cuda':
+        torch.cuda.manual_seed_all(seed)
 
     # Make PyTorch deterministic enough for experiments
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+    if get_device().type == 'cuda':
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
 
 
 def main():
+    configure_device('auto')  # Choose 'cpu' or 'cuda' to explicitly select the experiment device.
     seed_everything(42)
 
     async_drift_specs = dict(
@@ -137,7 +141,11 @@ def main():
         is_plot_client_data_distributions=False,  # Whether to plot the client data distributions
         client_ids_to_plot_data_distributions=[0, 1],  # Client IDs whose internal data distributions to be plotted.
         # Whether servers have test data for evaluation or the server accuracy/loss is got by averaging the client test accuracy/losses
-        servers_have_test_data=False
+        servers_have_test_data=False,
+        # `client_log.pkl` always records post-training local client metrics. This selects extra structured evaluation.
+        client_evaluation_stage='local_after_training',  # local_before_download, global_after_download, or local_after_training
+        drifted_class_metrics_enabled=False,
+        server_metric_weighting='uniform'  # uniform or train_samples for client-derived server metrics
     )
 
     # 000000000000000000000000000000000000000000000

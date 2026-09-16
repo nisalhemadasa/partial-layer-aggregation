@@ -13,11 +13,6 @@ from torch import nn
 import constants
 from strategy.FedAvg import FedAvg
 
-DEVICE = torch.device("cuda")  # Try "cuda" to train on GPU
-print(
-    f"Training on {DEVICE} using PyTorch {torch.__version__}"
-)
-
 
 class Oracle:
     def __init__(self, strategy_name: str):
