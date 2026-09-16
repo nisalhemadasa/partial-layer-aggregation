@@ -183,6 +183,10 @@ class Logs:
     EVALUATION_LOG = 'evaluation_log'
     DOWNLOADED_GLOBAL_CLIENT_LOG = 'downloaded_global_client_log'
     DRIFTED_CLASS_LOG = 'drifted_class_log'
+    DITTO_STATE_LOG = 'ditto_state_log'
+    DITTO_PERSONALIZED_CLIENT_LOG = 'ditto_personalized_client_log'
+    DITTO_PERSONALIZED_DRIFTED_CLASS_LOG = 'ditto_personalized_drifted_class_log'
+    DITTO_SELECTED_LAMBDA_LOG = 'ditto_selected_lambda_log'
 
 
 # Drift recovery algorithms
@@ -197,6 +201,7 @@ class RecoveryAlgorithm:
     FLUID = 'fluid'
     FEDEX = 'fedex'
     FEDRC = 'fedrc'  # Clustering-based
+    DITTO = 'ditto'  # Personalized federated learning
 
 
 # Types of models used in the project

@@ -52,7 +52,7 @@ Their instances should be created in a similar way to the existing ones (e.g., O
 - Existing FedAvg uses an equal average of model tensors, not sample-count weighting. Do not assume it accepts client sample counts or silently change aggregation for existing methods.
 - Oracle uses a flat multi-server layout; preserve evaluation of all its cluster servers.
 - FedCollab is not implemented and will not be integrated. Do not add FedCollab strategies, configuration, or dependencies.
-- Ditto is planned but not yet implemented. The requirements below describe the intended integration, not existing functionality.
+- Ditto integration is implemented for single-level, full-participation CPU experiments: strategy selection, Ditto-only sample-count-weighted global aggregation, persistent personalized state, fixed/dynamic-lambda proximal training, and separate personalized evaluation/logging.
 - `integration_progress.txt` contains inherited claims about FedCollab and weighted FedAvg that do not describe this checkout. Treat it as historical context. Verify references in `Ditto_integration_plan.txt` against the current code; that plan also contains inherited assumptions.
 
 ## Planned Ditto Integration
@@ -61,11 +61,17 @@ Their instances should be created in a similar way to the existing ones (e.g., O
 - Keep the integration PyTorch-native; do not import the upstream TensorFlow Ditto implementation.
 - Keep Ditto-specific logic in `strategy/Ditto/` where possible, with client state and small wiring changes in the existing client/server modules and orchestration helpers. Preserve the main simulation loop.
 - Keep `client.model` as the local/upload model used for aggregation, and introduce `client.ditto_personal_model` as the separate personalized model.
+- Initialize `client.ditto_personal_model` once after the framework's local warm-up. For later rounds, keep it persistent and anchor its proximal loss to a detached round-start server snapshot. Its SGD optimizer state is recreated per round to match ordinary client training.
 - Implement sample-count weighted FedAvg for Ditto over `client.model`; do not upload or aggregate `client.ditto_personal_model`. Existing FedAvg does not provide sample weighting, so add an explicit Ditto path or an opt-in weighted helper that preserves existing methods' behavior.
 - Keep `client_log.pkl` consistent with the rest of the framework: it records metrics for `client.model`.
 - Ditto personalized metrics belong in Ditto-specific logs such as `ditto_personalized_client_log.pkl` and `ditto_personalized_drifted_class_log.pkl`.
-- If dynamic lambda selection is implemented, `ditto_dynamic_lambda=True` should reserve a validation split from each client's sampled local training data, choose among `ditto_lambda_candidates`, and log selected values in `ditto_selected_lambda_log.pkl`. These options are not currently available.
+- Evaluate Ditto personalized models after local training through the explicit personalized methods. Do not redirect `Client.evaluate()` or mix personalized records into `client_log.pkl`; retain `model_role='ditto_personalized'` in structured records.
+- With `ditto_dynamic_lambda=True`, preserve each client's seeded validation indices across rounds, exclude them from training, compare candidates from identical pre-update model/optimizer state, and log all candidate losses and selected values in `ditto_selected_lambda_log.pkl`.
 - Robust aggregation options from upstream Ditto are out of scope for the first integration; add them later as independent aggregation strategies if needed.
+- Focused Ditto aggregation, fixed-lambda training, and personalized-evaluation checks are in `tests/test_ditto_strategy.py`.
+- The fixed-lambda end-to-end CPU smoke test is in `tests/test_ditto_simulation.py`.
+- The same simulation test covers dynamic-lambda selection and its structured log.
+- `tests/run_real_mnist_ditto_validation.py` runs isolated fixed/dynamic Ditto and FedAvg checks on a small downloaded MNIST subset; its generated outputs belong under the ignored `plots/.cpu_validation/` tree.
 
 ## Running
 

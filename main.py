@@ -148,6 +148,18 @@ def main():
         server_metric_weighting='uniform'  # uniform or train_samples for client-derived server metrics
     )
 
+    # Shared Ditto configuration. Merge this into a recovery configuration whenever DITTO is selected.
+    ditto_parameters = dict(
+        ditto_lambda=0.05,
+        ditto_learning_rate=None,  # None uses the ordinary client learning rate (currently 0.01).
+        ditto_personal_epochs=None,  # None uses num_local_epochs.
+        ditto_eval_personalized=True,
+        ditto_dynamic_lambda=False,
+        ditto_lambda_candidates=[0.1, 1.0, 2.0],
+        ditto_validation_fraction=0.1,
+        ditto_validation_seed=42,
+    )
+
     # 000000000000000000000000000000000000000000000
     # Define drift recovery algorithm related parameters
     drift_recovery_parameters = dict(
@@ -161,6 +173,7 @@ def main():
         #   - '+1' -> for the non-drift affected client group
         cluster_count=len(drift_specifications['drift_group_proportions'][0]) + 1,
         fedex_alpha=0.9,  # EMA weight (alpha) parameter for the FedEx algorithm
+        **ditto_parameters,
     )
 
     # Create a federated network
@@ -366,6 +379,35 @@ def main():
     #     file_save_path='plots/swap/MNIST/saved_plots_fedex/',
     #     log_save_path='logs/swap/MNIST/saved_logs_fedex/')
 
+    # #00000000000000000 Ditto 00000000000000000000
+    # Uncomment this block, and keep the other run_simulation calls disabled, to run Ditto on MNIST.
+    # ditto_recovery_parameters = dict(
+    #     recovery_method=constants.RecoveryAlgorithm.DITTO,
+    #     base_aggregation_method=constants.RecoveryAlgorithm.DITTO,
+    #     fedau_alpha=0.9,
+    #     fedrc_cluster_count=3,
+    #     cluster_count=len(drift_specifications['drift_group_proportions'][0]) + 1,
+    #     fedex_alpha=0.9,
+    #     **ditto_parameters,
+    # )
+    #
+    # ditto_fed_net = FederatedNetwork(
+    #     num_iid_client_instances=10,
+    #     num_noniid_client_instances=0,
+    #     server_tree_layout=[1],
+    #     num_training_rounds=50,
+    #     dataset_name=constants.DatasetNames.MNIST,
+    #     noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+    #     drift_specs=drift_specifications,
+    #     simulation_parameters=simulation_parameters,
+    #     client_select_fraction=1,
+    #     drift_recovery_parameters=ditto_recovery_parameters,
+    # )
+    #
+    # ditto_fed_net.run_simulation(
+    #     file_save_path='plots/swap/MNIST/saved_plots_ditto/',
+    #     log_save_path='logs/swap/MNIST/saved_logs_ditto/')
+
     # # # #00000000000000000 Oracle 00000000000000000000
     # Define drift recovery algorithm related parameters
     drift_recovery_parameters = dict(
@@ -477,6 +519,35 @@ def main():
     #     file_save_path='plots/swap/F_MNIST/saved_plots_fedex/',
     #     log_save_path='logs/swap/F_MNIST/saved_logs_fedex/')
 
+    # #00000000000000000 Ditto 00000000000000000000
+    # Uncomment this block, and keep the other run_simulation calls disabled, to run Ditto on Fashion-MNIST.
+    # ditto_recovery_parameters = dict(
+    #     recovery_method=constants.RecoveryAlgorithm.DITTO,
+    #     base_aggregation_method=constants.RecoveryAlgorithm.DITTO,
+    #     fedau_alpha=0.9,
+    #     fedrc_cluster_count=3,
+    #     cluster_count=len(drift_specifications['drift_group_proportions'][0]) + 1,
+    #     fedex_alpha=0.9,
+    #     **ditto_parameters,
+    # )
+    #
+    # ditto_fed_net = FederatedNetwork(
+    #     num_iid_client_instances=10,
+    #     num_noniid_client_instances=0,
+    #     server_tree_layout=[1],
+    #     num_training_rounds=50,
+    #     dataset_name=constants.DatasetNames.F_MNIST,
+    #     noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+    #     drift_specs=drift_specifications,
+    #     simulation_parameters=simulation_parameters,
+    #     client_select_fraction=1,
+    #     drift_recovery_parameters=ditto_recovery_parameters,
+    # )
+    #
+    # ditto_fed_net.run_simulation(
+    #     file_save_path='plots/swap/F_MNIST/saved_plots_ditto/',
+    #     log_save_path='logs/swap/F_MNIST/saved_logs_ditto/')
+
     # # # # #00000000000000000 Oracle 00000000000000000000
     # # Define drift recovery algorithm related parameters
     # drift_recovery_parameters = dict(
@@ -557,6 +628,35 @@ def main():
         # fed_net.run_simulation(
         #     file_save_path='plots/swap/CIFAR-10/saved_plots_fedex/alpha_' + str(idx+1) + '/',
         #     log_save_path='logs/swap/CIFAR-10/saved_logs_fedex/alpha_' + str(idx+1) + '/')
+
+    # #00000000000000000 Ditto 00000000000000000000
+    # Uncomment this block, and keep the other run_simulation calls disabled, to run Ditto on CIFAR-10.
+    # ditto_recovery_parameters = dict(
+    #     recovery_method=constants.RecoveryAlgorithm.DITTO,
+    #     base_aggregation_method=constants.RecoveryAlgorithm.DITTO,
+    #     fedau_alpha=0.9,
+    #     fedrc_cluster_count=3,
+    #     cluster_count=len(drift_specifications['drift_group_proportions'][0]) + 1,
+    #     fedex_alpha=0.9,
+    #     **ditto_parameters,
+    # )
+    #
+    # ditto_fed_net = FederatedNetwork(
+    #     num_iid_client_instances=10,
+    #     num_noniid_client_instances=0,
+    #     server_tree_layout=[1],
+    #     num_training_rounds=400,
+    #     dataset_name=constants.DatasetNames.CIFAR_10,
+    #     noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+    #     drift_specs=drift_specifications,
+    #     simulation_parameters=simulation_parameters,
+    #     client_select_fraction=1,
+    #     drift_recovery_parameters=ditto_recovery_parameters,
+    # )
+    #
+    # ditto_fed_net.run_simulation(
+    #     file_save_path='plots/swap/CIFAR-10/saved_plots_ditto/',
+    #     log_save_path='logs/swap/CIFAR-10/saved_logs_ditto/')
 
     # 0000000000000000000000000000000000000
     # Define drift recovery algorithm related parameters
@@ -706,6 +806,35 @@ def main():
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/CIFAR-100/saved_plots_fedex/',
     #     log_save_path='logs/swap/CIFAR-100/saved_logs_fedex/')
+    #
+    # #00000000000000000 Ditto 00000000000000000000
+    # Uncomment this block, and keep the other run_simulation calls disabled, to run Ditto on CIFAR-100.
+    # ditto_recovery_parameters = dict(
+    #     recovery_method=constants.RecoveryAlgorithm.DITTO,
+    #     base_aggregation_method=constants.RecoveryAlgorithm.DITTO,
+    #     fedau_alpha=0.9,
+    #     fedrc_cluster_count=3,
+    #     cluster_count=len(drift_specifications['drift_group_proportions'][0]) + 1,
+    #     fedex_alpha=0.9,
+    #     **ditto_parameters,
+    # )
+    #
+    # ditto_fed_net = FederatedNetwork(
+    #     num_iid_client_instances=10,
+    #     num_noniid_client_instances=0,
+    #     server_tree_layout=[1],
+    #     num_training_rounds=200,
+    #     dataset_name=constants.DatasetNames.CIFAR_100,
+    #     noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+    #     drift_specs=drift_specifications,
+    #     simulation_parameters=simulation_parameters,
+    #     client_select_fraction=1,
+    #     drift_recovery_parameters=ditto_recovery_parameters,
+    # )
+    #
+    # ditto_fed_net.run_simulation(
+    #     file_save_path='plots/swap/CIFAR-100/saved_plots_ditto/',
+    #     log_save_path='logs/swap/CIFAR-100/saved_logs_ditto/')
     #
     # 0000000000000000000000000000000000000
     # Define drift recovery algorithm related parameters
@@ -889,6 +1018,35 @@ def main():
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/Tiny/saved_plots_fedex/',
     #     log_save_path='logs/swap/Tiny/saved_logs_fedex/')
+
+    # #00000000000000000 Ditto 00000000000000000000
+    # Uncomment this block, and keep the other run_simulation calls disabled, to run Ditto on Tiny ImageNet-200.
+    # ditto_recovery_parameters = dict(
+    #     recovery_method=constants.RecoveryAlgorithm.DITTO,
+    #     base_aggregation_method=constants.RecoveryAlgorithm.DITTO,
+    #     fedau_alpha=0.9,
+    #     fedrc_cluster_count=3,
+    #     cluster_count=len(drift_specifications['drift_group_proportions'][0]) + 1,
+    #     fedex_alpha=0.9,
+    #     **ditto_parameters,
+    # )
+    #
+    # ditto_fed_net = FederatedNetwork(
+    #     num_iid_client_instances=10,
+    #     num_noniid_client_instances=0,
+    #     server_tree_layout=[1],
+    #     num_training_rounds=800,
+    #     dataset_name=constants.DatasetNames.TINY_IMAGENET_200,
+    #     noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+    #     drift_specs=drift_specifications,
+    #     simulation_parameters=simulation_parameters,
+    #     client_select_fraction=1,
+    #     drift_recovery_parameters=ditto_recovery_parameters,
+    # )
+    #
+    # ditto_fed_net.run_simulation(
+    #     file_save_path='plots/swap/Tiny/saved_plots_ditto/',
+    #     log_save_path='logs/swap/Tiny/saved_logs_ditto/')
 
     # 0000000000000000000000000000000000000
     # Define drift recovery algorithm related parameters

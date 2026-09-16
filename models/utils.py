@@ -479,6 +479,7 @@ def test(_model: nn.Module, _dataset: DataLoader) -> tuple[float, float]:
     correct, total, loss = 0, 0, 0.0
 
     _model = _model.to(get_device())
+    was_training = _model.training
     _model.eval()
 
     with torch.no_grad():
@@ -503,6 +504,9 @@ def test(_model: nn.Module, _dataset: DataLoader) -> tuple[float, float]:
             correct += (predicted == labels).sum().item()
 
     # average loss over all samples
+    if was_training:
+        _model.train()
+
     loss /= len(_dataset)
     accuracy = correct / total
     return loss, accuracy
@@ -526,6 +530,7 @@ def test_subset_classes(_model: nn.Module, _dataset: DataLoader, target_classes:
     target_tensor = torch.tensor(sorted(target_classes), device=get_device())
 
     _model = _model.to(get_device())
+    was_training = _model.training
     _model.eval()
     with torch.no_grad():
         for _x, _y in _dataset:
@@ -539,6 +544,9 @@ def test_subset_classes(_model: nn.Module, _dataset: DataLoader, target_classes:
             loss += criterion(outputs, selected_labels).item()
             correct += (outputs.argmax(dim=1) == selected_labels).sum().item()
             total += selected_labels.size(0)
+
+    if was_training:
+        _model.train()
 
     if total == 0:
         return None, None, 0

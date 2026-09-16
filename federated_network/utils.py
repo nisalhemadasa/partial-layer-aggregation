@@ -204,6 +204,109 @@ def evaluate_clients_for_stage(all_clients: List[Client], servers: List[Server],
     return {'round': round_idx, 'stage': stage, 'clients': records}
 
 
+def evaluate_ditto_personalized_clients(all_clients: List[Client], servers: List[Server], round_idx: int,
+                                        sampled_client_ids: List[int], drift: Drift,
+                                        include_drifted_classes: bool = False) -> Dict:
+    """
+    Evaluate initialized Ditto personalized models after local training.
+    :param all_clients: All clients, returned in stable client-ID order.
+    :param servers: Leaf servers used to record parent-server identity.
+    :param round_idx: Current local-training round.
+    :param sampled_client_ids: IDs participating in the local-training event.
+    :param drift: Drift metadata used for optional class-subset evaluation.
+    :param include_drifted_classes: Whether to include affected-class metrics.
+    :return: Structured personalized evaluation record.
+    """
+    server_map = {server.server_id: server for server in servers}
+    sampled_ids = set(sampled_client_ids)
+    target_classes = get_drifted_classes(drift) if include_drifted_classes else set()
+    records = []
+
+    for client in sorted(all_clients, key=lambda item: item.client_id):
+        server = server_map[client.parent_server_id]
+        loss, accuracy = client.evaluate_ditto_personalized()
+        record = {
+            'client_id': client.client_id,
+            'parent_server_id': server.server_id,
+            'server_abs_id': server.abs_id,
+            'model_id': 'personalized',
+            'model_role': 'ditto_personalized',
+            'participated': client.client_id in sampled_ids,
+            'loss': loss,
+            'accuracy': accuracy
+        }
+        if include_drifted_classes:
+            class_loss, class_accuracy, sample_count = \
+                client.evaluate_ditto_personalized_drifted_classes(target_classes)
+            record['drifted_class_metrics'] = {
+                'classes': sorted(target_classes),
+                'loss': class_loss,
+                'accuracy': class_accuracy,
+                'sample_count': sample_count
+            }
+        records.append(record)
+
+    return {'round': round_idx, 'stage': 'local_after_training', 'clients': records}
+
+
+def build_ditto_state_log(clients: List[Client], drift_recovery_parameters: Dict) -> Dict:
+    """
+    Build serializable Ditto configuration and client-state metadata.
+    :param clients: Ditto client instances.
+    :param drift_recovery_parameters: Resolved experiment parameters.
+    :return: Versioned Ditto state record.
+    """
+    parameter_names = [
+        'ditto_lambda', 'ditto_learning_rate', 'ditto_personal_epochs', 'ditto_eval_personalized',
+        'ditto_dynamic_lambda', 'ditto_lambda_candidates', 'ditto_validation_fraction',
+        'ditto_validation_seed'
+    ]
+    return {
+        'schema_version': 1,
+        'strategy': constants.RecoveryAlgorithm.DITTO,
+        'upload_model_role': 'local_client',
+        'personalized_model_role': 'ditto_personalized',
+        'personal_optimizer_state_policy': 'recreated_per_round',
+        'parameters': {name: copy.deepcopy(drift_recovery_parameters.get(name)) for name in parameter_names},
+        'clients': [
+            {
+                'client_id': client.client_id,
+                'parent_server_id': client.parent_server_id,
+                'ditto_initialized': bool(client.ditto_initialized),
+                'has_personalized_model': client.ditto_personal_model is not None,
+                'validation_sample_count': (len(client.ditto_validation_indices)
+                                            if client.ditto_validation_indices is not None else 0),
+                'training_pool_sample_count': (len(client.ditto_training_indices)
+                                               if client.ditto_training_indices is not None else None),
+                'selected_lambda': client.ditto_selected_lambda
+            }
+            for client in sorted(clients, key=lambda item: item.client_id)
+        ]
+    }
+
+
+def build_ditto_lambda_record(clients: List[Client], round_idx: int) -> Dict:
+    """
+    Build one round of dynamic Ditto lambda decisions.
+    :param clients: Ditto client instances.
+    :param round_idx: Current local-training round.
+    :return: Structured per-client lambda decision record.
+    """
+    return {
+        'round': round_idx,
+        'stage': 'local_after_training',
+        'clients': [
+            {
+                'client_id': client.client_id,
+                'parent_server_id': client.parent_server_id,
+                'selected_lambda': client.ditto_selected_lambda,
+                'decisions': copy.deepcopy(client.ditto_lambda_decisions)
+            }
+            for client in sorted(clients, key=lambda item: item.client_id)
+        ]
+    }
+
+
 def train_client_models(all_clients, sampled_client_ids, servers: List[Server], drift: Drift,
                         simulation_parameters: Dict, drift_recovery_method: str, verbose: bool = False) -> List:
     """
@@ -313,13 +416,19 @@ def handle_after_drift_configurations(drift: Drift, server_hierarchy: List[Any],
     """
     if drift.is_drift:  # execute only once: after the drift period ends
         if not drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.FEDRC:
-            # Change the aggregation strategy back to FedAvg outside the drift window
-            change_server_aggregation_strategy(server_hierarchy, constants.RecoveryAlgorithm.FEDAVG, drift)
+            # Ditto is a run-wide personalized method. Other recovery methods return to the configured base method.
+            after_drift_method = drift_recovery_parameters['base_aggregation_method']
+            if drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.DITTO:
+                after_drift_method = constants.RecoveryAlgorithm.DITTO
+            change_server_aggregation_strategy(server_hierarchy, after_drift_method, drift)
 
             if not drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.FLUID:
-                # Change the clients' (all of them) drift recovery method
-                change_client_drift_recovery_method(clients, drift_recovery_parameters['base_aggregation_method'],
-                                                    drift.drifted_client_indices)
+                if drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.DITTO:
+                    for client in clients:
+                        client.drift_recovery_method = constants.RecoveryAlgorithm.DITTO
+                else:
+                    change_client_drift_recovery_method(clients, after_drift_method,
+                                                        drift.drifted_client_indices)
             else:
                 # FLUID
                 # Change the clients' (only the drift affected clients) drift recovery method

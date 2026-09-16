@@ -18,19 +18,28 @@ from federated_network.client import client_fn, Client, client_initial_training
 from federated_network.server import server_fn, model_aggregation, model_distribution_fedex, \
     server_hierarchy_evaluate, model_distribution_fedrc, model_distribution_hierarchy
 from federated_network.utils import update_progress, link_server_hierarchy, train_client_models, \
-    link_clients_to_servers, handle_drift_for_round, apply_drift_to_clients, evaluate_clients_for_stage
+    link_clients_to_servers, handle_drift_for_round, apply_drift_to_clients, evaluate_clients_for_stage, \
+    evaluate_ditto_personalized_clients, build_ditto_state_log, build_ditto_lambda_record
 from log_utils.analysis_functions import compute_client_average_metrics, compute_server_average_metrics, \
     split_clients_loss_and_accuracy, convert_fedrc_metrics_to_pairs
 from log_utils.logging import write_logs, write_structured_log
 from plot_utils.plotting import plot_client_performance_vs_rounds, plot_server_performance_vs_rounds, \
     plot_dataset_distribution, \
     plot_client_avg_performance_vs_rounds
+from strategy.Ditto import resolve_ditto_parameters
 
 
 class FederatedNetwork:
     def __init__(self, num_iid_client_instances, num_noniid_client_instances, server_tree_layout, num_training_rounds,
                  dataset_name, noniid_partitioning_strategy, drift_specs, simulation_parameters,
                  drift_recovery_parameters, client_select_fraction=0.5, minibatch_size=128, num_local_epochs=5):
+        drift_recovery_parameters = dict(drift_recovery_parameters)
+        if drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.DITTO:
+            drift_recovery_parameters.update(resolve_ditto_parameters(drift_recovery_parameters))
+        if (drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.DITTO and
+                len(server_tree_layout) != 1):
+            raise ValueError("Ditto currently supports only a single-level server layout because hierarchical "
+                             "sample-weight propagation is not implemented.")
         # Dataset name
         self.dataset_name = dataset_name
 
@@ -111,7 +120,8 @@ class FederatedNetwork:
                 self.drift_recovery_parameters['recovery_method'],
                 _cluster_count,
                 # for FedRC, each client maintains the same number of local models as the multiple global models the server maintains
-                dataset_name
+                dataset_name,
+                self.drift_recovery_parameters
             )
             for i in range(num_noniid_client_instances)
         ]
@@ -125,7 +135,8 @@ class FederatedNetwork:
                 [partitioned_iid_trainsets[i], partitioned_iid_testsets[i]],
                 self.drift_recovery_parameters['recovery_method'],
                 _cluster_count,
-                dataset_name
+                dataset_name,
+                self.drift_recovery_parameters
             )
             for i in range(num_iid_client_instances)
         ]
@@ -138,12 +149,12 @@ class FederatedNetwork:
             # For each level in the tree, create a list of server instances, by passing the absolute index
             servers_at_level = [
                 server_fn(
-                    server_id,
-                    self.dataset_name,
-                    absolute_index + i,
-                    self.drift_recovery_parameters['recovery_method'],
-                    self.drift_recovery_parameters['fedex_alpha'],
-                    _cluster_count
+                    server_id=server_id,
+                    dataset_name=self.dataset_name,
+                    server_abs_id=absolute_index + i,
+                    drift_recovery_method=self.drift_recovery_parameters['recovery_method'],
+                    cluster_count=_cluster_count,
+                    fedex_alpha=self.drift_recovery_parameters['fedex_alpha']
                 )
                 for i, server_id in enumerate(range(_cluster_count))]
 
@@ -163,6 +174,8 @@ class FederatedNetwork:
         # Retained in memory so diagnostics and future FedEx optimization can consume the same structured history.
         self.model_distance_history = ModelDistanceHistory()
         self.evaluation_history = []
+        self.ditto_evaluation_history = []
+        self.ditto_lambda_history = []
 
     def sample_clients(self) -> List[Client]:
         """ Sample clients from the client pool and returns a list of client instances """
@@ -180,6 +193,11 @@ class FederatedNetwork:
         server_loss_and_accuracy = []  # Store the loss and accuracy at each level of the server hierarchy
         self.model_distance_history = ModelDistanceHistory()
         self.evaluation_history = []
+        self.ditto_evaluation_history = []
+        self.ditto_lambda_history = []
+        is_ditto_run = self.drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.DITTO
+        ditto_personalized_evaluation_enabled = (
+            is_ditto_run and self.drift_recovery_parameters.get('ditto_eval_personalized', True))
         model_distance_logging_enabled = self.simulation_parameters.get('model_distance_logging_enabled', True)
         model_distance_interval = self.simulation_parameters.get('model_distance_interval', 1)
         if not isinstance(model_distance_interval, int) or model_distance_interval <= 0:
@@ -303,6 +321,12 @@ class FederatedNetwork:
                 self.evaluation_history.append(evaluate_clients_for_stage(
                     self.clients, self.server_hierarchy[server_depth], _round, sampled_client_ids, evaluation_stage,
                     self.drift, drifted_class_metrics_enabled))
+            if ditto_personalized_evaluation_enabled:
+                self.ditto_evaluation_history.append(evaluate_ditto_personalized_clients(
+                    self.clients, self.server_hierarchy[server_depth], _round, sampled_client_ids, self.drift,
+                    drifted_class_metrics_enabled))
+            if is_ditto_run and self.drift_recovery_parameters.get('ditto_dynamic_lambda', False):
+                self.ditto_lambda_history.append(build_ditto_lambda_record(self.clients, _round))
 
         # Stop the timer
         end_time = time.time()
@@ -334,6 +358,36 @@ class FederatedNetwork:
                 })
             write_structured_log({'schema_version': 1, 'records': class_records},
                                  evaluation_log_save_path + constants.Logs.DRIFTED_CLASS_LOG)
+
+        if is_ditto_run:
+            write_structured_log(build_ditto_state_log(self.clients, self.drift_recovery_parameters),
+                                 evaluation_log_save_path + constants.Logs.DITTO_STATE_LOG)
+            if ditto_personalized_evaluation_enabled:
+                write_structured_log({'schema_version': 1, 'records': self.ditto_evaluation_history},
+                                     evaluation_log_save_path + constants.Logs.DITTO_PERSONALIZED_CLIENT_LOG)
+                if drifted_class_metrics_enabled:
+                    personalized_class_records = []
+                    for record in self.ditto_evaluation_history:
+                        personalized_class_records.append({
+                            'round': record['round'],
+                            'stage': record['stage'],
+                            'clients': [
+                                {
+                                    'client_id': client['client_id'],
+                                    'model_id': client['model_id'],
+                                    'model_role': client['model_role'],
+                                    'metrics': client['drifted_class_metrics']
+                                }
+                                for client in record['clients']
+                            ]
+                        })
+                    write_structured_log(
+                        {'schema_version': 1, 'records': personalized_class_records},
+                        evaluation_log_save_path + constants.Logs.DITTO_PERSONALIZED_DRIFTED_CLASS_LOG
+                    )
+            if self.drift_recovery_parameters.get('ditto_dynamic_lambda', False):
+                write_structured_log({'schema_version': 1, 'records': self.ditto_lambda_history},
+                                     evaluation_log_save_path + constants.Logs.DITTO_SELECTED_LAMBDA_LOG)
 
         if self.drift_recovery_parameters['recovery_method'] in [constants.RecoveryAlgorithm.FEDRC]:
             # ============================

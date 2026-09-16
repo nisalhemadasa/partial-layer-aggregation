@@ -48,3 +48,11 @@ Set `model_distance_logging_enabled=False` in `simulation_parameters` to disable
 Completed runs write the selected stage to `evaluation_log.pkl`. Global/downloaded-model runs also write `downloaded_global_client_log.pkl`. These records include client and assigned-server identity, model role, participation status, loss, and accuracy.
 
 Set `drifted_class_metrics_enabled=True` to include label-swap class-subset loss, accuracy, and sample counts in `drifted_class_log.pkl`. Rotation-only drift produces an empty class set and zero matching samples. `server_metric_weighting` controls client-derived server metrics: use `uniform` (default) or `train_samples`. This affects reported server metrics only, not aggregation.
+
+### Ditto integration
+
+Ditto currently supports fixed-lambda personalized training with full client participation and a single server level. Each client keeps `client.model` for upload/aggregation and a persistent `client.ditto_personal_model` for personalization. Ditto global aggregation is weighted by local sample count; existing FedAvg aggregation remains uniform.
+
+`client_log.pkl` continues to describe `client.model`. When `ditto_eval_personalized=True`, personalized metrics are evaluated after local training and written separately to `ditto_personalized_client_log.pkl`. With `drifted_class_metrics_enabled=True`, personalized label-drift subset metrics are written to `ditto_personalized_drifted_class_log.pkl`. `ditto_state_log.pkl` records the resolved configuration and model-role metadata.
+
+Set `ditto_dynamic_lambda=True` to reserve a persistent seeded validation partition for each client and select among `ditto_lambda_candidates` after comparable candidate updates. Training never uses the held-out validation indices. Per-round, per-client candidate losses and selected values are written to `ditto_selected_lambda_log.pkl`.

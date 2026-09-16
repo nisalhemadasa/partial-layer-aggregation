@@ -45,12 +45,14 @@ class Server:
             self.multi_models = None
 
     def train(self, client_model_parameters: Dict[str, OrderedDict],
-              aux_classifier_parameters: Dict[str, OrderedDict] = None, ema_weight: float = None) -> None:
+              aux_classifier_parameters: Dict[str, OrderedDict] = None, ema_weight: float = None,
+              client_sample_counts: Dict[int, int] = None) -> None:
         """
         Train the server model using the client model parameters.
         :param client_model_parameters: Dictionary of client model parameters
         :param aux_classifier_parameters: Dictionary of auxiliary classifier parameters from drifted clients
         :param ema_weight: EMA weight (alpha) parameter for the FedAU algorithm
+        :param client_sample_counts: Local-training sample counts for Ditto aggregation
         :return: None
         """
         if (self.strategy.strategy_name == constants.RecoveryAlgorithm.FEDAU or
@@ -70,6 +72,8 @@ class Server:
             self.strategy.aggregate_models(self.multi_models, client_model_parameters)
         elif self.strategy.strategy_name == constants.RecoveryAlgorithm.ORACLE:
             self.strategy.aggregate_models(self.model, client_model_parameters)
+        elif self.strategy.strategy_name == constants.RecoveryAlgorithm.DITTO:
+            self.strategy.aggregate_models(self.model, client_model_parameters, client_sample_counts)
         else:
             # FedAvg: For internal servers or when there are no drifted clients
             self.strategy.aggregate_models(self.model, client_model_parameters)
@@ -211,9 +215,13 @@ def model_aggregation_fedavg(server: Server, sampled_clients: List[Client], serv
     :return: None
     """
     if sampled_clients:  # Star topology
+        clients_by_id = {client.client_id: client for client in sampled_clients}
         # Get model parameters from all participating clients
-        model_parameters = {client_id: sampled_clients[client_id].model.state_dict()
+        model_parameters = {client_id: clients_by_id[client_id].model.state_dict()
                             for client_id in server.client_ids}
+        client_sample_counts = ({client_id: len(clients_by_id[client_id].local_trainset)
+                                 for client_id in server.client_ids}
+                                if server.strategy.strategy_name == constants.RecoveryAlgorithm.DITTO else None)
 
         if verbose:
             print('aggregate client models: server:' + str(server.server_id) + ' -> ' + 'clients:' + str(
@@ -224,6 +232,7 @@ def model_aggregation_fedavg(server: Server, sampled_clients: List[Client], serv
         model_parameters = {
             child_server: server_hierarchy[depth_level + 1][child_server].model.state_dict()
             for child_server in server.child_server_ids}
+        client_sample_counts = None
 
         if verbose:
             print('aggregate server models.')
@@ -233,7 +242,7 @@ def model_aggregation_fedavg(server: Server, sampled_clients: List[Client], serv
             "model_aggregation_fedavg: Either sampled_clients or server_hierarchy and depth_level must be provided")
 
     # Aggregate client models
-    server.train(model_parameters, None, None)
+    server.train(model_parameters, None, None, client_sample_counts)
 
 
 def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: DataLoader, sampled_clients: List[Client],
@@ -282,7 +291,8 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
 
                 elif server.strategy.strategy_name in {constants.RecoveryAlgorithm.FEDAVG,
                                                        constants.RecoveryAlgorithm.RRT,
-                                                       constants.RecoveryAlgorithm.FEDEX}:
+                                                       constants.RecoveryAlgorithm.FEDEX,
+                                                       constants.RecoveryAlgorithm.DITTO}:
                     model_aggregation_fedavg(server, sampled_clients, None, None, verbose=verbose)
                 else:
                     raise ValueError("Server.model_aggregation: Unsupported recovery algorithm name")
@@ -459,6 +469,10 @@ def change_server_aggregation_strategy(server_hierarchy: List[Any], drift_recove
             server.drift_id = drift.unique_drift_ids[idx]
             server.strategy = strategy.Oracle.aggregator_fn()
 
+    elif drift_recovery_method == constants.RecoveryAlgorithm.DITTO:
+        for server in server_hierarchy[-1]:
+            server.strategy = strategy.Ditto.aggregator_fn()
+
     else:
         # if the drift is ended, change the strategy back to FedAvg
         for server in server_hierarchy[-1]:
@@ -483,6 +497,8 @@ def server_fn(server_id: int, dataset_name: str, server_abs_id: int, drift_recov
         aggregator_strategy = strategy.Oracle.aggregator_fn()
     elif drift_recovery_method == constants.RecoveryAlgorithm.FEDEX:  # TODO: remove after testing
         aggregator_strategy = strategy.FedEx.aggregator_fn()  # TODO: remove after testing
+    elif drift_recovery_method == constants.RecoveryAlgorithm.DITTO:
+        aggregator_strategy = strategy.Ditto.aggregator_fn()
     else:
         aggregator_strategy = strategy.FedAvg.aggregator_fn()
 
