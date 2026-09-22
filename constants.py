@@ -202,6 +202,7 @@ class RecoveryAlgorithm:
     FEDEX = 'fedex'
     FEDRC = 'fedrc'  # Clustering-based
     DITTO = 'ditto'  # Personalized federated learning
+    FAIRFEDDRIFT = 'fairfeddrift'  # Group-aware drift clustering
 
 
 # Types of models used in the project

@@ -499,6 +499,8 @@ def server_fn(server_id: int, dataset_name: str, server_abs_id: int, drift_recov
         aggregator_strategy = strategy.FedEx.aggregator_fn()  # TODO: remove after testing
     elif drift_recovery_method == constants.RecoveryAlgorithm.DITTO:
         aggregator_strategy = strategy.Ditto.aggregator_fn()
+    elif drift_recovery_method == constants.RecoveryAlgorithm.FAIRFEDDRIFT:
+        aggregator_strategy = strategy.FairFedDrift.aggregator_fn()
     else:
         aggregator_strategy = strategy.FedAvg.aggregator_fn()
 

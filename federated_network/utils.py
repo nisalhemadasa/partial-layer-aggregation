@@ -415,7 +415,8 @@ def handle_after_drift_configurations(drift: Drift, server_hierarchy: List[Any],
     :return: None
     """
     if drift.is_drift:  # execute only once: after the drift period ends
-        if not drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.FEDRC:
+        if drift_recovery_parameters['recovery_method'] not in {
+                constants.RecoveryAlgorithm.FEDRC, constants.RecoveryAlgorithm.FAIRFEDDRIFT}:
             # Ditto is a run-wide personalized method. Other recovery methods return to the configured base method.
             after_drift_method = drift_recovery_parameters['base_aggregation_method']
             if drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.DITTO:
@@ -450,12 +451,14 @@ def handle_in_drift_configurations(drift: Drift, server_hierarchy: List[Any], dr
     """
     if not drift.is_drift:  # execute only once: at the beginning of the drift step
         # The server aggregation strategy needs to change for the FedAU's case, at the start of the drift step.
-        change_server_aggregation_strategy(server_hierarchy, drift_recovery_parameters['recovery_method'],
-                                           drift)
+        # FairFedDrift runs throughout the experiment; simulated drift must not reset its learned state.
+        if drift_recovery_parameters['recovery_method'] != constants.RecoveryAlgorithm.FAIRFEDDRIFT:
+            change_server_aggregation_strategy(server_hierarchy, drift_recovery_parameters['recovery_method'],
+                                               drift)
 
-        # Change the clients' (all of them) drift recovery method. (This is not needed for Oracle.)
-        change_client_drift_recovery_method(clients, drift_recovery_parameters['recovery_method'],
-                                            drift.drifted_client_indices)
+            # Change the clients' recovery method for the existing triggered strategies.
+            change_client_drift_recovery_method(clients, drift_recovery_parameters['recovery_method'],
+                                                drift.drifted_client_indices)
 
         drift.is_drift = True  # Drift occurs in the current step
 

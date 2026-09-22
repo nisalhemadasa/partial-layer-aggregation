@@ -1,5 +1,9 @@
 # Development progress
 
+## 2026-09-22
+
+- Created `FairFedDrift_integration_plan.txt` with small implementation/check steps after reading AGENTS.md, current strategy hooks and upstream revision `51dec5e`. Source and document readback checks completed; integration and runtime validation remain pending.
+
 Keep one brief dated entry per development step: change, validation, and any remaining limitation. Record completed work only; implementation plans remain in their separate files.
 
 ## 2026-09-16
@@ -22,3 +26,29 @@ Keep one brief dated entry per development step: change, validation, and any rem
 - Cross-checked Ditto against FedTNT commit `692a0e1` and appended the remaining `main.py` entry-point integration steps to `Ditto_integration_plan.txt`. Algorithmic differences that intentionally preserve this framework's training semantics are documented separately from the missing runnable Ditto configuration.
 - Implemented Ditto entry-point steps 1-4: centralized `main.py` Ditto settings and added a disabled-by-default MNIST Ditto experiment with full participation, a flat server, and dedicated output paths. Compilation and source/diff checks passed; focused tests could not import because the available Python environments lack project dependencies. Executing this exact block and its FedAvg compatibility run remain pending.
 - Added disabled-by-default Ditto handles under all five `main.py` dataset sections: MNIST, Fashion-MNIST, CIFAR-10, CIFAR-100, and Tiny ImageNet-200. All share the centralized Ditto settings and use dataset-specific output paths; extracted-block parsing, coverage checks, `main.py` compilation, and diff checks passed.
+
+- 2026-09-22: Simplified the FairFedDrift plan around existing files/functions and explicit main.py settings, constructor/run handles and dataset coverage. Verified function references and document readback; implementation remains pending.
+
+- 2026-09-22: Completed FairFedDrift step 1.1: added RecoveryAlgorithm.FAIRFEDDRIFT and marked the plan step complete. Python import/value checks passed for the new constant and all eight existing strategy names; strategy implementation and wiring remain pending.
+
+- 2026-09-22: Completed FairFedDrift step 1.2: added the strategy class, factory, package exports and explicit NotImplementedError aggregation placeholder; updated the plan. Syntax and isolated factory/failure checks passed, and full package import/factory checks passed on Python 3.11. Default Python hits existing union-annotation incompatibility; algorithm implementation and server wiring remain pending.
+
+- 2026-09-22: Implemented FairFedDrift step 1.3 in server_fn(), reusing existing model creation and Server initialization; updated the plan. Isolated actual factory/initializer checks passed for MNIST on CPU for FairFedDrift, FedAvg, Oracle, FedEx and Ditto. Full server import is blocked by missing SciPy on Python 3.11; aggregation and remaining flow wiring are pending.
+
+- 2026-09-22: Implemented FairFedDrift step 1.4: exported parameter resolution and setup validation following Ditto's pattern, with explicit group thresholds and CPU/full-participation/flat-layout checks. All six focused configuration tests passed on Python 3.11; updated and read back the plan. Automatic invocation during experiment construction remains pending flow wiring; full server import still requires SciPy.
+
+- 2026-09-22: Set FairFedDrift's default history window to 100 communication rounds, clarified round-based retention and pending eviction in the plan, and updated configuration checks. All seven focused tests passed on Python 3.11; actual history storage/eviction remains unimplemented.
+
+- 2026-09-22: Implemented FairFedDrift step 2.1 with set_dataset_groups()/get_dataset_groups() in data/utils.py, preserving dataset types and two-field training batches. All 11 focused data/configuration tests passed, including nested subsets, IID/non-IID partitioning, shuffled group loaders and invalid metadata; plan read back. Real group generation and experiment attachment remain pending.
+
+- 2026-09-22: Revised the FairFedDrift plan for PaLA's client-group drift: single local loss/threshold, optional sensitive metadata, scalar merging, 100-round history, PaLA metrics and main.py handles. Reopened configuration step 1.4 and preserved completed-work history; read back the revised plan. This is documentation only; current dual-threshold code still needs migration.
+
+- 2026-09-22: Completed revised FairFedDrift step 1.4: replaced dual thresholds with required fairfeddrift_loss_threshold, added obsolete-key migration errors, and updated tests and plan. All 13 focused configuration/data checks passed on Python 3.11; defaults and setup checks remain unchanged. Validator invocation during experiment construction and algorithm implementation remain pending.
+
+- 2026-09-22: Removed unused sensitive-group metadata helpers from data/utils.py and their dedicated test_fairfeddrift_data.py; updated the plan to reflect cleanup. All nine remaining FairFedDrift tests and the existing two-field dataset/loader smoke check passed on Python 3.11; source search found no remaining helper/group_ids references. Multi-client fixture and algorithm implementation remain pending.
+
+- 2026-09-22: Completed test-only FairFedDrift step 2.2 with a six-client before/after fixture and separate ground-truth identities. All 13 focused tests passed on Python 3.11, including four fixture checks for labels/counts, two-field batches, isolation and repeatability. Updated/read back the plan to preserve main.py-controlled final drift configurations; detector and empty-data validation remain pending.
+
+- 2026-09-22: Completed FairFedDrift step 2.3 drift-path review and guarded start/end handlers against resetting the strategy to FedAvg. Added a real drift-function test for configurable swaps/timing, stationary clients, loader refresh and no Oracle reassignment; main.py and drift transformations unchanged. All 14 FairFedDrift tests passed on Python 3.10; broader discovery passed 26 tests with two Ditto import errors from missing ucimlrepo. Plan read back; full simulation and future detector isolation remain pending.
+
+- 2026-09-22: Implemented step 2.4 helpers: selected-sample CPU DatasetSnapshot and per-client ClientDataHistory with 100-round expiry, duplicate-arrival protection and expired-round reporting. All 19 FairFedDrift tests passed on Python 3.10, including five history checks; plan read back. Snapshots freeze transformed inputs. Runtime wiring, cross-arrival deduplication and cluster-history cleanup remain pending; existing functions/main.py were not changed.
