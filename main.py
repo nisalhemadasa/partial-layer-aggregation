@@ -151,7 +151,7 @@ def main():
     # starting value and must be validated on held-out validation data.
     fairfeddrift_parameters = dict(
         fairfeddrift_loss_threshold=0.1,
-        fairfeddrift_window=100,  # Retained communication rounds.
+        fairfeddrift_window=1,  # Retained communication rounds.
         fairfeddrift_rounds_per_timestep=1,
         fairfeddrift_seed=experiment_seed,
     )
@@ -397,11 +397,11 @@ def main():
         drift_recovery_parameters=drift_recovery_parameters, # Drift recovery algorithm related parameters
     )
 
-    # Running the simulation
-    fed_net.run_simulation(
-        file_save_path='plots/swap/MNIST/saved_plots_fedex/',
-        log_save_path='logs/swap/MNIST/saved_logs_fedex/')
-    print(f"Simulation completed: dataset=MNIST, method=FedEx.")
+    # # Running the simulation
+    # fed_net.run_simulation(
+    #     file_save_path='plots/swap/MNIST/saved_plots_fedex/',
+    #     log_save_path='logs/swap/MNIST/saved_logs_fedex/')
+    # print(f"Simulation completed: dataset=MNIST, method=FedEx.")
 
     # #00000000000000000 Ditto 00000000000000000000
     # Uncomment this block, and keep the other run_simulation calls disabled, to run Ditto on MNIST.
@@ -484,11 +484,11 @@ def main():
         drift_recovery_parameters=drift_recovery_parameters, # Drift recovery algorithm related parameters
     )
 
-    # Running the simulation
-    fed_net.run_simulation(
-        file_save_path='plots/swap/MNIST/saved_plots_oracle/',
-        log_save_path='logs/swap/MNIST/saved_logs_oracle/')
-    print(f"Simulation completed: dataset=MNIST, method=Oracle.")
+    # # Running the simulation
+    # fed_net.run_simulation(
+    #     file_save_path='plots/swap/MNIST/saved_plots_oracle/',
+    #     log_save_path='logs/swap/MNIST/saved_logs_oracle/')
+    # print(f"Simulation completed: dataset=MNIST, method=Oracle.")
 
 
     # # # 00000000000000000000000000000000000000000000000000000000000000
