@@ -24,6 +24,41 @@ from typing import List, Tuple, Any
 import constants
 
 
+class DatasetSnapshot(Dataset):
+    """Detached CPU samples whose values cannot be changed through item access."""
+
+    def __init__(self, dataset: Dataset):
+        """
+        Materialize only selected samples, preserving their current transformed values.
+        :param dataset: Nonempty dataset yielding tensor input/label pairs.
+        """
+        if len(dataset) == 0:
+            raise ValueError("Cannot snapshot an empty dataset.")
+        self._samples = []
+        for index in range(len(dataset)):
+            inputs, label = dataset[index]
+            if not isinstance(inputs, Tensor):
+                raise ValueError("Dataset snapshots require tensor inputs after preprocessing.")
+            self._samples.append((inputs.detach().cpu().clone(),
+                                  torch.as_tensor(label).detach().cpu().clone()))
+
+    def __len__(self) -> int:
+        """
+        Return the number of retained samples.
+        :return: Snapshot sample count.
+        """
+        return len(self._samples)
+
+    def __getitem__(self, index: int) -> Tuple[Tensor, Tensor]:
+        """
+        Read independent tensors so callers cannot alter historical samples.
+        :param index: Local snapshot sample index.
+        :return: Copied input and label tensors.
+        """
+        inputs, label = self._samples[index]
+        return inputs.clone(), label.clone()
+
+
 class CustomDataset(Dataset):
     def __init__(self, images: torch.Tensor, labels: torch.Tensor, transform=None):
         self.images = images

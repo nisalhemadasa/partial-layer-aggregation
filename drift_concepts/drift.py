@@ -30,7 +30,7 @@ class Drift:
     def __init__(self, drifted_clients_fraction, drift_group_proportions, is_synchronous, is_random, async_drift_specs,
                  drift_mode, drift_start_round, drift_end_round, drift_step_rounds, num_client_instances, max_rotation,
                  class_pairs_to_swap, drift_pattern_id_map, drift_patterns_over_time, label_swap_percentage_steps,
-                 current_drift_step):
+                 current_drift_step, random_seed):
         # Number of clients to be applied with drifted data
         self.num_drifted_clients = int(drifted_clients_fraction * num_client_instances)
 
@@ -97,6 +97,7 @@ class Drift:
 
         # Current drift step (used internally during simulation)
         self.current_drift_step = current_drift_step
+        self.random_seed = random_seed
 
         # -----------------------
         # for asynchronous-clustering based drift patterns
@@ -129,13 +130,12 @@ class Drift:
         :return: List of Client objects with the rotated images in their datasets
         """
 
-        def apply_rotation(dataset, _rotation_angle: float, _fraction_rotated: float, seed: int = 42):
+        def apply_rotation(dataset, _rotation_angle: float, _fraction_rotated: float):
             """
             Apply rotation drift to a fraction of the images.
             :param dataset: Dataset to process
             :param _rotation_angle: Angle of rotation
             :param _fraction_rotated: Fraction of images to rotate
-            :param seed: Random seed for reproducibility
             :return: Drifted images and original labels
             """
             _images = dataset.data  # Access dataset images
@@ -146,7 +146,7 @@ class Drift:
             num_images_to_rotate = int(_fraction_rotated * num_images)
 
             # pick random subset of indices to rotate
-            rng = np.random.default_rng(seed)
+            rng = np.random.default_rng(self.random_seed)
             rotate_indices = rng.choice(num_images, size=num_images_to_rotate, replace=False)
 
             # apply rotation only to those indices
@@ -384,12 +384,13 @@ def modify_drifted_client_groups(drift: Drift, _round: int) -> None:
             drift.drifted_client_indices = drift.async_drift_specs['drift_groups'][1]
 
 
-def drift_fn(num_client_instances: int, num_training_rounds: int, drift_specs: Dict) -> Drift:
+def drift_fn(num_client_instances: int, num_training_rounds: int, drift_specs: Dict, random_seed: int) -> Drift:
     """
     Create a drift object using the specifications given as inputs.
     :param num_client_instances: Total number of client instances in the federated network
     :param num_training_rounds: Total number of training rounds
     :param drift_specs: Dictionary containing the drift specifications
+    :param random_seed: Experiment seed selected by the entry point.
     :return: Drift object
     """
     # Drift start and end rounds
@@ -413,7 +414,8 @@ def drift_fn(num_client_instances: int, num_training_rounds: int, drift_specs: D
                  drift_pattern_id_map=drift_specs['drift_pattern_id_map'],
                  drift_patterns_over_time=drift_specs['drift_patterns_over_time'],
                  label_swap_percentage_steps=drift_specs['label_swap_percentage_steps'],
-                 current_drift_step=drift_specs['current_drift_step'])
+                 current_drift_step=drift_specs['current_drift_step'],
+                 random_seed=random_seed)
 
 
 def apply_drift(clients: List[Client], drift: Drift) -> List[Client]:
