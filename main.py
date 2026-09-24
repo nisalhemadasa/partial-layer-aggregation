@@ -160,6 +160,24 @@ def main():
         ditto_validation_seed=42,
     )
 
+    # Shared FairFedDrift settings. The loss-increase threshold is an experimental
+    # starting value and must be validated on held-out validation data.
+    fairfeddrift_parameters = dict(
+        fairfeddrift_loss_threshold=0.1,
+        fairfeddrift_window=100,  # Retained communication rounds.
+        fairfeddrift_rounds_per_timestep=1,
+        fairfeddrift_seed=42,
+    )
+
+    # Dedicated configuration for the disabled FairFedDrift experiment handle below.
+    fairfeddrift_recovery_parameters = dict(
+        recovery_method=constants.RecoveryAlgorithm.FAIRFEDDRIFT,
+        base_aggregation_method=constants.RecoveryAlgorithm.FAIRFEDDRIFT,
+        fedau_alpha=0.9,
+        fedex_alpha=0.9,
+        **fairfeddrift_parameters,
+    )
+
     # 000000000000000000000000000000000000000000000
     # Define drift recovery algorithm related parameters
     drift_recovery_parameters = dict(
@@ -408,6 +426,25 @@ def main():
     #     file_save_path='plots/swap/MNIST/saved_plots_ditto/',
     #     log_save_path='logs/swap/MNIST/saved_logs_ditto/')
 
+    # #00000000000000000 FairFedDrift 00000000000000000000
+    # Keep both the constructor and run call commented until this handle is selected.
+    # fairfeddrift_fed_net = FederatedNetwork(
+    #     num_iid_client_instances=10,
+    #     num_noniid_client_instances=0,
+    #     server_tree_layout=[1],
+    #     num_training_rounds=50,
+    #     dataset_name=constants.DatasetNames.MNIST,
+    #     noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+    #     drift_specs=drift_specifications,
+    #     simulation_parameters=simulation_parameters,
+    #     client_select_fraction=1,
+    #     drift_recovery_parameters=fairfeddrift_recovery_parameters,
+    # )
+    #
+    # fairfeddrift_fed_net.run_simulation(
+    #     file_save_path='plots/swap/MNIST/saved_plots_fairfeddrift/',
+    #     log_save_path='logs/swap/MNIST/saved_logs_fairfeddrift/')
+
     # # # #00000000000000000 Oracle 00000000000000000000
     # Define drift recovery algorithm related parameters
     drift_recovery_parameters = dict(
@@ -548,6 +585,23 @@ def main():
     #     file_save_path='plots/swap/F_MNIST/saved_plots_ditto/',
     #     log_save_path='logs/swap/F_MNIST/saved_logs_ditto/')
 
+    # #00000000000000000 FairFedDrift 00000000000000000000
+    # fairfeddrift_fed_net = FederatedNetwork(
+    #     num_iid_client_instances=10,
+    #     num_noniid_client_instances=0,
+    #     server_tree_layout=[1],
+    #     num_training_rounds=50,
+    #     dataset_name=constants.DatasetNames.F_MNIST,
+    #     noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+    #     drift_specs=drift_specifications,
+    #     simulation_parameters=simulation_parameters,
+    #     client_select_fraction=1,
+    #     drift_recovery_parameters=fairfeddrift_recovery_parameters,
+    # )
+    # fairfeddrift_fed_net.run_simulation(
+    #     file_save_path='plots/swap/F_MNIST/saved_plots_fairfeddrift/',
+    #     log_save_path='logs/swap/F_MNIST/saved_logs_fairfeddrift/')
+
     # # # # #00000000000000000 Oracle 00000000000000000000
     # # Define drift recovery algorithm related parameters
     # drift_recovery_parameters = dict(
@@ -657,6 +711,23 @@ def main():
     # ditto_fed_net.run_simulation(
     #     file_save_path='plots/swap/CIFAR-10/saved_plots_ditto/',
     #     log_save_path='logs/swap/CIFAR-10/saved_logs_ditto/')
+
+    # #00000000000000000 FairFedDrift 00000000000000000000
+    # fairfeddrift_fed_net = FederatedNetwork(
+    #     num_iid_client_instances=10,
+    #     num_noniid_client_instances=0,
+    #     server_tree_layout=[1],
+    #     num_training_rounds=400,
+    #     dataset_name=constants.DatasetNames.CIFAR_10,
+    #     noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+    #     drift_specs=drift_specifications,
+    #     simulation_parameters=simulation_parameters,
+    #     client_select_fraction=1,
+    #     drift_recovery_parameters=fairfeddrift_recovery_parameters,
+    # )
+    # fairfeddrift_fed_net.run_simulation(
+    #     file_save_path='plots/swap/CIFAR-10/saved_plots_fairfeddrift/',
+    #     log_save_path='logs/swap/CIFAR-10/saved_logs_fairfeddrift/')
 
     # 0000000000000000000000000000000000000
     # Define drift recovery algorithm related parameters
@@ -835,6 +906,23 @@ def main():
     # ditto_fed_net.run_simulation(
     #     file_save_path='plots/swap/CIFAR-100/saved_plots_ditto/',
     #     log_save_path='logs/swap/CIFAR-100/saved_logs_ditto/')
+
+    # #00000000000000000 FairFedDrift 00000000000000000000
+    # fairfeddrift_fed_net = FederatedNetwork(
+    #     num_iid_client_instances=10,
+    #     num_noniid_client_instances=0,
+    #     server_tree_layout=[1],
+    #     num_training_rounds=200,
+    #     dataset_name=constants.DatasetNames.CIFAR_100,
+    #     noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+    #     drift_specs=drift_specifications,
+    #     simulation_parameters=simulation_parameters,
+    #     client_select_fraction=1,
+    #     drift_recovery_parameters=fairfeddrift_recovery_parameters,
+    # )
+    # fairfeddrift_fed_net.run_simulation(
+    #     file_save_path='plots/swap/CIFAR-100/saved_plots_fairfeddrift/',
+    #     log_save_path='logs/swap/CIFAR-100/saved_logs_fairfeddrift/')
     #
     # 0000000000000000000000000000000000000
     # Define drift recovery algorithm related parameters
@@ -1047,6 +1135,23 @@ def main():
     # ditto_fed_net.run_simulation(
     #     file_save_path='plots/swap/Tiny/saved_plots_ditto/',
     #     log_save_path='logs/swap/Tiny/saved_logs_ditto/')
+
+    # #00000000000000000 FairFedDrift 00000000000000000000
+    # fairfeddrift_fed_net = FederatedNetwork(
+    #     num_iid_client_instances=10,
+    #     num_noniid_client_instances=0,
+    #     server_tree_layout=[1],
+    #     num_training_rounds=800,
+    #     dataset_name=constants.DatasetNames.TINY_IMAGENET_200,
+    #     noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+    #     drift_specs=drift_specifications,
+    #     simulation_parameters=simulation_parameters,
+    #     client_select_fraction=1,
+    #     drift_recovery_parameters=fairfeddrift_recovery_parameters,
+    # )
+    # fairfeddrift_fed_net.run_simulation(
+    #     file_save_path='plots/swap/Tiny/saved_plots_fairfeddrift/',
+    #     log_save_path='logs/swap/Tiny/saved_logs_fairfeddrift/')
 
     # 0000000000000000000000000000000000000
     # Define drift recovery algorithm related parameters

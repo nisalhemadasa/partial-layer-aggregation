@@ -31,6 +31,9 @@ class Server:
         self.abs_id = _abs_id  # Absolute ID that keeps a running count of the servers in the server hierarchy
         self.strategy = _strategy
         self.model = _model
+        self.fairfeddrift_strategy = (_strategy if _strategy.strategy_name ==
+                                      constants.RecoveryAlgorithm.FAIRFEDDRIFT else None)
+        self.fairfeddrift_cluster_id = (0 if self.fairfeddrift_strategy is not None else None)
         self.fedex_alpha = _fedex_alpha  # EMA weight (alpha) parameter for the FedEx algorithm
         self.client_ids = []  # List of client IDs the server is connected to in the federated network
         self.child_server_ids = []  # List of child server IDs in the server hierarchy
@@ -46,13 +49,17 @@ class Server:
 
     def train(self, client_model_parameters: Dict[str, OrderedDict],
               aux_classifier_parameters: Dict[str, OrderedDict] = None, ema_weight: float = None,
-              client_sample_counts: Dict[int, int] = None) -> None:
+              client_sample_counts: Dict[int, int] = None,
+              fairfeddrift_history_parameters: Dict[int, OrderedDict] = None,
+              fairfeddrift_history_sample_counts: Dict[int, int] = None) -> None:
         """
         Train the server model using the client model parameters.
         :param client_model_parameters: Dictionary of client model parameters
         :param aux_classifier_parameters: Dictionary of auxiliary classifier parameters from drifted clients
         :param ema_weight: EMA weight (alpha) parameter for the FedAU algorithm
-        :param client_sample_counts: Local-training sample counts for Ditto aggregation
+        :param client_sample_counts: Local-training sample counts for Ditto or FairFedDrift aggregation
+        :param fairfeddrift_history_parameters: Per-client historical FairFedDrift uploads for this cluster.
+        :param fairfeddrift_history_sample_counts: Exact counts corresponding to those historical uploads.
         :return: None
         """
         if (self.strategy.strategy_name == constants.RecoveryAlgorithm.FEDAU or
@@ -74,6 +81,10 @@ class Server:
             self.strategy.aggregate_models(self.model, client_model_parameters)
         elif self.strategy.strategy_name == constants.RecoveryAlgorithm.DITTO:
             self.strategy.aggregate_models(self.model, client_model_parameters, client_sample_counts)
+        elif self.strategy.strategy_name == constants.RecoveryAlgorithm.FAIRFEDDRIFT:
+            self.strategy.aggregate_models(
+                self.model, client_model_parameters, client_sample_counts,
+                fairfeddrift_history_parameters, fairfeddrift_history_sample_counts)
         else:
             # FedAvg: For internal servers or when there are no drifted clients
             self.strategy.aggregate_models(self.model, client_model_parameters)
@@ -167,6 +178,73 @@ def model_aggregation_oracle(server: Server, sampled_clients: List[Client], verb
     # Aggregate client models
     if client_model_parameters:  # check to avoid empty dict error
         server.train(client_model_parameters, None, None)
+
+
+def model_aggregation_fairfeddrift(server: Server, servers: List[Server], sampled_clients: List[Client],
+                                  verbose: bool = False) -> None:
+    """
+    Aggregate each FairFedDrift upload only into the cluster used for local training.
+    :param server: Active cluster server being aggregated.
+    :param servers: Flat active FairFedDrift server list, used to validate routing.
+    :param sampled_clients: Clients completing local training in this round.
+    :param verbose: Whether to print detailed aggregation information.
+    :return: None.
+    """
+    if not sampled_clients:
+        return
+    clients_by_id = {client.client_id: client for client in sampled_clients}
+    if len(clients_by_id) != len(sampled_clients):
+        raise ValueError("FairFedDrift aggregation received duplicate client IDs.")
+
+    tags = [getattr(client, 'fairfeddrift_training_cluster_id', None) for client in sampled_clients]
+    if all(cluster_id is None for cluster_id in tags):
+        # The only untagged uploads are the framework's independent warm-up models.
+        if len(servers) != 1 or getattr(servers[0], 'fairfeddrift_cluster_id', servers[0].server_id) != 0:
+            raise ValueError("Untagged FairFedDrift uploads are valid only for initial cluster 0.")
+        cluster_ids = {sampled_client.client_id: 0 for sampled_client in sampled_clients}
+    else:
+        if any(cluster_id is None for cluster_id in tags):
+            raise ValueError("FairFedDrift aggregation cannot mix tagged and untagged uploads.")
+        cluster_ids = {client.client_id: cluster_id for client, cluster_id in zip(sampled_clients, tags)}
+
+    active_cluster_ids = {getattr(server, 'fairfeddrift_cluster_id', server.server_id) for server in servers}
+    if any(cluster_id not in active_cluster_ids for cluster_id in cluster_ids.values()):
+        raise ValueError("FairFedDrift upload references a cluster without an active server.")
+
+    cluster_id = getattr(server, 'fairfeddrift_cluster_id', server.server_id)
+    assigned_clients = [client for client in sampled_clients if cluster_ids[client.client_id] == cluster_id]
+    model_parameters = {client.client_id: client.model.state_dict() for client in assigned_clients}
+    # Match Ditto's existing sample-count convention: count the client's local training partition.
+    client_sample_counts = {client.client_id: len(client.local_trainset) for client in assigned_clients}
+    if any(count <= 0 for count in client_sample_counts.values()):
+        raise ValueError("FairFedDrift aggregation requires positive local training sample counts.")
+
+    history_model_parameters = {}
+    history_sample_counts = {}
+    for client in sampled_clients:
+        client_history_uploads = getattr(client, 'fairfeddrift_history_uploads', {})
+        client_history_counts = getattr(client, 'fairfeddrift_history_sample_counts', {})
+        if not isinstance(client_history_uploads, dict) or not isinstance(client_history_counts, dict):
+            raise ValueError("FairFedDrift historical uploads and counts must be dictionaries.")
+        if set(client_history_uploads) != set(client_history_counts):
+            raise ValueError("FairFedDrift historical uploads and counts must have identical cluster IDs.")
+        if any(isinstance(history_cluster_id, bool) or not isinstance(history_cluster_id, int) or
+               history_cluster_id < 0 for history_cluster_id in client_history_uploads):
+            raise ValueError("FairFedDrift historical cluster IDs must be non-negative integers.")
+        if not set(client_history_uploads).issubset(active_cluster_ids):
+            raise ValueError("FairFedDrift historical upload references an inactive cluster.")
+        if cluster_id in client_history_uploads:
+            history_model_parameters[client.client_id] = client_history_uploads[cluster_id]
+            history_sample_counts[client.client_id] = client_history_counts[cluster_id]
+
+    if not model_parameters and not history_model_parameters:
+        return
+    if verbose:
+        print('aggregate models: server:' + str(server.server_id) + ' -> cluster:' + str(cluster_id) +
+              ' current clients:' + str(list(model_parameters)) + ' historical clients:' +
+              str(list(history_model_parameters)))
+    server.train(model_parameters, None, None, client_sample_counts,
+                 history_model_parameters, history_sample_counts)
 
 
 def model_aggregation_fedau_fluid(server: Server, sampled_clients: List[Client], drift: Drift, ema_weight,
@@ -285,6 +363,10 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
                 elif server.strategy.strategy_name == constants.RecoveryAlgorithm.ORACLE:
                     model_aggregation_oracle(server, sampled_clients, verbose=verbose)
 
+                elif server.strategy.strategy_name == constants.RecoveryAlgorithm.FAIRFEDDRIFT:
+                    model_aggregation_fairfeddrift(server, server_hierarchy[depth_level], sampled_clients,
+                                                   verbose=verbose)
+
                 elif server.strategy.strategy_name in {constants.RecoveryAlgorithm.FEDAU,
                                                        constants.RecoveryAlgorithm.FLUID}:
                     model_aggregation_fedau_fluid(server, sampled_clients, drift, ema_weight, verbose=verbose)
@@ -395,6 +477,20 @@ def server_hierarchy_evaluate(server_hierarchy: List[Server], server_test_set: D
         losses, accuracies = global_server.evaluate_multi_models(
             server_test_set)  # returns ([loss1, loss2,...], [acc1, acc2,...])
         server_loss_and_accuracy.append((losses, accuracies))
+    elif any(server.strategy.strategy_name == constants.RecoveryAlgorithm.FAIRFEDDRIFT
+             for server in server_hierarchy[0]):
+        # FairFedDrift learns its cluster count at runtime; evaluate each active
+        # cluster server just as Oracle evaluates each server in its flat layout.
+        for server in server_hierarchy[0]:
+            if server.client_ids:
+                if _is_server_has_test_data:
+                    loss, accuracy = server.model_evaluate(server_test_set)
+                else:
+                    loss, accuracy = server.average_client_evaluation_results(
+                        all_clients, server_metric_weighting)
+                server_loss_and_accuracy.append([(loss, accuracy)])
+            else:
+                server_loss_and_accuracy.append([(0.0, 0.0)])
     elif _drift_recovery_method == constants.RecoveryAlgorithm.ORACLE:
         # ORACLE: multiple-server, clustering-based
         if _is_server_has_test_data:
@@ -439,12 +535,14 @@ def server_hierarchy_evaluate(server_hierarchy: List[Server], server_test_set: D
     return server_loss_and_accuracy
 
 
-def change_server_aggregation_strategy(server_hierarchy: List[Any], drift_recovery_method: str, drift: Drift) -> None:
+def change_server_aggregation_strategy(server_hierarchy: List[Any], drift_recovery_method: str, drift: Drift,
+                                       drift_recovery_parameters: Dict = None) -> None:
     """
     Change the aggregation strategy of the leaf servers (only) of the hierarchy.
     :param server_hierarchy: List of servers in the hierarchy
     :param drift_recovery_method: Drift recovery method
     :param drift: Drift instance
+    :param drift_recovery_parameters: Optional strategy-specific settings.
     :return: None
     """
     if (drift_recovery_method == constants.RecoveryAlgorithm.FEDAU or
@@ -473,6 +571,20 @@ def change_server_aggregation_strategy(server_hierarchy: List[Any], drift_recove
         for server in server_hierarchy[-1]:
             server.strategy = strategy.Ditto.aggregator_fn()
 
+    elif drift_recovery_method == constants.RecoveryAlgorithm.FAIRFEDDRIFT:
+        servers = server_hierarchy[-1]
+        shared_strategy = next((server.fairfeddrift_strategy for server in servers
+                                if getattr(server, 'fairfeddrift_strategy', None) is not None), None)
+        if shared_strategy is None:
+            if drift_recovery_parameters is None:
+                raise ValueError("FairFedDrift settings are required when restoring its strategy state.")
+            shared_strategy = strategy.FairFedDrift.aggregator_fn(drift_recovery_parameters)
+        for position, server in enumerate(servers):
+            server.fairfeddrift_strategy = shared_strategy
+            server.strategy = shared_strategy
+            if getattr(server, 'fairfeddrift_cluster_id', None) is None:
+                server.fairfeddrift_cluster_id = position
+
     else:
         # if the drift is ended, change the strategy back to FedAvg
         for server in server_hierarchy[-1]:
@@ -480,7 +592,7 @@ def change_server_aggregation_strategy(server_hierarchy: List[Any], drift_recove
 
 
 def server_fn(server_id: int, dataset_name: str, server_abs_id: int, drift_recovery_method: str, cluster_count: int,
-              fedex_alpha: float, ) -> Server:
+              fedex_alpha: float, drift_recovery_parameters: Dict = None) -> Server:
     """
     Create a server instances on demand for the optimal use of resources.
     :param server_id: Server ID
@@ -489,6 +601,7 @@ def server_fn(server_id: int, dataset_name: str, server_abs_id: int, drift_recov
     :param drift_recovery_method: Drift recovery method to be used by the client
     :param cluster_count: number of models (clusters) in the server (for multi-global-model methods, e.g.FedRC, Oracle)
     :param fedex_alpha: EMA weight (alpha) parameter for the FedEx algorithm
+    :param drift_recovery_parameters: Strategy-specific experiment parameters.
     :returns Server: A Server instance.
     """
     if drift_recovery_method == constants.RecoveryAlgorithm.FEDRC:
@@ -500,7 +613,7 @@ def server_fn(server_id: int, dataset_name: str, server_abs_id: int, drift_recov
     elif drift_recovery_method == constants.RecoveryAlgorithm.DITTO:
         aggregator_strategy = strategy.Ditto.aggregator_fn()
     elif drift_recovery_method == constants.RecoveryAlgorithm.FAIRFEDDRIFT:
-        aggregator_strategy = strategy.FairFedDrift.aggregator_fn()
+        aggregator_strategy = strategy.FairFedDrift.aggregator_fn(drift_recovery_parameters)
     else:
         aggregator_strategy = strategy.FedAvg.aggregator_fn()
 
@@ -520,5 +633,12 @@ def server_fn(server_id: int, dataset_name: str, server_abs_id: int, drift_recov
     else:
         raise ValueError("Unsupported dataset name")
 
-    return Server(_server_id=server_id, _abs_id=server_abs_id, _strategy=aggregator_strategy, _model=model,
-                  _cluster_count=cluster_count, _fedex_alpha=fedex_alpha)
+    server = Server(_server_id=server_id, _abs_id=server_abs_id, _strategy=aggregator_strategy, _model=model,
+                    _cluster_count=cluster_count, _fedex_alpha=fedex_alpha)
+    if drift_recovery_parameters is not None and constants.RecoveryAlgorithm.FAIRFEDDRIFT in {
+            drift_recovery_parameters.get('recovery_method'),
+            drift_recovery_parameters.get('base_aggregation_method')
+    } and server.fairfeddrift_strategy is None:
+        server.fairfeddrift_strategy = strategy.FairFedDrift.aggregator_fn(drift_recovery_parameters)
+        server.fairfeddrift_cluster_id = 0
+    return server

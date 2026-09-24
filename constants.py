@@ -187,6 +187,7 @@ class Logs:
     DITTO_PERSONALIZED_CLIENT_LOG = 'ditto_personalized_client_log'
     DITTO_PERSONALIZED_DRIFTED_CLASS_LOG = 'ditto_personalized_drifted_class_log'
     DITTO_SELECTED_LAMBDA_LOG = 'ditto_selected_lambda_log'
+    FAIRFEDDRIFT_STATE_LOG = 'fairfeddrift_state_log'
 
 
 # Drift recovery algorithms

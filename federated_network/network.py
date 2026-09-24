@@ -19,7 +19,8 @@ from federated_network.server import server_fn, model_aggregation, model_distrib
     server_hierarchy_evaluate, model_distribution_fedrc, model_distribution_hierarchy
 from federated_network.utils import update_progress, link_server_hierarchy, train_client_models, \
     link_clients_to_servers, handle_drift_for_round, apply_drift_to_clients, evaluate_clients_for_stage, \
-    evaluate_ditto_personalized_clients, build_ditto_state_log, build_ditto_lambda_record
+    evaluate_ditto_personalized_clients, build_ditto_state_log, build_ditto_lambda_record, \
+    build_fairfeddrift_state_log
 from log_utils.analysis_functions import compute_client_average_metrics, compute_server_average_metrics, \
     split_clients_loss_and_accuracy, convert_fedrc_metrics_to_pairs
 from log_utils.logging import write_logs, write_structured_log
@@ -27,6 +28,8 @@ from plot_utils.plotting import plot_client_performance_vs_rounds, plot_server_p
     plot_dataset_distribution, \
     plot_client_avg_performance_vs_rounds
 from strategy.Ditto import resolve_ditto_parameters
+from strategy.FairFedDrift import resolve_fairfeddrift_parameters, validate_fairfeddrift_setup
+from device_utils import get_device
 
 
 class FederatedNetwork:
@@ -34,6 +37,24 @@ class FederatedNetwork:
                  dataset_name, noniid_partitioning_strategy, drift_specs, simulation_parameters,
                  drift_recovery_parameters, client_select_fraction=0.5, minibatch_size=128, num_local_epochs=5):
         drift_recovery_parameters = dict(drift_recovery_parameters)
+        recovery_method = drift_recovery_parameters['recovery_method']
+        base_method = drift_recovery_parameters.get('base_aggregation_method', recovery_method)
+        drift_recovery_parameters['base_aggregation_method'] = base_method
+        fairfeddrift_phase_methods = {recovery_method, base_method}
+        if constants.RecoveryAlgorithm.FAIRFEDDRIFT in fairfeddrift_phase_methods:
+            if constants.RecoveryAlgorithm.FEDRC in fairfeddrift_phase_methods:
+                raise ValueError("FairFedDrift cannot share a run with FedRC phase switching because its "
+                                 "multi-model server layout is incompatible with learned clusters.")
+            if (recovery_method == constants.RecoveryAlgorithm.ORACLE and
+                    base_method == constants.RecoveryAlgorithm.FAIRFEDDRIFT):
+                raise ValueError("FairFedDrift cannot currently use Oracle as the drift-phase recovery method; "
+                                 "Oracle requires a fixed ground-truth server layout while FairFedDrift learns "
+                                 "its own cluster count.")
+            drift_recovery_parameters.update(resolve_fairfeddrift_parameters(drift_recovery_parameters))
+            validate_fairfeddrift_setup(server_tree_layout, client_select_fraction, get_device())
+            self.initial_aggregation_method = base_method
+        else:
+            self.initial_aggregation_method = recovery_method
         if drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.DITTO:
             drift_recovery_parameters.update(resolve_ditto_parameters(drift_recovery_parameters))
         if (drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.DITTO and
@@ -99,9 +120,9 @@ class FederatedNetwork:
         self.drift_recovery_parameters = drift_recovery_parameters
 
         # Determine the cluster count based on the recovery method
-        if self.drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.FEDRC:
+        if self.initial_aggregation_method == constants.RecoveryAlgorithm.FEDRC:
             _cluster_count = self.drift_recovery_parameters['fedrc_cluster_count']
-        elif self.drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.ORACLE:
+        elif self.initial_aggregation_method == constants.RecoveryAlgorithm.ORACLE:
             _cluster_count = self.drift_recovery_parameters['cluster_count']
             server_tree_layout = [
                 _cluster_count]  # Oracle method uses a flat server structure, with each server representing a cluster base
@@ -117,7 +138,7 @@ class FederatedNetwork:
                 self.num_local_epochs,
                 self.minibatch_size,
                 [partitioned_noniid_trainsets[i], partitioned_noniid_testsets[i]],
-                self.drift_recovery_parameters['recovery_method'],
+                self.initial_aggregation_method,
                 _cluster_count,
                 # for FedRC, each client maintains the same number of local models as the multiple global models the server maintains
                 dataset_name,
@@ -133,7 +154,7 @@ class FederatedNetwork:
                 self.num_local_epochs,
                 self.minibatch_size,
                 [partitioned_iid_trainsets[i], partitioned_iid_testsets[i]],
-                self.drift_recovery_parameters['recovery_method'],
+                self.initial_aggregation_method,
                 _cluster_count,
                 dataset_name,
                 self.drift_recovery_parameters
@@ -152,9 +173,10 @@ class FederatedNetwork:
                     server_id=server_id,
                     dataset_name=self.dataset_name,
                     server_abs_id=absolute_index + i,
-                    drift_recovery_method=self.drift_recovery_parameters['recovery_method'],
+                    drift_recovery_method=self.initial_aggregation_method,
                     cluster_count=_cluster_count,
-                    fedex_alpha=self.drift_recovery_parameters['fedex_alpha']
+                    fedex_alpha=self.drift_recovery_parameters['fedex_alpha'],
+                    drift_recovery_parameters=self.drift_recovery_parameters
                 )
                 for i, server_id in enumerate(range(_cluster_count))]
 
@@ -162,6 +184,9 @@ class FederatedNetwork:
             absolute_index += server_tree_layout[depth_level]
 
         self.server_hierarchy = server_hierarchy
+        self.fairfeddrift_strategy = next((server.fairfeddrift_strategy
+                                           for level in server_hierarchy for server in level
+                                           if getattr(server, 'fairfeddrift_strategy', None) is not None), None)
 
         # Link servers in the hierarchical structure
         link_server_hierarchy(self.server_hierarchy)
@@ -223,7 +248,7 @@ class FederatedNetwork:
         # Train the clients initially using their local data
         initial_client_loss_and_accuracy = client_initial_training(self.clients, self.drift.is_drift,
                                                                    self.drift.is_drift_end,
-                                                                   self.drift_recovery_parameters['recovery_method'])
+                                                                   self.initial_aggregation_method)
         # clients_loss_and_accuracy.append(initial_client_loss_and_accuracy)
 
         # Load the test set for server evaluation
@@ -287,7 +312,7 @@ class FederatedNetwork:
                                                                        self.clients,
                                                                        self.simulation_parameters[
                                                                            'servers_have_test_data'],
-                                                                       self.drift_recovery_parameters['recovery_method'],
+                self.initial_aggregation_method,
                                                                        server_metric_weighting)
             server_loss_and_accuracy.append(round_server_loss_and_accuracy)
 
@@ -343,6 +368,9 @@ class FederatedNetwork:
         evaluation_log_save_path = log_save_path if log_save_path is not None else constants.Paths.LOG_SAVE_PATH
         write_structured_log({'schema_version': 1, 'records': self.evaluation_history},
                              evaluation_log_save_path + constants.Logs.EVALUATION_LOG)
+        if self.fairfeddrift_strategy is not None:
+            write_structured_log(build_fairfeddrift_state_log(self.fairfeddrift_strategy),
+                                 evaluation_log_save_path + constants.Logs.FAIRFEDDRIFT_STATE_LOG)
         if evaluation_stage == 'global_after_download':
             write_structured_log({'schema_version': 1, 'records': self.evaluation_history},
                                  evaluation_log_save_path + constants.Logs.DOWNLOADED_GLOBAL_CLIENT_LOG)

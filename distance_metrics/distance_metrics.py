@@ -10,6 +10,8 @@ import torch
 from collections import OrderedDict
 from typing import List, Dict, Tuple, Any
 
+import constants
+
 
 class ModelDistanceHistory:
     """Structured model-distance records retained for diagnostics and future strategy optimization."""
@@ -187,13 +189,17 @@ def collect_model_distance_diagnostics(leaf_servers, clients, round_idx: int, sa
                 client_records[client_id] = values
             model_records.append({'model_id': model_id, 'clients': client_records})
 
-        server_records.append({
+        server_record = {
             'depth': 'leaf',
             'server_id': server.server_id,
             'server_abs_id': server.abs_id,
             'strategy': server.strategy.strategy_name,
             'models': model_records
-        })
+        }
+        if getattr(getattr(server, 'strategy', None), 'strategy_name', None) == \
+                constants.RecoveryAlgorithm.FAIRFEDDRIFT:
+            server_record['fairfeddrift_cluster_id'] = server.fairfeddrift_cluster_id
+        server_records.append(server_record)
 
     return {'round': round_idx, 'phase': phase, 'servers': server_records}
 
