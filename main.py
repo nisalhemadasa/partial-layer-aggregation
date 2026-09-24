@@ -6,34 +6,20 @@ Date: 02-04-2025
 Version: 2.0
 """
 import constants
-from device_utils import configure_device, get_device
+from device_utils import configure_device
 from federated_network.network import FederatedNetwork
+from random_utils import configure_random_seed
 
 import os
-import random
-import numpy as np
-import torch
 
 # Prevents the error on CUDA device-side assertion failure, which are likely triggered by invalid tensor operations
 # (e.g., NaN, Inf, or out-of-bounds values) during loss computation in the training loop.
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
-def seed_everything(seed: int = 42):
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    if get_device().type == 'cuda':
-        torch.cuda.manual_seed_all(seed)
-
-    # Make PyTorch deterministic enough for experiments
-    if get_device().type == 'cuda':
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
-
-
 def main():
-    configure_device('auto')  # Choose 'cpu' or 'cuda' to explicitly select the experiment device.
-    seed_everything(42)
+    configure_device('cuda')  # Experiments require CUDA; unavailable CUDA raises instead of falling back to CPU.
+    experiment_seed = 42  # Single seed handle shared by every method in a comparison.
+    configure_random_seed(experiment_seed)
 
     async_drift_specs = dict(
         num_drift_groups=2,  # Number of groups of clients that are affected by the drift asynchronously
@@ -137,6 +123,7 @@ def main():
 
     # Define simulation parameters
     simulation_parameters = dict(
+        random_seed=experiment_seed,
         is_server_adaptability=False,  # Evaluate the adaptability of servers/clients to the data/drift distribution
         is_plot_client_data_distributions=False,  # Whether to plot the client data distributions
         client_ids_to_plot_data_distributions=[0, 1],  # Client IDs whose internal data distributions to be plotted.
@@ -157,7 +144,25 @@ def main():
         ditto_dynamic_lambda=False,
         ditto_lambda_candidates=[0.1, 1.0, 2.0],
         ditto_validation_fraction=0.1,
-        ditto_validation_seed=42,
+        ditto_validation_seed=experiment_seed,
+    )
+
+    # Shared FairFedDrift settings. The loss-increase threshold is an experimental
+    # starting value and must be validated on held-out validation data.
+    fairfeddrift_parameters = dict(
+        fairfeddrift_loss_threshold=0.1,
+        fairfeddrift_window=1,  # Retained communication rounds.
+        fairfeddrift_rounds_per_timestep=1,
+        fairfeddrift_seed=experiment_seed,
+    )
+
+    # Dedicated configuration for the disabled FairFedDrift experiment handle below.
+    fairfeddrift_recovery_parameters = dict(
+        recovery_method=constants.RecoveryAlgorithm.FAIRFEDDRIFT,
+        base_aggregation_method=constants.RecoveryAlgorithm.FAIRFEDDRIFT,
+        fedau_alpha=0.9,
+        fedex_alpha=0.9,
+        **fairfeddrift_parameters,
     )
 
     # 000000000000000000000000000000000000000000000
@@ -197,6 +202,7 @@ def main():
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/test/saved_plots_fedex/',
     #     log_save_path='logs/swap/test/saved_logs_fedex/')
+    # print(f"Simulation completed: dataset=Tiny ImageNet-200 test, method=FedEx.")
     #
     # print('break')
 
@@ -210,48 +216,56 @@ def main():
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/layer_removal/MNIST/case_1_rm_fc_2/saved_plots_fedex/',
     #     log_save_path='logs/swap/layer_removal/MNIST/case_1_rm_fc_2/saved_logs_fedex/')
+    # print(f"Simulation completed: dataset=MNIST, method=FedEx (case_1_rm_fc_2).")
     # print('Break!!!!!!!')
     #--------------------------------------------------------
     # # case 2: dropping the layer 'fc2' and 'fc1' (last 2 layers) in FedEx
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/layer_removal/MNIST/case_2_rm_fc_1_2/saved_plots_fedex/',
     #     log_save_path='logs/swap/layer_removal/MNIST/case_2_rm_fc_1_2/saved_logs_fedex/')
+    # print(f"Simulation completed: dataset=MNIST, method=FedEx (case_2_rm_fc_1_2).")
 
     #--------------------------------------------------------
     # # case 3: dropping all layer except layer 'fc2' (last layer) in FedEx (aggregating only the last layer)
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/layer_removal/MNIST/case_3_agg_fc_2/saved_plots_fedex/',
     #     log_save_path='logs/swap/layer_removal/MNIST/case_3_agg_fc_2/saved_logs_fedex/')
+    # print(f"Simulation completed: dataset=MNIST, method=FedEx (case_3_agg_fc_2).")
 
     # #--------------------------------------------------------
     # # case 4: add an additional fully connected layer 'fc3' after 'fc2' in FedEx
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/layer_removal/MNIST/case_4_add_fc_3/saved_plots_fedex/',
     #     log_save_path='logs/swap/layer_removal/MNIST/case_4_add_fc_3/saved_logs_fedex/')
+    # print(f"Simulation completed: dataset=MNIST, method=FedEx (case_4_add_fc_3).")
     #
     # #--------------------------------------------------------
     # # case 5: dropping the layer 'fc3' (last layer) in FedEx
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/layer_removal/MNIST/case_5_rm_fc_3/saved_plots_fedex/',
     #     log_save_path='logs/swap/layer_removal/MNIST/case_5_rm_fc_3/saved_logs_fedex/')
+    # print(f"Simulation completed: dataset=MNIST, method=FedEx (case_5_rm_fc_3).")
     # print('Break!!!!!!!')
     # #--------------------------------------------------------
     # # case 6: keep only the layer 'fc3' (last layer) in FedEx
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/layer_removal/MNIST/case_6_agg_fc_3/saved_plots_fedex/',
     #     log_save_path='logs/swap/layer_removal/MNIST/case_6_agg_fc_3/saved_logs_fedex/')
+    # print(f"Simulation completed: dataset=MNIST, method=FedEx (case_6_agg_fc_3).")
 
     # #--------------------------------------------------------
     #     # # case 7: keep only the layers 'fc2' and 'fc3' (last 2 layers) in FedEx
     #     # fed_net.run_simulation(
     #     #     file_save_path='plots/swap/layer_removal/MNIST/case_7_agg_fc_2_3/saved_plots_fedex/',
     #     #     log_save_path='logs/swap/layer_removal/MNIST/case_7_agg_fc_2_3/saved_logs_fedex/')
+    #     # print(f"Simulation completed: dataset=MNIST, method=FedEx (case_7_agg_fc_2_3).")
     #     # print('Break!!!!!!!')
     #--------------------------------------------------------
     # # case 8: Drop layers 'fc2' (middle layer) with fc3 available in FedEx
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/layer_removal/MNIST/case_8_agg_fc_2_3/saved_plots_fedex/',
     #     log_save_path='logs/swap/layer_removal/MNIST/case_8_agg_fc_2_3/saved_logs_fedex/')
+    # print(f"Simulation completed: dataset=MNIST, method=FedEx (case_8_agg_fc_2_3).")
     # print('Break!!!!!!!')
 
     #00000000000000 CIFAR-10 0000000000000000000000
@@ -259,48 +273,56 @@ def main():
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/layer_removal/CIFAR-10/case_1_rm_fc_2/saved_plots_fedex/',
     #     log_save_path='logs/swap/layer_removal/CIFAR-10/case_1_rm_fc_2/saved_logs_fedex/')
+    # print(f"Simulation completed: dataset=CIFAR-10, method=FedEx (case_1_rm_fc_2).")
 
     #--------------------------------------------------------
     # # case 2: dropping the layer 'fc2' and 'fc1' (last 2 layers) in FedEx
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/layer_removal/CIFAR-10/case_2_rm_fc_1_2/saved_plots_fedex/',
     #     log_save_path='logs/swap/layer_removal/CIFAR-10/case_2_rm_fc_1_2/saved_logs_fedex/')
+    # print(f"Simulation completed: dataset=CIFAR-10, method=FedEx (case_2_rm_fc_1_2).")
 
     # #--------------------------------------------------------
     # # case 3: dropping all layer except layer 'fc2' (last layer) in FedEx (aggregating only the last layer)
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/layer_removal/CIFAR-10/case_3_agg_fc_2/saved_plots_fedex/',
     #     log_save_path='logs/swap/layer_removal/CIFAR-10/case_3_agg_fc_2/saved_logs_fedex/')
+    # print(f"Simulation completed: dataset=CIFAR-10, method=FedEx (case_3_agg_fc_2).")
 
     # #--------------------------------------------------------
     # # case 4: add an additional fully connected layer 'fc3' after 'fc2' in FedEx
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/layer_removal/CIFAR-10/case_4_add_fc_3/saved_plots_fedex/',
     #     log_save_path='logs/swap/layer_removal/CIFAR-10/case_4_add_fc_3/saved_logs_fedex/')
+    # print(f"Simulation completed: dataset=CIFAR-10, method=FedEx (case_4_add_fc_3).")
 
     # #--------------------------------------------------------
     # # case 5: dropping the layer 'fc3' (last layer) in FedEx
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/layer_removal/CIFAR-10/case_4_add_fc_3/saved_plots_fedex/',
     #     log_save_path='logs/swap/layer_removal/CIFAR-10/case_4_add_fc_3/saved_logs_fedex/')
+    # print(f"Simulation completed: dataset=CIFAR-10, method=FedEx (case_5_rm_fc_3).")
 
     # #--------------------------------------------------------
     # # case 6: keep only the layer 'fc3' (last layer) in FedEx
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/layer_removal/CIFAR-10/case_6_agg_fc_3/saved_plots_fedex/',
     #     log_save_path='logs/swap/layer_removal/CIFAR-10/case_6_agg_fc_3/saved_logs_fedex/')
+    # print(f"Simulation completed: dataset=CIFAR-10, method=FedEx (case_6_agg_fc_3).")
 
     # #--------------------------------------------------------
     # # case 7: keep only the layers 'fc2' and 'fc3' (last 2 layers) in FedEx
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/layer_removal/CIFAR-10/case_7_agg_fc_2_3/saved_plots_fedex/',
     #     log_save_path='logs/swap/layer_removal/CIFAR-10/case_7_agg_fc_2_3/saved_logs_fedex/')
+    # print(f"Simulation completed: dataset=CIFAR-10, method=FedEx (case_7_agg_fc_2_3).")
 
     #--------------------------------------------------------
     # # case 8: Drop layers 'fc2' (middle layer) with fc3 available in FedEx
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/layer_removal/CIFAR-10/case_8_agg_fc_2_3/saved_plots_fedex/',
     #     log_save_path='logs/swap/layer_removal/CIFAR-10/case_8_agg_fc_2_3/saved_logs_fedex/')
+    # print(f"Simulation completed: dataset=CIFAR-10, method=FedEx (case_8_agg_fc_2_3).")
 
 
     # #0000000000000000000000000000000000000
@@ -341,6 +363,7 @@ def main():
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/MNIST/saved_plots_fedavg/',
     #     log_save_path='logs/swap/MNIST/saved_logs_fedavg/')
+    # print(f"Simulation completed: dataset=MNIST, method=FedAvg.")
 
 
     # #00000000000000000 FedEx 00000000000000000000
@@ -378,6 +401,7 @@ def main():
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/MNIST/saved_plots_fedex/',
     #     log_save_path='logs/swap/MNIST/saved_logs_fedex/')
+    # print(f"Simulation completed: dataset=MNIST, method=FedEx.")
 
     # #00000000000000000 Ditto 00000000000000000000
     # Uncomment this block, and keep the other run_simulation calls disabled, to run Ditto on MNIST.
@@ -407,6 +431,27 @@ def main():
     # ditto_fed_net.run_simulation(
     #     file_save_path='plots/swap/MNIST/saved_plots_ditto/',
     #     log_save_path='logs/swap/MNIST/saved_logs_ditto/')
+    # print(f"Simulation completed: dataset=MNIST, method=Ditto.")
+
+    # #00000000000000000 FairFedDrift 00000000000000000000
+    # Keep both the constructor and run call commented until this handle is selected.
+    fairfeddrift_fed_net = FederatedNetwork(
+        num_iid_client_instances=10,
+        num_noniid_client_instances=0,
+        server_tree_layout=[1],
+        num_training_rounds=50,
+        dataset_name=constants.DatasetNames.MNIST,
+        noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+        drift_specs=drift_specifications,
+        simulation_parameters=simulation_parameters,
+        client_select_fraction=1,
+        drift_recovery_parameters=fairfeddrift_recovery_parameters,
+    )
+    
+    fairfeddrift_fed_net.run_simulation(
+        file_save_path='plots/swap/MNIST/saved_plots_fairfeddrift/',
+        log_save_path='logs/swap/MNIST/saved_logs_fairfeddrift/')
+    print(f"Simulation completed: dataset=MNIST, method=FairFedDrift.")
 
     # # # #00000000000000000 Oracle 00000000000000000000
     # Define drift recovery algorithm related parameters
@@ -443,6 +488,7 @@ def main():
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/MNIST/saved_plots_oracle/',
     #     log_save_path='logs/swap/MNIST/saved_logs_oracle/')
+    # print(f"Simulation completed: dataset=MNIST, method=Oracle.")
 
 
     # # # 00000000000000000000000000000000000000000000000000000000000000
@@ -481,6 +527,7 @@ def main():
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/F_MNIST/saved_plots_fedavg/',
     #     log_save_path='logs/swap/F_MNIST/saved_logs_fedavg/')
+    # print(f"Simulation completed: dataset=Fashion-MNIST, method=FedAvg.")
     #
     #
     # #00000000000000000 FedEx 00000000000000000000
@@ -518,6 +565,7 @@ def main():
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/F_MNIST/saved_plots_fedex/',
     #     log_save_path='logs/swap/F_MNIST/saved_logs_fedex/')
+    # print(f"Simulation completed: dataset=Fashion-MNIST, method=FedEx.")
 
     # #00000000000000000 Ditto 00000000000000000000
     # Uncomment this block, and keep the other run_simulation calls disabled, to run Ditto on Fashion-MNIST.
@@ -547,6 +595,25 @@ def main():
     # ditto_fed_net.run_simulation(
     #     file_save_path='plots/swap/F_MNIST/saved_plots_ditto/',
     #     log_save_path='logs/swap/F_MNIST/saved_logs_ditto/')
+    # print(f"Simulation completed: dataset=Fashion-MNIST, method=Ditto.")
+
+    # #00000000000000000 FairFedDrift 00000000000000000000
+    # fairfeddrift_fed_net = FederatedNetwork(
+    #     num_iid_client_instances=10,
+    #     num_noniid_client_instances=0,
+    #     server_tree_layout=[1],
+    #     num_training_rounds=50,
+    #     dataset_name=constants.DatasetNames.F_MNIST,
+    #     noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+    #     drift_specs=drift_specifications,
+    #     simulation_parameters=simulation_parameters,
+    #     client_select_fraction=1,
+    #     drift_recovery_parameters=fairfeddrift_recovery_parameters,
+    # )
+    # fairfeddrift_fed_net.run_simulation(
+    #     file_save_path='plots/swap/F_MNIST/saved_plots_fairfeddrift/',
+    #     log_save_path='logs/swap/F_MNIST/saved_logs_fairfeddrift/')
+    # print(f"Simulation completed: dataset=Fashion-MNIST, method=FairFedDrift.")
 
     # # # # #00000000000000000 Oracle 00000000000000000000
     # # Define drift recovery algorithm related parameters
@@ -583,6 +650,7 @@ def main():
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/F_MNIST/saved_plots_oracle/',
     #     log_save_path='logs/swap/F_MNIST/saved_logs_oracle/')
+    # print(f"Simulation completed: dataset=Fashion-MNIST, method=Oracle.")
 
     # # 00000000000000000000000000000000000000000000000000000000000000
     # # 0000000000000000000000000 CIFAR-10 000000000000000000000000000
@@ -619,15 +687,17 @@ def main():
             drift_recovery_parameters=drift_recovery_parameters, # Drift recovery algorithm related parameters
         )
 
-        # Running the simulation
-        fed_net.run_simulation(
-            file_save_path='plots/swap/CIFAR-10/saved_plots_fedex/',
-            log_save_path='logs/swap/CIFAR-10/saved_logs_fedex/')
+        # # Running the simulation
+        # fed_net.run_simulation(
+        #     file_save_path='plots/swap/CIFAR-10/saved_plots_fedex/',
+        #     log_save_path='logs/swap/CIFAR-10/saved_logs_fedex/')
+        # print(f"Simulation completed: dataset=CIFAR-10, method=FedEx.")
 
         # # Running the simulation
         # fed_net.run_simulation(
         #     file_save_path='plots/swap/CIFAR-10/saved_plots_fedex/alpha_' + str(idx+1) + '/',
         #     log_save_path='logs/swap/CIFAR-10/saved_logs_fedex/alpha_' + str(idx+1) + '/')
+        # print(f"Simulation completed: dataset=CIFAR-10, method=FedEx (alpha sweep index={idx+1}).")
 
     # #00000000000000000 Ditto 00000000000000000000
     # Uncomment this block, and keep the other run_simulation calls disabled, to run Ditto on CIFAR-10.
@@ -657,6 +727,25 @@ def main():
     # ditto_fed_net.run_simulation(
     #     file_save_path='plots/swap/CIFAR-10/saved_plots_ditto/',
     #     log_save_path='logs/swap/CIFAR-10/saved_logs_ditto/')
+    # print(f"Simulation completed: dataset=CIFAR-10, method=Ditto.")
+
+    # #00000000000000000 FairFedDrift 00000000000000000000
+    # fairfeddrift_fed_net = FederatedNetwork(
+    #     num_iid_client_instances=10,
+    #     num_noniid_client_instances=0,
+    #     server_tree_layout=[1],
+    #     num_training_rounds=400,
+    #     dataset_name=constants.DatasetNames.CIFAR_10,
+    #     noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+    #     drift_specs=drift_specifications,
+    #     simulation_parameters=simulation_parameters,
+    #     client_select_fraction=1,
+    #     drift_recovery_parameters=fairfeddrift_recovery_parameters,
+    # )
+    # fairfeddrift_fed_net.run_simulation(
+    #     file_save_path='plots/swap/CIFAR-10/saved_plots_fairfeddrift/',
+    #     log_save_path='logs/swap/CIFAR-10/saved_logs_fairfeddrift/')
+    # print(f"Simulation completed: dataset=CIFAR-10, method=FairFedDrift.")
 
     # 0000000000000000000000000000000000000
     # Define drift recovery algorithm related parameters
@@ -689,10 +778,11 @@ def main():
         drift_recovery_parameters=drift_recovery_parameters, # Drift recovery algorithm related parameters
     )
 
-    # Running the simulation
-    fed_net.run_simulation(
-        file_save_path='plots/swap/CIFAR-10/saved_plots_oracle/',
-        log_save_path='logs/swap/CIFAR-10/saved_logs_oracle/')
+    # # Running the simulation
+    # fed_net.run_simulation(
+    #     file_save_path='plots/swap/CIFAR-10/saved_plots_oracle/',
+    #     log_save_path='logs/swap/CIFAR-10/saved_logs_oracle/')
+    # print(f"Simulation completed: dataset=CIFAR-10, method=Oracle.")
 
     # # #0000000000000000000000000000000000000
     # Define drift recovery algorithm related parameters
@@ -725,10 +815,11 @@ def main():
         drift_recovery_parameters=drift_recovery_parameters, # Drift recovery algorithm related parameters
     )
 
-    # Running the simulation
-    fed_net.run_simulation(
-        file_save_path='plots/swap/CIFAR-10/saved_plots_fedavg/',
-        log_save_path='logs/swap/CIFAR-10/saved_logs_fedavg/')
+    # # Running the simulation
+    # fed_net.run_simulation(
+    #     file_save_path='plots/swap/CIFAR-10/saved_plots_fedavg/',
+    #     log_save_path='logs/swap/CIFAR-10/saved_logs_fedavg/')
+    # print(f"Simulation completed: dataset=CIFAR-10, method=FedAvg.")
 
 
     # # 00000000000000000000000000000000000000000000000000000000000000
@@ -806,6 +897,7 @@ def main():
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/CIFAR-100/saved_plots_fedex/',
     #     log_save_path='logs/swap/CIFAR-100/saved_logs_fedex/')
+    # print(f"Simulation completed: dataset=CIFAR-100, method=FedEx.")
     #
     # #00000000000000000 Ditto 00000000000000000000
     # Uncomment this block, and keep the other run_simulation calls disabled, to run Ditto on CIFAR-100.
@@ -835,6 +927,25 @@ def main():
     # ditto_fed_net.run_simulation(
     #     file_save_path='plots/swap/CIFAR-100/saved_plots_ditto/',
     #     log_save_path='logs/swap/CIFAR-100/saved_logs_ditto/')
+    # print(f"Simulation completed: dataset=CIFAR-100, method=Ditto.")
+
+    # #00000000000000000 FairFedDrift 00000000000000000000
+    # fairfeddrift_fed_net = FederatedNetwork(
+    #     num_iid_client_instances=10,
+    #     num_noniid_client_instances=0,
+    #     server_tree_layout=[1],
+    #     num_training_rounds=200,
+    #     dataset_name=constants.DatasetNames.CIFAR_100,
+    #     noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+    #     drift_specs=drift_specifications,
+    #     simulation_parameters=simulation_parameters,
+    #     client_select_fraction=1,
+    #     drift_recovery_parameters=fairfeddrift_recovery_parameters,
+    # )
+    # fairfeddrift_fed_net.run_simulation(
+    #     file_save_path='plots/swap/CIFAR-100/saved_plots_fairfeddrift/',
+    #     log_save_path='logs/swap/CIFAR-100/saved_logs_fairfeddrift/')
+    # print(f"Simulation completed: dataset=CIFAR-100, method=FairFedDrift.")
     #
     # 0000000000000000000000000000000000000
     # Define drift recovery algorithm related parameters
@@ -871,6 +982,7 @@ def main():
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/CIFAR-100/saved_plots_oracle/',
     #     log_save_path='logs/swap/CIFAR-100/saved_logs_oracle/')
+    # print(f"Simulation completed: dataset=CIFAR-100, method=Oracle.")
 
     # # #0000000000000000000000000000000000000
     # Define drift recovery algorithm related parameters
@@ -907,6 +1019,7 @@ def main():
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/CIFAR-100/saved_plots_fedavg/',
     #     log_save_path='logs/swap/CIFAR-100/saved_logs_fedavg/')
+    # print(f"Simulation completed: dataset=CIFAR-100, method=FedAvg.")
 
     # # 00000000000000000000000000000000000000000000000000000000000000
     # # 0000000000000000000000000 Tiny-ImageNet 000000000000000000000000000
@@ -1018,6 +1131,7 @@ def main():
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/Tiny/saved_plots_fedex/',
     #     log_save_path='logs/swap/Tiny/saved_logs_fedex/')
+    # print(f"Simulation completed: dataset=Tiny ImageNet-200, method=FedEx.")
 
     # #00000000000000000 Ditto 00000000000000000000
     # Uncomment this block, and keep the other run_simulation calls disabled, to run Ditto on Tiny ImageNet-200.
@@ -1047,6 +1161,25 @@ def main():
     # ditto_fed_net.run_simulation(
     #     file_save_path='plots/swap/Tiny/saved_plots_ditto/',
     #     log_save_path='logs/swap/Tiny/saved_logs_ditto/')
+    # print(f"Simulation completed: dataset=Tiny ImageNet-200, method=Ditto.")
+
+    # #00000000000000000 FairFedDrift 00000000000000000000
+    # fairfeddrift_fed_net = FederatedNetwork(
+    #     num_iid_client_instances=10,
+    #     num_noniid_client_instances=0,
+    #     server_tree_layout=[1],
+    #     num_training_rounds=800,
+    #     dataset_name=constants.DatasetNames.TINY_IMAGENET_200,
+    #     noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+    #     drift_specs=drift_specifications,
+    #     simulation_parameters=simulation_parameters,
+    #     client_select_fraction=1,
+    #     drift_recovery_parameters=fairfeddrift_recovery_parameters,
+    # )
+    # fairfeddrift_fed_net.run_simulation(
+    #     file_save_path='plots/swap/Tiny/saved_plots_fairfeddrift/',
+    #     log_save_path='logs/swap/Tiny/saved_logs_fairfeddrift/')
+    # print(f"Simulation completed: dataset=Tiny ImageNet-200, method=FairFedDrift.")
 
     # 0000000000000000000000000000000000000
     # Define drift recovery algorithm related parameters
@@ -1083,6 +1216,7 @@ def main():
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/Tiny/saved_plots_oracle/',
     #     log_save_path='logs/swap/Tiny/saved_logs_oracle/')
+    # print(f"Simulation completed: dataset=Tiny ImageNet-200, method=Oracle.")
     #
     # # #0000000000000000000000000000000000000
     # Define drift recovery algorithm related parameters
@@ -1119,6 +1253,7 @@ def main():
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/Tiny/saved_plots_fedavg/',
     #     log_save_path='logs/swap/Tiny/saved_logs_fedavg/')
+    # print(f"Simulation completed: dataset=Tiny ImageNet-200, method=FedAvg.")
 
 
 

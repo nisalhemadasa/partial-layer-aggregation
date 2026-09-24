@@ -41,6 +41,9 @@ class Client:
         self.trainloader = None  # initialized only when sample_data() is called
         self.testloader = None  # initialized only when sample_data() is called
         self.parent_server_id = None  # server ID in the server hierarchy to which the client is connected
+        self.fairfeddrift_training_cluster_id = None  # Cluster used for the most recent local upload
+        self.fairfeddrift_history_uploads = {}
+        self.fairfeddrift_history_sample_counts = {}
         self.auxiliary_classifier_parameters = None  # distance of the client from the server in the server hierarchy
         self.aux_trainloader = None  # dateset with random labels for training the auxiliary classifier in FedAU
         self.drift_id = None  # drift pattern ID assigned to this client (for clustering-based methods, e.g., or Oracle)
@@ -187,6 +190,48 @@ class Client:
                                       if self.ditto_lambda_decisions
                                       else self.ditto_parameters['ditto_lambda'])
 
+    def fit_fairfeddrift_history(self, server_models: Dict[int, torch.nn.Module],
+                                 history_loaders: Dict[int, DataLoader],
+                                 sample_counts: Dict[int, int]) -> Dict[int, OrderedDict]:
+        """
+        Train isolated temporary models on this client's retained data per cluster.
+        The ordinary client.model remains the current-assignment model/upload. Each
+        call to models.utils.train() creates an independent optimizer for its model.
+        :param server_models: Active cluster ID to corresponding server model mapping.
+        :param history_loaders: Active cluster ID to this client's retained-data loader.
+        :param sample_counts: Exact selected-sample count for each history loader.
+        :return: Cluster ID to detached local parameter-upload mapping.
+        """
+        self.fairfeddrift_history_uploads = {}
+        self.fairfeddrift_history_sample_counts = {}
+        if not isinstance(server_models, dict) or not isinstance(history_loaders, dict) or \
+                not isinstance(sample_counts, dict):
+            raise ValueError("FairFedDrift historical training requires model, loader and count mappings.")
+        if set(history_loaders) != set(sample_counts) or not set(history_loaders).issubset(server_models):
+            raise ValueError("FairFedDrift historical models, loaders and counts must have matching cluster IDs.")
+
+        uploads = {}
+        counts = {}
+        for cluster_id, loader in history_loaders.items():
+            sample_count = sample_counts[cluster_id]
+            if (isinstance(cluster_id, bool) or not isinstance(cluster_id, int) or cluster_id < 0 or
+                    not isinstance(loader, DataLoader) or isinstance(sample_count, bool) or
+                    not isinstance(sample_count, int) or sample_count <= 0 or
+                    len(loader.dataset) != sample_count):
+                raise ValueError("FairFedDrift history loaders need valid cluster IDs and exact positive counts.")
+            server_model = server_models[cluster_id]
+            if not isinstance(server_model, torch.nn.Module):
+                raise ValueError("FairFedDrift historical training requires a model for every loader.")
+            temporary_model = copy.deepcopy(server_model).to(get_device())
+            train(temporary_model, loader, _epochs=self.epochs)
+            uploads[cluster_id] = OrderedDict(
+                (key, value.detach().clone()) for key, value in temporary_model.state_dict().items())
+            counts[cluster_id] = sample_count
+
+        self.fairfeddrift_history_uploads = uploads
+        self.fairfeddrift_history_sample_counts = counts
+        return uploads
+
     def fit(self, _is_drift: bool, _is_drift_end: bool, server_model_parameters: OrderedDict, _client_id: int,
             drift_recovery_method: str, _drifted_client_indices: List[int]) -> None:
         """
@@ -219,7 +264,8 @@ class Client:
         else:
             # Train the client model using new data and server parameters
             if drift_recovery_method in [constants.RecoveryAlgorithm.FEDAVG, constants.RecoveryAlgorithm.FEDEX,
-                                         constants.RecoveryAlgorithm.ORACLE]:
+                                         constants.RecoveryAlgorithm.ORACLE,
+                                         constants.RecoveryAlgorithm.FAIRFEDDRIFT]:
                 # Adam-based recovery (1st order) + reinitialization of client parameters from the global model from scratch
                 train(self.model, self.trainloader, _epochs=self.epochs)
             elif drift_recovery_method == constants.RecoveryAlgorithm.RRT:
