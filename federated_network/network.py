@@ -30,12 +30,19 @@ from plot_utils.plotting import plot_client_performance_vs_rounds, plot_server_p
 from strategy.Ditto import resolve_ditto_parameters
 from strategy.FairFedDrift import resolve_fairfeddrift_parameters, validate_fairfeddrift_setup
 from device_utils import get_device
+from random_utils import configure_random_seed
 
 
 class FederatedNetwork:
     def __init__(self, num_iid_client_instances, num_noniid_client_instances, server_tree_layout, num_training_rounds,
                  dataset_name, noniid_partitioning_strategy, drift_specs, simulation_parameters,
                  drift_recovery_parameters, client_select_fraction=0.5, minibatch_size=128, num_local_epochs=5):
+        if not isinstance(simulation_parameters, dict):
+            raise ValueError("simulation_parameters must be a dictionary.")
+        self.random_seed = simulation_parameters.get('random_seed')
+        if self.random_seed is None:
+            raise ValueError("simulation_parameters['random_seed'] is required for comparable experiments.")
+        configure_random_seed(self.random_seed)
         drift_recovery_parameters = dict(drift_recovery_parameters)
         recovery_method = drift_recovery_parameters['recovery_method']
         base_method = drift_recovery_parameters.get('base_aggregation_method', recovery_method)
@@ -111,7 +118,7 @@ class FederatedNetwork:
         _labels_noniid_test = get_unique_labels_per_subset(self.testset, partitioned_noniid_testsets)
 
         # Concept drift properties
-        self.drift = drift_fn(self.num_client_instances, num_training_rounds, drift_specs)
+        self.drift = drift_fn(self.num_client_instances, num_training_rounds, drift_specs, self.random_seed)
 
         # Simulation parameters
         self.simulation_parameters = simulation_parameters
@@ -213,6 +220,7 @@ class FederatedNetwork:
         :param log_save_path: Path to save the logs
         :return: None
         """
+        configure_random_seed(self.random_seed)
         clients_loss_and_accuracy = []  # Store the loss and accuracy of the all the clients at each round
         sampled_clients_in_each_round = []  # To keep track of the client IDs sampled in each round
         server_loss_and_accuracy = []  # Store the loss and accuracy at each level of the server hierarchy
