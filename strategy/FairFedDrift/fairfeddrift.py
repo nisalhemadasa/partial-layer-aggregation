@@ -71,8 +71,8 @@ def validate_fairfeddrift_setup(server_tree_layout, client_select_fraction, reso
     if (isinstance(client_select_fraction, bool) or not isinstance(client_select_fraction, (int, float)) or
             client_select_fraction != 1):
         raise ValueError("FairFedDrift currently requires full participation (client_select_fraction=1).")
-    if getattr(resolved_device, 'type', None) != 'cpu':
-        raise ValueError("FairFedDrift currently requires a resolved CPU device.")
+    if getattr(resolved_device, 'type', None) not in {'cpu', 'cuda'}:
+        raise ValueError("FairFedDrift requires a resolved CPU or CUDA device.")
 
 
 class FairFedDrift:
