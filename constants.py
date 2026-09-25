@@ -187,6 +187,7 @@ class Logs:
     DITTO_PERSONALIZED_CLIENT_LOG = 'ditto_personalized_client_log'
     DITTO_PERSONALIZED_DRIFTED_CLASS_LOG = 'ditto_personalized_drifted_class_log'
     DITTO_SELECTED_LAMBDA_LOG = 'ditto_selected_lambda_log'
+    FEDBABU_PERSONALIZED_CLIENT_LOG = 'fedbabu_personalized_client_log'
     FAIRFEDDRIFT_STATE_LOG = 'fairfeddrift_state_log'
 
 
@@ -204,6 +205,7 @@ class RecoveryAlgorithm:
     FEDRC = 'fedrc'  # Clustering-based
     DITTO = 'ditto'  # Personalized federated learning
     FAIRFEDDRIFT = 'fairfeddrift'  # Group-aware drift clustering
+    FEDBABU = 'fedbabu'  # Fixed-head body aggregation with post-training personalization
 
 
 # Types of models used in the project

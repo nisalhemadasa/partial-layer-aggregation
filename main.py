@@ -147,6 +147,15 @@ def main():
         ditto_validation_seed=experiment_seed,
     )
 
+    # Shared FedBABU final-head fine-tuning settings. The strategy resolver
+    # validates these and provides the same defaults for non-FedBABU runs.
+    fedbabu_parameters = dict(
+        fedbabu_head_finetune_epochs=5,
+        fedbabu_head_finetune_learning_rate=0.01,
+        fedbabu_head_finetune_momentum=0.5,
+        fedbabu_head_finetune_weight_decay=0.0,
+    )
+
     # Shared FairFedDrift settings. The loss-increase threshold is an experimental
     # starting value and must be validated on held-out validation data.
     fairfeddrift_parameters = dict(
@@ -163,6 +172,16 @@ def main():
         fedau_alpha=0.9,
         fedex_alpha=0.9,
         **fairfeddrift_parameters,
+    )
+
+    # Shared configuration for the disabled FedBABU experiment handles below.
+    fedbabu_recovery_parameters = dict(
+        recovery_method=constants.RecoveryAlgorithm.FEDBABU,
+        base_aggregation_method=constants.RecoveryAlgorithm.FEDBABU,
+        fedau_alpha=0.9,
+        fedrc_cluster_count=3,
+        fedex_alpha=0.9,
+        **fedbabu_parameters,
     )
 
     # 000000000000000000000000000000000000000000000
@@ -433,6 +452,24 @@ def main():
     #     log_save_path='logs/swap/MNIST/saved_logs_ditto/')
     # print(f"Simulation completed: dataset=MNIST, method=Ditto.")
 
+    # #00000000000000000 FedBABU 00000000000000000000
+    # Uncomment this constructor and its run call to run FedBABU on MNIST.
+    # fedbabu_fed_net = FederatedNetwork(
+    #     num_iid_client_instances=10,
+    #     num_noniid_client_instances=0,
+    #     server_tree_layout=[1],
+    #     num_training_rounds=50,
+    #     dataset_name=constants.DatasetNames.MNIST,
+    #     noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+    #     drift_specs=drift_specifications,
+    #     simulation_parameters=simulation_parameters,
+    #     client_select_fraction=1,
+    #     drift_recovery_parameters=fedbabu_recovery_parameters,
+    # )
+    # fedbabu_fed_net.run_simulation(
+    #     file_save_path='plots/swap/MNIST/saved_plots_fedbabu/',
+    #     log_save_path='logs/swap/MNIST/saved_logs_fedbabu/')
+
     # #00000000000000000 FairFedDrift 00000000000000000000
     # Keep both the constructor and run call commented until this handle is selected.
     fairfeddrift_fed_net = FederatedNetwork(
@@ -597,6 +634,23 @@ def main():
     #     log_save_path='logs/swap/F_MNIST/saved_logs_ditto/')
     # print(f"Simulation completed: dataset=Fashion-MNIST, method=Ditto.")
 
+    # FedBABU handle for Fashion-MNIST; keep construction and execution disabled by default.
+    # fedbabu_fed_net = FederatedNetwork(
+    #     num_iid_client_instances=10,
+    #     num_noniid_client_instances=0,
+    #     server_tree_layout=[1],
+    #     num_training_rounds=50,
+    #     dataset_name=constants.DatasetNames.F_MNIST,
+    #     noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+    #     drift_specs=drift_specifications,
+    #     simulation_parameters=simulation_parameters,
+    #     client_select_fraction=1,
+    #     drift_recovery_parameters=fedbabu_recovery_parameters,
+    # )
+    # fedbabu_fed_net.run_simulation(
+    #     file_save_path='plots/swap/F_MNIST/saved_plots_fedbabu/',
+    #     log_save_path='logs/swap/F_MNIST/saved_logs_fedbabu/')
+
     # #00000000000000000 FairFedDrift 00000000000000000000
     # fairfeddrift_fed_net = FederatedNetwork(
     #     num_iid_client_instances=10,
@@ -728,6 +782,23 @@ def main():
     #     file_save_path='plots/swap/CIFAR-10/saved_plots_ditto/',
     #     log_save_path='logs/swap/CIFAR-10/saved_logs_ditto/')
     # print(f"Simulation completed: dataset=CIFAR-10, method=Ditto.")
+
+    # FedBABU handle for CIFAR-10; keep construction and execution disabled by default.
+    # fedbabu_fed_net = FederatedNetwork(
+    #     num_iid_client_instances=10,
+    #     num_noniid_client_instances=0,
+    #     server_tree_layout=[1],
+    #     num_training_rounds=400,
+    #     dataset_name=constants.DatasetNames.CIFAR_10,
+    #     noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+    #     drift_specs=drift_specifications,
+    #     simulation_parameters=simulation_parameters,
+    #     client_select_fraction=1,
+    #     drift_recovery_parameters=fedbabu_recovery_parameters,
+    # )
+    # fedbabu_fed_net.run_simulation(
+    #     file_save_path='plots/swap/CIFAR-10/saved_plots_fedbabu/',
+    #     log_save_path='logs/swap/CIFAR-10/saved_logs_fedbabu/')
 
     # #00000000000000000 FairFedDrift 00000000000000000000
     # fairfeddrift_fed_net = FederatedNetwork(
@@ -928,6 +999,23 @@ def main():
     #     file_save_path='plots/swap/CIFAR-100/saved_plots_ditto/',
     #     log_save_path='logs/swap/CIFAR-100/saved_logs_ditto/')
     # print(f"Simulation completed: dataset=CIFAR-100, method=Ditto.")
+
+    # FedBABU handle for CIFAR-100; keep construction and execution disabled by default.
+    # fedbabu_fed_net = FederatedNetwork(
+    #     num_iid_client_instances=10,
+    #     num_noniid_client_instances=0,
+    #     server_tree_layout=[1],
+    #     num_training_rounds=200,
+    #     dataset_name=constants.DatasetNames.CIFAR_100,
+    #     noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+    #     drift_specs=drift_specifications,
+    #     simulation_parameters=simulation_parameters,
+    #     client_select_fraction=1,
+    #     drift_recovery_parameters=fedbabu_recovery_parameters,
+    # )
+    # fedbabu_fed_net.run_simulation(
+    #     file_save_path='plots/swap/CIFAR-100/saved_plots_fedbabu/',
+    #     log_save_path='logs/swap/CIFAR-100/saved_logs_fedbabu/')
 
     # #00000000000000000 FairFedDrift 00000000000000000000
     # fairfeddrift_fed_net = FederatedNetwork(
@@ -1162,6 +1250,23 @@ def main():
     #     file_save_path='plots/swap/Tiny/saved_plots_ditto/',
     #     log_save_path='logs/swap/Tiny/saved_logs_ditto/')
     # print(f"Simulation completed: dataset=Tiny ImageNet-200, method=Ditto.")
+
+    # FedBABU handle for Tiny ImageNet; keep construction and execution disabled by default.
+    # fedbabu_fed_net = FederatedNetwork(
+    #     num_iid_client_instances=10,
+    #     num_noniid_client_instances=0,
+    #     server_tree_layout=[1],
+    #     num_training_rounds=800,
+    #     dataset_name=constants.DatasetNames.TINY_IMAGENET_200,
+    #     noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+    #     drift_specs=drift_specifications,
+    #     simulation_parameters=simulation_parameters,
+    #     client_select_fraction=1,
+    #     drift_recovery_parameters=fedbabu_recovery_parameters,
+    # )
+    # fedbabu_fed_net.run_simulation(
+    #     file_save_path='plots/swap/Tiny/saved_plots_fedbabu/',
+    #     log_save_path='logs/swap/Tiny/saved_logs_fedbabu/')
 
     # #00000000000000000 FairFedDrift 00000000000000000000
     # fairfeddrift_fed_net = FederatedNetwork(

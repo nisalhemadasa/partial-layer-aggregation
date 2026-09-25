@@ -12,6 +12,7 @@ import constants
 from drift_concepts.drift import apply_drift, Drift
 from federated_network.client import set_parameters, Client, change_client_drift_recovery_method, set_client_drift_ids
 from federated_network.server import Server, change_server_aggregation_strategy
+from strategy.FedBABU import initialize_fedbabu_personal_models
 from strategy.FedRC import fedrc
 from strategy.FairFedDrift.utils import (ClientDataHistory, build_fairfeddrift_history_loaders,
                                          evaluate_fairfeddrift_loss, prepare_fairfeddrift_decision_loader)
@@ -520,6 +521,73 @@ def evaluate_ditto_personalized_clients(all_clients: List[Client], servers: List
         records.append(record)
 
     return {'round': round_idx, 'stage': 'local_after_training', 'clients': records}
+
+
+def evaluate_fedbabu_personalized_clients(all_clients: List[Client], servers: List[Server],
+                                          round_idx: int) -> Dict:
+    """
+    Evaluate each final FedBABU personalized model through its client's test loader.
+    :param all_clients: All clients, returned in stable client-ID order.
+    :param servers: Single-level FedBABU server list used to record server identity.
+    :param round_idx: Final federated round index.
+    :return: One structured post-training personalized evaluation record.
+    """
+    if len(servers) != 1:
+        raise ValueError("FedBABU personalized evaluation currently requires one flat server.")
+    server = servers[0]
+    records = []
+    client_ids = [client.client_id for client in all_clients]
+    if len(set(client_ids)) != len(client_ids):
+        raise ValueError("FedBABU personalized evaluation requires unique client IDs.")
+
+    for client in sorted(all_clients, key=lambda item: item.client_id):
+        if client.parent_server_id != server.server_id:
+            raise ValueError("FedBABU client is not assigned to the single final server.")
+        loss, accuracy = client.evaluate_fedbabu_personalized()
+        records.append({
+            'client_id': client.client_id,
+            'parent_server_id': server.server_id,
+            'server_abs_id': server.abs_id,
+            'model_id': 'personalized',
+            'model_role': 'fedbabu_personalized',
+            'loss': loss,
+            'accuracy': accuracy
+        })
+
+    return {'round': round_idx, 'stage': 'post_training_personalization', 'clients': records}
+
+
+def build_fedbabu_personalized_log(evaluation_record: Dict) -> Dict:
+    """
+    Wrap one FedBABU final evaluation record in the repository structured-log envelope.
+    :param evaluation_record: Final client-level personalized evaluation record.
+    :return: Versioned log payload ready for `write_structured_log()`.
+    """
+    if not isinstance(evaluation_record, dict) or \
+            evaluation_record.get('stage') != 'post_training_personalization':
+        raise ValueError("FedBABU personalized log requires its post-training evaluation record.")
+    clients = evaluation_record.get('clients')
+    if not isinstance(clients, list) or not clients:
+        raise ValueError("FedBABU personalized log requires at least one client result.")
+    if any(not isinstance(client, dict) or client.get('model_role') != 'fedbabu_personalized'
+           for client in clients):
+        raise ValueError("FedBABU personalized log records must identify the personalized model role.")
+    return {'schema_version': 1, 'records': [copy.deepcopy(evaluation_record)]}
+
+
+def finalize_fedbabu_personalization(all_clients: List[Client], servers: List[Server],
+                                    final_round: int) -> Dict:
+    """
+    Build, fine-tune and evaluate each client's final FedBABU personal model.
+    :param all_clients: Clients participating in the FedBABU simulation.
+    :param servers: Single-level FedBABU server list containing the final model.
+    :param final_round: Index of the final federated aggregation round.
+    :return: Structured final personalized evaluation record.
+    """
+    initialize_fedbabu_personal_models(all_clients, servers)
+    for client in sorted(all_clients, key=lambda item: item.client_id):
+        client.fine_tune_fedbabu_personal_head()
+    return evaluate_fedbabu_personalized_clients(all_clients, servers, final_round)
 
 
 def build_ditto_state_log(clients: List[Client], drift_recovery_parameters: Dict) -> Dict:

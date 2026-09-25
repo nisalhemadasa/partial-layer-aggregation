@@ -22,6 +22,7 @@ from models.utils import train, test, test_subset_classes, CNNModel, rapid_train
     CNNCIFAR10, CNNCIFAR100, TabularAdultModel
 from strategy.FedRC import fedrc
 from strategy.Ditto import resolve_ditto_parameters, train_ditto_personal_model
+from strategy.FedBABU import resolve_fedbabu_parameters, train_fedbabu_body, train_fedbabu_head
 
 from device_utils import get_device
 
@@ -47,6 +48,10 @@ class Client:
         self.auxiliary_classifier_parameters = None  # distance of the client from the server in the server hierarchy
         self.aux_trainloader = None  # dateset with random labels for training the auxiliary classifier in FedAU
         self.drift_id = None  # drift pattern ID assigned to this client (for clustering-based methods, e.g., or Oracle)
+        self.fedbabu_personal_model = None
+        self.fedbabu_parameters = None
+        if self.drift_recovery_method == constants.RecoveryAlgorithm.FEDBABU:
+            self.fedbabu_parameters = resolve_fedbabu_parameters(drift_recovery_parameters or {})
 
         # ===== Ditto specific initializations =====
         self.ditto_parameters = None
@@ -190,6 +195,37 @@ class Client:
                                       if self.ditto_lambda_decisions
                                       else self.ditto_parameters['ditto_lambda'])
 
+    def _fit_fedbabu(self) -> None:
+        """
+        Train only this client's FedBABU body, including during local warm-up.
+        :return: None.
+        """
+        train_fedbabu_body(self.model, self.trainloader, self.epochs)
+
+    def fine_tune_fedbabu_personal_head(self) -> None:
+        """
+        Fine-tune the isolated FedBABU model head using all local training data.
+        :return: None.
+        """
+        if self.fedbabu_personal_model is None:
+            raise ValueError("FedBABU personal evaluation model has not been initialized.")
+        if self.fedbabu_parameters is None:
+            raise ValueError("FedBABU fine-tuning parameters have not been initialized.")
+        local_training_loader = convert_dataset_to_loader(
+            self.local_trainset, _batch_size=self.mini_batch_size, _is_shuffle=True)
+        train_fedbabu_head(self.fedbabu_personal_model, local_training_loader,
+                           self.fedbabu_parameters)
+
+    def evaluate_fedbabu_personalized(self) -> tuple[float, float]:
+        """
+        Evaluate the post-training FedBABU personalized model on this client's test set.
+        :return: Personalized-model loss and accuracy.
+        """
+        if self.fedbabu_personal_model is None:
+            raise ValueError("FedBABU personal evaluation model has not been initialized.")
+        loss, accuracy = test(self.fedbabu_personal_model, self.testloader)
+        return float(loss), float(accuracy)
+
     def fit_fairfeddrift_history(self, server_models: Dict[int, torch.nn.Module],
                                  history_loaders: Dict[int, DataLoader],
                                  sample_counts: Dict[int, int]) -> Dict[int, OrderedDict]:
@@ -247,6 +283,10 @@ class Client:
         """
         if drift_recovery_method == constants.RecoveryAlgorithm.DITTO:
             self._fit_ditto(server_model_parameters)
+            return
+
+        if drift_recovery_method == constants.RecoveryAlgorithm.FEDBABU:
+            self._fit_fedbabu()
             return
 
         if not _is_drift:

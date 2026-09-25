@@ -314,13 +314,21 @@ def rapid_train(_model: nn.Module, _dataset: DataLoader, _epochs: int, _batch_si
             print(f"Train Epoch {epoch + 1}: train loss {epoch_loss}, accuracy {epoch_acc}")
 
 
-def train(_model: nn.Module, _dataset: DataLoader, _epochs: int, verbose: bool = False) -> None:
+def train(_model: nn.Module, _dataset: DataLoader, _epochs: int, verbose: bool = False,
+          _optimizer_parameters: List[nn.Parameter] = None, _learning_rate: float = 0.01,
+          _momentum: float = 0.9, _weight_decay: float = 5e-4,
+          _frozen_modules: List[nn.Module] = None) -> None:
     """
     Train the network on the training set.
     :param _model: The model to train
     :param _dataset: The dataloader containing training dataset
     :param _epochs: The number of epochs to train for
     :param verbose: Whether to print training progress
+    :param _optimizer_parameters: Optional parameter subset for the SGD optimizer.
+    :param _learning_rate: SGD learning rate; defaults preserve existing callers.
+    :param _momentum: SGD momentum; defaults preserve existing callers.
+    :param _weight_decay: SGD weight decay; defaults preserve existing callers.
+    :param _frozen_modules: Optional modules placed in evaluation mode each epoch.
     :return: None
     """
     # # For generic trainng
@@ -347,12 +355,16 @@ def train(_model: nn.Module, _dataset: DataLoader, _epochs: int, verbose: bool =
     criterion = nn.NLLLoss()
     _model = _model.to(get_device()).float()
 
-    optimizer = torch.optim.SGD(
-        _model.parameters(),
-        lr=0.01,
-        momentum=0.9,
-        weight_decay=5e-4
-    )
+    optimizer_parameters = (list(_model.parameters()) if _optimizer_parameters is None
+                            else list(_optimizer_parameters))
+    if not optimizer_parameters:
+        raise ValueError("Training requires at least one optimizer parameter.")
+    frozen_modules = [] if _frozen_modules is None else list(_frozen_modules)
+    if any(not isinstance(module, nn.Module) for module in frozen_modules):
+        raise ValueError("Frozen training modules must be PyTorch modules.")
+
+    optimizer = torch.optim.SGD(optimizer_parameters, lr=_learning_rate, momentum=_momentum,
+                                weight_decay=_weight_decay)
 
     scheduler = torch.optim.lr_scheduler.MultiStepLR(
         optimizer,
@@ -364,6 +376,8 @@ def train(_model: nn.Module, _dataset: DataLoader, _epochs: int, verbose: bool =
 
     for epoch in range(_epochs):
         _model.train()
+        for module in frozen_modules:
+            module.eval()
 
         correct = 0
         total = 0

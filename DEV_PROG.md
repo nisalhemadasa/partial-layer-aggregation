@@ -120,3 +120,70 @@ Keep one brief dated entry per development step: change, validation, and any rem
 - 2026-09-24: Synthetic validation passed for all six notebooks and six checkpoints: four-method log reads, FairFedDrift statistics, purple curves in 8 plots per standard notebook/14 for CIFAR-10 focus variants, legends, and six four-method fairness tables with independently checked horizon means and LaTeX headers. Save calls intercepted to avoid generating experiment artifacts; external FairFedDrift data and actual PGF rendering remain unverified.
 
 - 2026-09-24: Created FedBABU_integration_plan.md after studying the attached paper and official repository. The plan distinguishes FedBABU's fixed-head client training and post-training head personalization from FedEx's local-head behavior, and maps implementation to existing strategy/client/server paths while preserving the simulation loop. Markdown read-back and git diff --check passed.
+
+- 2026-09-24: Completed FedBABU plan step 0.1 by auditing active model constructors and startup lifecycle. Recorded final classifier modules and the finding that clients/servers get independently initialized heads before local warm-up; a shared-head initialization point is needed before warm-up. Plan read-back and git diff --check passed.
+
+- 2026-09-24: Completed FedBABU plan step 0.2 by tracing the warm-up, round training, strategy aggregation, distribution, and log-persistence paths. Recorded the no-loop integration points and limited the first implementation to flat topology because the current hierarchical path re-aggregates parent/child models. Plan read-back and git diff --check passed.
+
+- 2026-09-24: Implemented FedBABU plan step 1.1 by adding RecoveryAlgorithm.FEDBABU = 'fedbabu'; no strategy behavior is wired yet. Python import/value assertion and git diff --check passed.
+
+- 2026-09-24: Implemented FedBABU plan step 1.2 with a package, strategy class, explicit not-yet-implemented aggregation method, factory, and root strategy export. Package/factory and expected placeholder behavior checks plus diff checks pending.
+
+- 2026-09-24: Implemented FedBABU plan step 1.2 by adding and exporting the strategy package, factory, and explicit aggregation placeholder. Python 3.10 root-package/factory assertions, placeholder exception check, py_compile, plan read-back, and git diff --check passed; server construction and aggregation dispatch remain pending step 1.3.
+
+- 2026-09-24: Implemented FedBABU plan step 1.3 in federated_network/server.py: registered server construction, routed flat leaf aggregation to the ordinary model-aggregation helper, and dispatched Server.train() to FedBABU. Python 3.10 runtime checks confirmed construction and both dispatch routes; compilation and git diff --check passed. The strategy aggregation placeholder remains until step 3.
+
+- 2026-09-24: Implemented FedBABU plan step 1.4 by adding focused registration and dispatch tests. All four tests passed with Python 3.10; bytecode compilation and git diff --check passed. FedBABU aggregation remains intentionally unimplemented.
+
+- 2026-09-24: Implemented FedBABU plan step 2.1 with an explicit model-type-to-final-Linear-head mapping and a state-dict partition helper in strategy/FedBABU/utils.py. Added no changes to the existing FedEx split helper. Focused partition checks and diff checks pending.
+
+- 2026-09-24: Implemented FedBABU plan step 2.1 with an explicit model-type-to-final-Linear-head mapping and state-dict partition helper. Exported it without changing the FedEx split helper. All seven focused FedBABU tests, py_compile, and git diff --check passed; stronger partition edge-case checks remain in step 2.2.
+
+- 2026-09-24: Implemented FedBABU plan step 2.2 by validating state-dict keys and tensor shapes against the model schema, and by testing disjoint/full partition coverage, supplied-state ordering/value preservation, and failure cases. All nine focused FedBABU tests, py_compile, and git diff --check passed.
+
+- 2026-09-24: Implemented FedBABU plan step 2.3 by adding a tensor-reduction helper: floating/complex values use equal averaging; non-floating buffers use elementwise max and retain the reference dtype. An actual ResNet18CIFAR100 state confirmed 20 integer BatchNorm counters. All 13 focused tests, actual model partition/buffer check, py_compile, and git diff --check passed; helper integration into strategy aggregation remains step 3.1.
+
+- 2026-09-24: Implemented FedBABU plan step 3.1 with validated equal aggregation of body state only, using the dtype-aware tensor reduction from step 2.3. Head values are excluded; client/server inputs remain unchanged and existing FedAvg is untouched. All 15 focused FedBABU tests, py_compile, and git diff --check passed. Server update remains step 3.2.
+
+- 2026-09-24: Implemented FedBABU plan step 3.2: FedBABU.aggregate_models() now applies only aggregated body state through the existing non-strict set_parameters() helper, preserving server head tensors. All 16 focused tests, py_compile, and git diff --check passed; client distribution and fixed-head initialization remain later steps.
+
+- 2026-09-24: Completed FedBABU plan step 3.3 by confirming that the existing train_client_models() full-state download sends the updated body and fixed head for flat topology; model_distribution_hierarchy() requires no FedBABU branch. Added a runtime test for the full client download. All 17 focused tests, py_compile, and git diff --check passed; detailed end-to-end aggregate/distribute checks remain in step 3.4.
+
+- 2026-09-24: Completed FedBABU step 3.4 with normal-path server aggregation/download tests, fixed-head invariance, invalid-upload failure without server mutation, and FedAvg/FedEx compatibility checks. All 21 focused FedBABU tests passed. Ditto regression import was blocked by missing `ucimlrepo`; no production code changed in this test-only step. Body-only client training remains step 4.1.
+
+- 2026-09-24: Implemented FedBABU step 4.1 with `Client._fit_fedbabu()` and a strategy helper that freezes final-head parameters while reusing `models.utils.train()` for body updates. The route covers warm-up, ordinary rounds and drift rounds; head values remain unchanged and `requires_grad` flags are restored. All 23 focused FedBABU tests and `py_compile` passed; common client/server head initialization remains step 4.3.
+
+- 2026-09-24: Completed FedBABU step 4.2 by verifying its helper delegates the existing client DataLoader and epoch count to `models.utils.train()`, preserving the framework loss, optimizer/scheduler, batching and device path while freezing the head. Added a delegation check. All 24 FedBABU tests and four device tests passed on CPU; device tests emitted existing AMP deprecation warnings. No shared trainer changes were required.
+
+- 2026-09-24: Completed FedBABU step 4.3 by copying the first flat server's initial classifier head to every client before warm-up in `FederatedNetwork.__init__()`. The helper validates head schemas and changes no body tensors. All 26 focused FedBABU tests, compilation and `git diff --check` passed; a live constructor run is unverified because `ucimlrepo` is missing.
+
+- 2026-09-24: Completed FedBABU step 4.4 by auditing participation: the current `run_simulation()` loop passes `self.clients` each round, while `sample_clients()`/`client_select_fraction` are not used there. FedBABU retains that existing all-client behavior without simulation-loop edits or a new sampling path. Corrected the plan to clarify that AGENTS.md's full-participation note is Ditto-specific. Source audit and plan read-back passed; no code/test changes.
+
+- 2026-09-24: Completed FedBABU step 4.5 with body/head delta checks for initial warm-up, regular server-backed local training and the drift-active client path, plus a FedAvg check that ordinary client training still uses the unrestricted trainer. All 27 focused FedBABU tests passed. A configured-drift full simulation remains step 7.3.
+
+- 2026-09-24: Completed FedBABU step 5.1 by adding a helper that creates an independent per-client evaluation-model copy from the final single server state, including its shared body and fixed head. It validates model schemas and leaves source/client models unchanged. All 28 focused FedBABU tests passed; post-loop invocation remains step 5.5.
+
+- 2026-09-24: Implemented FedBABU step 5.2 with full-local-data classifier fine-tuning on each isolated personal model, validated explicit epoch/SGD settings, a head-only optimizer subset, frozen body modules and restored body state (including buffers). Optional trainer arguments preserve existing defaults. All 31 FedBABU tests and four device tests passed. Ditto regression: 10/11 passed after stubbing missing `ucimlrepo`/`random_utils`; the remaining pre-existing hierarchy-guard test expects an error before the current required-seed validation. Finalizer invocation remains step 5.5; main.py parameter values remain step 6.1.
+
+- 2026-09-24: Completed FedBABU step 5.3 with client evaluation through the existing test loader and a separate structured post-training result tagged `model_role='fedbabu_personalized'`. Evaluation leaves personal, local-upload and server states unchanged and does not write into `client_log.pkl`. All 32 focused FedBABU tests passed; persistence naming remains step 5.4 and run integration remains step 5.5.
+
+- 2026-09-25: Completed FedBABU step 5.4 by adding the separate `fedbabu_personalized_client_log` constant and a schema-versioned payload builder for the existing structured-log writer. A temporary pickle round-trip test passed with the FedBABU suite (33 tests); ordinary `client_log` naming and output are untouched. Writing the final run record is connected in step 5.5.
+
+- 2026-09-25: Completed FedBABU step 5.5 by wiring final personalization after the round loop: independent final-server copies, local head fine-tuning, existing-path evaluation, and separate structured-log writing. The ordinary logs and round loop are unchanged. All 34 focused FedBABU tests passed; compile and diff checks passed. Full `FederatedNetwork` simulation remains pending because this environment lacks `ucimlrepo` and `random_utils`.
+
+- 2026-09-25: Completed FedBABU step 6.1 by adding explicit head fine-tuning defaults to main.py beside shared strategy settings. Added an AST-based check against `resolve_fedbabu_parameters`; all 35 FedBABU tests, compilation and diff checks passed. FedBABU experiment handles remain disabled for step 6.2.
+
+- 2026-09-25: Completed FedBABU step 6.2 by adding disabled-by-default experiment handles for MNIST, Fashion-MNIST, CIFAR-10, CIFAR-100 and Tiny ImageNet, using shared FedBABU settings and existing run/output conventions. All 36 focused tests and compilation passed. A full main.py run remains intentionally avoided because it constructs many experiments.
+
+- 2026-09-25: Completed FedBABU step 6.3 with an AST audit: main.py has 16 active FederatedNetwork constructor call sites and one active FairFedDrift MNIST run; all FedBABU handles remain comments. Recorded that full validation must isolate the intended constructor first. No experiment selection changed and no full main.py run was performed.
+
+- 2026-09-25: Completed FedBABU step 7.1: all 36 focused strategy tests passed, covering body/head partitioning, fixed-head client behavior, body aggregation/distribution, personal-head fine-tuning and evaluation, and separate persistence. This does not substitute for a full simulation.
+
+- 2026-09-25: Completed FedBABU step 7.2 regression audit. Device (4), staged-evaluation (4), and model-distance (5) tests passed. FairFedDrift ran 99 tests (94 passed; 5 failed/errored on stale API/main-handle expectations and missing dependencies); Ditto strategy/simulation tests could not import without `ucimlrepo`. No unrelated behavior changed; CUDA validation remains unavailable.
+
+- 2026-09-25: Fixed a drift-phase routing gap found during FedBABU smoke testing: `change_server_aggregation_strategy()` now selects the FedBABU strategy instead of falling back to FedAvg; added a regression test. All 37 focused FedBABU tests and compilation passed.
+- 2026-09-25: Completed FedBABU step 7.3 with a synthetic MNIST-shaped full-participation CPU run through the real simulation loop (2 clients, 2 rounds, controlled label-swap onset/end). FedBABU remained active, shared heads stayed fixed, personal heads trained, and required logs were written. Data loading/splitting and plots were stubbed; real-dataset validation remains unverified.
+
+- 2026-09-25: Completed FedBABU step 7.4 with matching two-client, two-round synthetic CPU simulations for FedAvg and FedEx. Both completed controlled drift onset/end, retained their configured server strategy, and wrote standard client/server/evaluation logs. Dataset loading/splitting and plotting were stubbed; downloaded-dataset behavior remains unverified.
+
+- 2026-09-25: Completed FedBABU step 7.5 by documenting limits: missing `ucimlrepo`/`random_utils`, CPU-only PyTorch, synthetic-data smoke checks, existing FairFedDrift test failures and the explicitly mapped model-head support boundary. No GPU or downloaded-dataset benchmark is claimed.
