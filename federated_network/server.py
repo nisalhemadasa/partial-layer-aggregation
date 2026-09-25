@@ -81,6 +81,8 @@ class Server:
             self.strategy.aggregate_models(self.model, client_model_parameters)
         elif self.strategy.strategy_name == constants.RecoveryAlgorithm.DITTO:
             self.strategy.aggregate_models(self.model, client_model_parameters, client_sample_counts)
+        elif self.strategy.strategy_name == constants.RecoveryAlgorithm.FEDBABU:
+            self.strategy.aggregate_models(self.model, client_model_parameters)
         elif self.strategy.strategy_name == constants.RecoveryAlgorithm.FAIRFEDDRIFT:
             self.strategy.aggregate_models(
                 self.model, client_model_parameters, client_sample_counts,
@@ -374,7 +376,8 @@ def model_aggregation(server_hierarchy: List[List[Server]], server_test_set: Dat
                 elif server.strategy.strategy_name in {constants.RecoveryAlgorithm.FEDAVG,
                                                        constants.RecoveryAlgorithm.RRT,
                                                        constants.RecoveryAlgorithm.FEDEX,
-                                                       constants.RecoveryAlgorithm.DITTO}:
+                                                       constants.RecoveryAlgorithm.DITTO,
+                                                       constants.RecoveryAlgorithm.FEDBABU}:
                     model_aggregation_fedavg(server, sampled_clients, None, None, verbose=verbose)
                 else:
                     raise ValueError("Server.model_aggregation: Unsupported recovery algorithm name")
@@ -571,6 +574,10 @@ def change_server_aggregation_strategy(server_hierarchy: List[Any], drift_recove
         for server in server_hierarchy[-1]:
             server.strategy = strategy.Ditto.aggregator_fn()
 
+    elif drift_recovery_method == constants.RecoveryAlgorithm.FEDBABU:
+        for server in server_hierarchy[-1]:
+            server.strategy = strategy.FedBABU.aggregator_fn()
+
     elif drift_recovery_method == constants.RecoveryAlgorithm.FAIRFEDDRIFT:
         servers = server_hierarchy[-1]
         shared_strategy = next((server.fairfeddrift_strategy for server in servers
@@ -612,6 +619,8 @@ def server_fn(server_id: int, dataset_name: str, server_abs_id: int, drift_recov
         aggregator_strategy = strategy.FedEx.aggregator_fn()  # TODO: remove after testing
     elif drift_recovery_method == constants.RecoveryAlgorithm.DITTO:
         aggregator_strategy = strategy.Ditto.aggregator_fn()
+    elif drift_recovery_method == constants.RecoveryAlgorithm.FEDBABU:
+        aggregator_strategy = strategy.FedBABU.aggregator_fn()
     elif drift_recovery_method == constants.RecoveryAlgorithm.FAIRFEDDRIFT:
         aggregator_strategy = strategy.FairFedDrift.aggregator_fn(drift_recovery_parameters)
     else:

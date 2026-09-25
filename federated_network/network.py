@@ -20,7 +20,7 @@ from federated_network.server import server_fn, model_aggregation, model_distrib
 from federated_network.utils import update_progress, link_server_hierarchy, train_client_models, \
     link_clients_to_servers, handle_drift_for_round, apply_drift_to_clients, evaluate_clients_for_stage, \
     evaluate_ditto_personalized_clients, build_ditto_state_log, build_ditto_lambda_record, \
-    build_fairfeddrift_state_log
+    build_fairfeddrift_state_log, finalize_fedbabu_personalization, build_fedbabu_personalized_log
 from log_utils.analysis_functions import compute_client_average_metrics, compute_server_average_metrics, \
     split_clients_loss_and_accuracy, convert_fedrc_metrics_to_pairs
 from log_utils.logging import write_logs, write_structured_log
@@ -28,6 +28,7 @@ from plot_utils.plotting import plot_client_performance_vs_rounds, plot_server_p
     plot_dataset_distribution, \
     plot_client_avg_performance_vs_rounds
 from strategy.Ditto import resolve_ditto_parameters
+from strategy.FedBABU import initialize_fedbabu_shared_head
 from strategy.FairFedDrift import resolve_fairfeddrift_parameters, validate_fairfeddrift_setup
 from device_utils import get_device
 from random_utils import configure_random_seed
@@ -203,6 +204,10 @@ class FederatedNetwork:
 
         # Combine all clients into a single list
         self.clients = self.noniid_clients + self.iid_clients
+        if self.initial_aggregation_method == constants.RecoveryAlgorithm.FEDBABU:
+            if len(self.server_hierarchy) != 1:
+                raise ValueError("FedBABU currently requires a single-level server layout.")
+            initialize_fedbabu_shared_head(self.clients, self.server_hierarchy[0])
         # Retained in memory so diagnostics and future FedEx optimization can consume the same structured history.
         self.model_distance_history = ModelDistanceHistory()
         self.evaluation_history = []
@@ -361,6 +366,11 @@ class FederatedNetwork:
             if is_ditto_run and self.drift_recovery_parameters.get('ditto_dynamic_lambda', False):
                 self.ditto_lambda_history.append(build_ditto_lambda_record(self.clients, _round))
 
+        fedbabu_personalized_record = None
+        if self.drift_recovery_parameters['recovery_method'] == constants.RecoveryAlgorithm.FEDBABU:
+            fedbabu_personalized_record = finalize_fedbabu_personalization(
+                self.clients, self.server_hierarchy[-1], self.num_training_rounds)
+
         # Stop the timer
         end_time = time.time()
         minutes, secs = divmod(end_time - start_time, 60)
@@ -376,6 +386,9 @@ class FederatedNetwork:
         evaluation_log_save_path = log_save_path if log_save_path is not None else constants.Paths.LOG_SAVE_PATH
         write_structured_log({'schema_version': 1, 'records': self.evaluation_history},
                              evaluation_log_save_path + constants.Logs.EVALUATION_LOG)
+        if fedbabu_personalized_record is not None:
+            write_structured_log(build_fedbabu_personalized_log(fedbabu_personalized_record),
+                                 evaluation_log_save_path + constants.Logs.FEDBABU_PERSONALIZED_CLIENT_LOG)
         if self.fairfeddrift_strategy is not None:
             write_structured_log(build_fairfeddrift_state_log(self.fairfeddrift_strategy),
                                  evaluation_log_save_path + constants.Logs.FAIRFEDDRIFT_STATE_LOG)

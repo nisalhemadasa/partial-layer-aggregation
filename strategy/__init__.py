@@ -7,3 +7,4 @@ from .FedRC import fedrc
 from .Oracle import oracle
 from .Ditto import ditto
 from .FairFedDrift import fairfeddrift
+from .FedBABU import fedbabu
