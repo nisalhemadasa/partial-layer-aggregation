@@ -302,6 +302,87 @@ def plot_client_layer_distance_vs_rounds(client_layer_distance: List[Dict[int, D
                             file_save_path + constants.Plots.CLIENT_SERVER_LAYER_DISTANCE_VS_ROUNDS_PNG)
 
 
+def annotate_drift_intervals(ax, boundaries, labels=("2", "3"), arrow_y=0.16, label_y=0.12):
+    """
+    Mark intervals between vertical drift boundaries with double-headed arrows.
+    :param ax: Matplotlib axes receiving the annotations.
+    :param boundaries: Ordered round positions bounding the intervals.
+    :param labels: Subscript labels for the intervals, without the leading T.
+    :param arrow_y: Arrow height as a fraction of the axes height.
+    :param label_y: Label height as a fraction of the axes height.
+    :return: None
+    """
+    if len(boundaries) != len(labels) + 1:
+        raise ValueError("Each interval label requires two consecutive boundaries.")
+    transform = ax.get_xaxis_transform()
+    for left, right, label in zip(boundaries[:-1], boundaries[1:], labels):
+        if right <= left:
+            raise ValueError("Drift boundaries must be strictly increasing.")
+        ax.annotate(
+            "", xy=(right, arrow_y), xytext=(left, arrow_y),
+            xycoords=transform, textcoords=transform,
+            arrowprops=dict(arrowstyle="<->", color="black", linewidth=1.2,
+                            mutation_scale=12, shrinkA=0, shrinkB=0),
+            zorder=6,
+        )
+        ax.text((left + right) / 2, label_y, rf"$T_{{{label}}}$",
+                transform=transform, ha="center", va="top", fontsize=24,
+                color="black", zorder=6)
+
+
+def annotate_scenario_intervals(ax, boundaries, drift_pattern):
+    """
+    Annotate scenario intervals and fade scenario-A drift-2 curves in T1.
+    :param ax: Matplotlib axes containing the method curves.
+    :param boundaries: Ordered drift boundaries, including the final round.
+    :param drift_pattern: Selected scenario's sequence of drift identities.
+    :return: None
+    """
+    if drift_pattern == [[1], [1, 2]]:
+        annotate_drift_intervals(ax, boundaries[:2], labels=("1",))
+        left, right = boundaries[:2]
+        # Drift 2 uses dash-dot lines in both combined and individual plots.
+        for line in list(ax.lines):
+            if line.get_linestyle() != "-.":
+                continue
+            x = list(line.get_xdata())
+            y = list(line.get_ydata())
+            if not x or x[-1] < left or x[0] > right:
+                continue
+            # Insert boundary points so splitting never leaves a gap.
+            points = list(zip(x, y))
+            for boundary in (left, right):
+                if x[0] < boundary < x[-1] and boundary not in x:
+                    for x0, x1, y0, y1 in zip(x[:-1], x[1:], y[:-1], y[1:]):
+                        if x0 < boundary < x1:
+                            points.append((boundary, y0 + (y1 - y0) * (boundary - x0) / (x1 - x0)))
+                            break
+            points.sort()
+            sections = [
+                ([p for p in points if p[0] <= left], line.get_alpha()),
+                ([p for p in points if left <= p[0] <= right], 0.2),
+                ([p for p in points if p[0] >= right], line.get_alpha()),
+            ]
+            for section, alpha in sections:
+                if len(section) < 2:
+                    continue
+                ax.plot([p[0] for p in section], [p[1] for p in section],
+                        color=line.get_color(), linestyle=line.get_linestyle(),
+                        linewidth=line.get_linewidth(), alpha=alpha,
+                        zorder=line.get_zorder(), label="_nolegend_")
+            line.remove()
+    elif drift_pattern == [[1, 2], [1, 2]]:
+        annotate_drift_intervals(ax, boundaries, labels=("2", "3"))
+    elif drift_pattern == [[1, 2], [1, 2], [2, 1]]:
+        # Lower the middle marker to keep labels clear for closely spaced drifts.
+        for index, label in enumerate(("4", "5", "6")):
+            annotate_drift_intervals(
+                ax, boundaries[index:index + 2], labels=(label,),
+                arrow_y=0.16 if index != 1 else 0.32,
+                label_y=0.12 if index != 1 else 0.28,
+            )
+
+
 def configure_and_save_plot(_plt, _x_label, _y_label, _title, _file_path, _legend_handles=None,
                             _label_rotate=None, _if_grid=None, plot_formats=('png', 'pdf', 'pgf'),
                             pgf_strict=False) -> None:
