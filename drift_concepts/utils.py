@@ -65,3 +65,64 @@ def cluster_client_indices_by_drift_patterns(_num_client_instances: int, _num_dr
         return drift_clustered_client_indices
     else:
         raise ValueError("Synchronous drift case is not implemented yet.")
+
+
+def compose_label_mapping(mapping, class_pairs):
+    """
+    Compose ordered whole-class swaps onto a current label permutation.
+    :param mapping: Tuple mapping each original class to its current label.
+    :param class_pairs: Ordered pairs of current labels to exchange.
+    :return: Updated immutable label mapping.
+    """
+    if (not isinstance(mapping, tuple) or not mapping or
+            any(type(label) is not int for label in mapping) or
+            set(mapping) != set(range(len(mapping)))):
+        raise ValueError('Label mapping must be a permutation of the complete class domain.')
+    for pair in class_pairs:
+        if (len(pair) != 2 or any(type(label) is not int or label not in range(len(mapping))
+                                  for label in pair)):
+            raise ValueError('Swap pairs must contain two labels from the class domain.')
+        left, right = pair
+        mapping = tuple(right if value == left else left if value == right else value for value in mapping)
+    return mapping
+
+
+def reachable_label_mappings(drift, client_ids, num_classes):
+    """
+    Enumerate mappings reached by a finite asynchronous whole-class swap schedule.
+    :param drift: Configured drift with client groups and operation patterns.
+    :param client_ids: IDs of all clients, including clients without drift.
+    :param num_classes: Complete dataset class count.
+    :return: Stable tuple of reachable signatures, beginning with identity.
+    """
+    if type(num_classes) is not int or num_classes < 1:
+        raise ValueError('Oracle requires a positive complete class count.')
+    identity = tuple(range(num_classes))
+    mappings = dict.fromkeys(client_ids, identity)
+    if not mappings or len(mappings) != len(client_ids):
+        raise ValueError('Oracle requires nonempty, unique client IDs.')
+    groups = drift.drift_clustered_client_indices
+    operations = drift.drift_patterns_over_time
+    if len(groups) != len(operations):
+        raise ValueError('Oracle drift groups and operation steps must match.')
+    for operation_id, pairs in drift.drift_pattern_id_map.items():
+        if operation_id == 0:
+            raise ValueError('Operation ID zero must remain the no-drift ID.')
+        compose_label_mapping(identity, pairs)
+    reached = {identity: None}
+    for step_groups, step_operations in zip(groups, operations):
+        if len(step_groups) != len(step_operations):
+            raise ValueError('Each drift group needs exactly one operation ID.')
+        assigned = set()
+        for group, operation_id in zip(step_groups, step_operations):
+            if operation_id != 0 and operation_id not in drift.drift_pattern_id_map:
+                raise ValueError('Unknown Oracle drift operation ID.')
+            for client_id in group:
+                if client_id not in mappings or client_id in assigned:
+                    raise ValueError('Drift groups contain unknown or repeated client IDs.')
+                assigned.add(client_id)
+                mappings[client_id] = compose_label_mapping(
+                    mappings[client_id], drift.drift_pattern_id_map.get(operation_id, ()))
+        for mapping in mappings.values():
+            reached.setdefault(mapping, None)
+    return tuple(reached)

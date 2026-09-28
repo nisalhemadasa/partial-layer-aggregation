@@ -11,6 +11,7 @@ from federated_network.network import FederatedNetwork
 from random_utils import configure_random_seed
 
 import os
+import sys
 
 # Prevents the error on CUDA device-side assertion failure, which are likely triggered by invalid tensor operations
 # (e.g., NaN, Inf, or out-of-bounds values) during loss computation in the training loop.
@@ -522,6 +523,9 @@ def main():
     )
 
     # # Running the simulation
+    # Before enabling this Oracle run, initialize cumulative-concept routing once:
+    # from strategy.Oracle.support import prepare_oracle_cumulative_routing
+    # prepare_oracle_cumulative_routing(fed_net, num_classes=10)
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/MNIST/saved_plots_oracle/',
     #     log_save_path='logs/swap/MNIST/saved_logs_oracle/')
@@ -1362,5 +1366,51 @@ def main():
 
 
 
+def run_oracle_mnist_validation():
+    """
+    Run only a small matched real-MNIST legacy/cumulative Oracle comparison.
+    :return: Comparison summary with routing and input matching checks.
+    """
+    from datetime import datetime
+    import torch
+    from tests.run_real_mnist_oracle_validation import run_comparison
+
+    configure_device('cpu')
+    torch.set_num_threads(2)
+    config = dict(
+        num_iid_client_instances=10, num_noniid_client_instances=0, server_tree_layout=[1],
+        num_training_rounds=50, dataset_name=constants.DatasetNames.MNIST,
+        noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+        client_select_fraction=1, minibatch_size=32, num_local_epochs=3,
+        drift_specs=dict(
+            clients_fraction=0.8, drift_group_proportions=[[0.1, 0.9], [0.8, 0.2]],
+            is_synchronous=False, is_random=False,
+            async_drift_specs=dict(num_drift_groups=2, drift_groups=None, drift_split_round=0.8,
+                                  is_read_scenarios=False, scenario_num=1),
+            drift_mode=constants.DriftMode.LABEL_SWAP_INCREMENTAL_STEPS,
+            drift_step_rounds=[0.4, 0.65, 1.0], max_rotation=0,
+            class_pairs_to_swap=[[(1, 2), (3, 4)], [(5, 7)]],
+            drift_pattern_id_map={1: [(1, 2), (3, 4)], 2: [(5, 7)]},
+            drift_patterns_over_time=[[1, 2], [1, 2]], label_swap_percentage_steps=[1, 1],
+            current_drift_step=-1),
+        simulation_parameters=dict(
+            random_seed=42, is_server_adaptability=False, is_plot_client_data_distributions=False,
+            client_ids_to_plot_data_distributions=[], servers_have_test_data=False,
+            client_evaluation_stage='global_after_download', drifted_class_metrics_enabled=True,
+            server_metric_weighting='uniform', model_distance_logging_enabled=True, model_distance_interval=1),
+        drift_recovery_parameters=dict(
+            recovery_method=constants.RecoveryAlgorithm.ORACLE,
+            base_aggregation_method=constants.RecoveryAlgorithm.ORACLE,
+            fedau_alpha=0.9, fedex_alpha=0.9, fedrc_cluster_count=3, cluster_count=3))
+    output_root = os.path.join('plots', '.cpu_validation',
+                               'oracle_mnist_' + datetime.now().strftime('%Y%m%d_%H%M%S'))
+    return run_comparison(config, sample_counts=(6000, 2000), output_root=output_root)
+
+
 if __name__ == "__main__":
-    main()
+    if sys.argv[1:] == ['--oracle-mnist-validation']:
+        run_oracle_mnist_validation()
+    elif sys.argv[1:]:
+        raise SystemExit('Supported optional argument: --oracle-mnist-validation')
+    else:
+        main()
