@@ -30,6 +30,11 @@ class MiscMessages:
     ACCURACY = "accuracy"
 
 
+class TrainingHyperparameters:
+    CLIENT_LEARNING_RATE = 0.005
+    LOCAL_EPOCHS = 3
+
+
 # Names of the dataset
 class DatasetNames:
     MNIST = 'MNIST'

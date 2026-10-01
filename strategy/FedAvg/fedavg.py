@@ -22,7 +22,7 @@ class FedAvg:
     def aggregate_models(self, server_model: nn.Module, client_model_params_dict: Dict[str, OrderedDict],
                          client_model_params_list: List[OrderedDict] = None) -> None:
         """
-        Aggregate the client models to the global model, using weighted averaging, and returns the new aggregated model.
+        Aggregate client models into the global model using an equal, unweighted parameter average.
         :param server_model: The server (edge or global) model
         :param client_model_params_dict: Dictionary containing the server IDs (keys) and the corresponding state dicts of the client models
         :param client_model_params_list: List of state dicts of the client models (used in the FedAU implementation)

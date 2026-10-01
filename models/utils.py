@@ -315,7 +315,8 @@ def rapid_train(_model: nn.Module, _dataset: DataLoader, _epochs: int, _batch_si
 
 
 def train(_model: nn.Module, _dataset: DataLoader, _epochs: int, verbose: bool = False,
-          _optimizer_parameters: List[nn.Parameter] = None, _learning_rate: float = 0.01,
+          _optimizer_parameters: List[nn.Parameter] = None,
+          _learning_rate: float = constants.TrainingHyperparameters.CLIENT_LEARNING_RATE,
           _momentum: float = 0.9, _weight_decay: float = 5e-4,
           _frozen_modules: List[nn.Module] = None) -> None:
     """

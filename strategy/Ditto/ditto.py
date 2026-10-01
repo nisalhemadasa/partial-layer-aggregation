@@ -144,7 +144,8 @@ def evaluate_ditto_validation_loss(personal_model: nn.Module, validation_loader:
 
 def train_ditto_personal_model(personal_model: nn.Module, trainloader: DataLoader,
                                global_model_params: OrderedDict, ditto_lambda: float,
-                               epochs: int, learning_rate: float = 0.01,
+                               epochs: int,
+                               learning_rate: float = constants.TrainingHyperparameters.CLIENT_LEARNING_RATE,
                                dynamic_lambda: bool = False,
                                lambda_candidates: List[float] = None,
                                validation_loader: DataLoader = None) -> List[Dict]:

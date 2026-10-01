@@ -71,7 +71,8 @@ class Client:
             # Create a list of models of size 'fedrc_cluster_count' (equivalent to the number of models server) in each client for FedRC
             self.fedrc_models = [copy.deepcopy(model) for _ in range(fedrc_cluster_count)]
 
-            self.fedrc_optimizers = [torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9) for model in
+            self.fedrc_optimizers = [torch.optim.SGD(
+                model.parameters(), lr=constants.TrainingHyperparameters.CLIENT_LEARNING_RATE, momentum=0.9) for model in
                                      self.fedrc_models]
 
             self.model = None
@@ -176,7 +177,7 @@ class Client:
         train(self.model, self.trainloader, _epochs=self.epochs)
         personal_learning_rate = self.ditto_parameters['ditto_learning_rate']
         if personal_learning_rate is None:
-            personal_learning_rate = 0.01
+            personal_learning_rate = constants.TrainingHyperparameters.CLIENT_LEARNING_RATE
         personal_epochs = self.ditto_parameters['ditto_personal_epochs']
         if personal_epochs is None:
             personal_epochs = self.epochs

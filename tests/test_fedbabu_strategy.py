@@ -501,7 +501,8 @@ class FedBABUPersonalHeadTrainingTests(unittest.TestCase):
         """Expose named defaults and reject invalid optimizer settings."""
         defaults = resolve_fedbabu_parameters({})
         self.assertEqual(defaults['fedbabu_head_finetune_epochs'], 5)
-        self.assertEqual(defaults['fedbabu_head_finetune_learning_rate'], 0.01)
+        self.assertEqual(defaults['fedbabu_head_finetune_learning_rate'],
+                         constants.TrainingHyperparameters.CLIENT_LEARNING_RATE)
         self.assertEqual(defaults['fedbabu_head_finetune_momentum'], 0.5)
         self.assertEqual(defaults['fedbabu_head_finetune_weight_decay'], 0.0)
         with self.assertRaisesRegex(ValueError, 'epochs must be a positive integer'):
