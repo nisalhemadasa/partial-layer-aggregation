@@ -11,6 +11,7 @@ from federated_network.network import FederatedNetwork
 from random_utils import configure_random_seed
 
 import os
+import sys
 
 # Prevents the error on CUDA device-side assertion failure, which are likely triggered by invalid tensor operations
 # (e.g., NaN, Inf, or out-of-bounds values) during loss computation in the training loop.
@@ -43,10 +44,10 @@ def main():
         # drift_group_proportions=[[0.5, 0.5],  # At the first drift step - drift_step_rounds[0]
         #                          [0.5, 0.5],  # drift_step_rounds[1]
         #                          [0.5, 0.5]],
-        # drift_group_proportions=[[0.5, 0.5],  # Scenario A
-        #                          [0.2, 0.8]],
-        drift_group_proportions=[[0.1, 0.9],  # Scenario B
-                                 [0.8, 0.2]],
+        drift_group_proportions=[[0.5, 0.5],  # Scenario A
+                                 [0.2, 0.8]],
+        # drift_group_proportions=[[0.1, 0.9],  # Scenario B
+        #                          [0.8, 0.2]],
         # drift_group_proportions=[[1],  # At the first drift step - drift_step_rounds[0]
         #                          [1],  # drift_step_rounds[1]
         #                          [1]],
@@ -106,10 +107,10 @@ def main():
         # drift_patterns_over_time=[[1, 2],
         #                          [1, 2],
         #                          [1, 2]],   # TODO: test [1,1] case
-        # drift_patterns_over_time=[[1, 1],
-        #                           [1, 2]],   # Scenario A
-        drift_patterns_over_time=[[1, 2],
-                                  [1, 2]],   # Scenario B
+        drift_patterns_over_time=[[1, 1],
+                                  [1, 2]],   # Scenario A
+        # drift_patterns_over_time=[[1, 2],
+        #                           [1, 2]],   # Scenario B
 
         #--------------------
         # Classes to be swapped in the label-swapping drift method
@@ -138,7 +139,7 @@ def main():
     # Shared Ditto configuration. Merge this into a recovery configuration whenever DITTO is selected.
     ditto_parameters = dict(
         ditto_lambda=0.05,
-        ditto_learning_rate=None,  # None uses the ordinary client learning rate (currently 0.01).
+        ditto_learning_rate=None,  # None uses the ordinary client learning rate (currently 0.005).
         ditto_personal_epochs=None,  # None uses num_local_epochs.
         ditto_eval_personalized=True,
         ditto_dynamic_lambda=False,
@@ -151,7 +152,7 @@ def main():
     # validates these and provides the same defaults for non-FedBABU runs.
     fedbabu_parameters = dict(
         fedbabu_head_finetune_epochs=5,
-        fedbabu_head_finetune_learning_rate=0.01,
+        fedbabu_head_finetune_learning_rate=constants.TrainingHyperparameters.CLIENT_LEARNING_RATE,
         fedbabu_head_finetune_momentum=0.5,
         fedbabu_head_finetune_weight_decay=0.0,
     )
@@ -202,9 +203,9 @@ def main():
 
     # Create a federated network
     fed_net = FederatedNetwork(
-        num_iid_client_instances=0,  # Number of IID clients in the federated network
+        num_iid_client_instances=10,  # Number of IID clients in the federated network
         # num_iid_client_instances=100,  # Suggested at FLTA
-        num_noniid_client_instances=10,  # Number of non-IID clients in the federated network
+        num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
         server_tree_layout=[1],
         # Number of servers at each level of the server tree of depth n = [n, n-1,..., 1]
         # num_training_rounds=100,  # In literature, over 50 rounds are trained. FLUID trains 100 rounds
@@ -363,7 +364,7 @@ def main():
 
     # Create a federated network
     fed_net = FederatedNetwork(
-        num_iid_client_instances=10,  # Number of IID clients in the federated network
+        num_iid_client_instances=100,  # Number of IID clients in the federated network
         # num_iid_client_instances=100,  # Suggested at FLTA
         num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
         server_tree_layout=[1],
@@ -378,11 +379,11 @@ def main():
         drift_recovery_parameters=drift_recovery_parameters, # Drift recovery algorithm related parameters
     )
 
-    # # Running the simulation
-    # fed_net.run_simulation(
-    #     file_save_path='plots/swap/MNIST/saved_plots_fedavg/',
-    #     log_save_path='logs/swap/MNIST/saved_logs_fedavg/')
-    # print(f"Simulation completed: dataset=MNIST, method=FedAvg.")
+    # Running the simulation
+    fed_net.run_simulation(
+        file_save_path='plots/swap/MNIST/saved_plots_fedavg/',
+        log_save_path='logs/swap/MNIST/saved_logs_fedavg/')
+    print(f"Simulation completed: dataset=MNIST, method=FedAvg.")
 
 
     # #00000000000000000 FedEx 00000000000000000000
@@ -401,7 +402,7 @@ def main():
 
     # Create a federated network
     fed_net = FederatedNetwork(
-        num_iid_client_instances=10,  # Number of IID clients in the federated network
+        num_iid_client_instances=100,  # Number of IID clients in the federated network
         # num_iid_client_instances=100,  # Suggested at FLTA
         num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
         server_tree_layout=[1],
@@ -416,11 +417,11 @@ def main():
         drift_recovery_parameters=drift_recovery_parameters, # Drift recovery algorithm related parameters
     )
 
-    # # Running the simulation
-    # fed_net.run_simulation(
-    #     file_save_path='plots/swap/MNIST/saved_plots_fedex/',
-    #     log_save_path='logs/swap/MNIST/saved_logs_fedex/')
-    # print(f"Simulation completed: dataset=MNIST, method=FedEx.")
+    # Running the simulation
+    fed_net.run_simulation(
+        file_save_path='plots/swap/MNIST/saved_plots_fedex/',
+        log_save_path='logs/swap/MNIST/saved_logs_fedex/')
+    print(f"Simulation completed: dataset=MNIST, method=FedEx.")
 
     # #00000000000000000 Ditto 00000000000000000000
     # Uncomment this block, and keep the other run_simulation calls disabled, to run Ditto on MNIST.
@@ -454,26 +455,27 @@ def main():
 
     # #00000000000000000 FedBABU 00000000000000000000
     # Uncomment this constructor and its run call to run FedBABU on MNIST.
-    # fedbabu_fed_net = FederatedNetwork(
-    #     num_iid_client_instances=10,
-    #     num_noniid_client_instances=0,
-    #     server_tree_layout=[1],
-    #     num_training_rounds=50,
-    #     dataset_name=constants.DatasetNames.MNIST,
-    #     noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
-    #     drift_specs=drift_specifications,
-    #     simulation_parameters=simulation_parameters,
-    #     client_select_fraction=1,
-    #     drift_recovery_parameters=fedbabu_recovery_parameters,
-    # )
-    # fedbabu_fed_net.run_simulation(
-    #     file_save_path='plots/swap/MNIST/saved_plots_fedbabu/',
-    #     log_save_path='logs/swap/MNIST/saved_logs_fedbabu/')
+    fedbabu_fed_net = FederatedNetwork(
+        num_iid_client_instances=100,
+        num_noniid_client_instances=0,
+        server_tree_layout=[1],
+        num_training_rounds=50,
+        dataset_name=constants.DatasetNames.MNIST,
+        noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+        drift_specs=drift_specifications,
+        simulation_parameters=simulation_parameters,
+        client_select_fraction=1,
+        drift_recovery_parameters=fedbabu_recovery_parameters,
+    )
+    fedbabu_fed_net.run_simulation(
+        file_save_path='plots/swap/MNIST/saved_plots_fedbabu/',
+        log_save_path='logs/swap/MNIST/saved_logs_fedbabu/')
+    print(f"Simulation completed: dataset=MNIST, method=FedBABU.")
 
     # #00000000000000000 FairFedDrift 00000000000000000000
     # Keep both the constructor and run call commented until this handle is selected.
     fairfeddrift_fed_net = FederatedNetwork(
-        num_iid_client_instances=10,
+        num_iid_client_instances=100,
         num_noniid_client_instances=0,
         server_tree_layout=[1],
         num_training_rounds=50,
@@ -506,7 +508,7 @@ def main():
 
     # Create a federated network
     fed_net = FederatedNetwork(
-        num_iid_client_instances=10,  # Number of IID clients in the federated network
+        num_iid_client_instances=100,  # Number of IID clients in the federated network
         # num_iid_client_instances=100,  # Suggested at FLTA
         num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
         server_tree_layout=[1],
@@ -521,52 +523,55 @@ def main():
         drift_recovery_parameters=drift_recovery_parameters, # Drift recovery algorithm related parameters
     )
 
-    # # Running the simulation
-    # fed_net.run_simulation(
-    #     file_save_path='plots/swap/MNIST/saved_plots_oracle/',
-    #     log_save_path='logs/swap/MNIST/saved_logs_oracle/')
-    # print(f"Simulation completed: dataset=MNIST, method=Oracle.")
+    # # # # Running the simulation
+    # # Before enabling this Oracle run, initialize cumulative-concept routing once:
+    # from strategy.Oracle.support import prepare_oracle_cumulative_routing
+    # prepare_oracle_cumulative_routing(fed_net, num_classes=10)
+    fed_net.run_simulation(
+        file_save_path='plots/swap/MNIST/saved_plots_oracle/',
+        log_save_path='logs/swap/MNIST/saved_logs_oracle/')
+    print(f"Simulation completed: dataset=MNIST, method=Oracle.")
 
 
     # # # 00000000000000000000000000000000000000000000000000000000000000
     # # # # 0000000000000000000000000 F_MNIST 000000000000000000000000000
-    # # Define drift recovery algorithm related parameters
-    # drift_recovery_parameters = dict(
-    #     recovery_method=constants.RecoveryAlgorithm.FEDAVG,  # Aggregation method used during the drift period
-    #     base_aggregation_method=constants.RecoveryAlgorithm.FEDAVG,  # Aggregation algorithm used outside the drift period
-    #     fedau_alpha=0.9, # EMA weight (alpha) parameter for the FedAU algorithm
-    #     fedrc_cluster_count=3, # Number of clusters (K) for the FedRC algorithm
-    #     # Number of clusters (K) for the Oracle (multi-global-model-based) algorithm
-    #     #   - drift_specifications['drift_group_proportions'][0] -> number of drift affected client groups
-    #     #   - '+1' -> for the non-drift affected client group
-    #     cluster_count=len(drift_specifications['drift_group_proportions'][0]) + 1,
-    # fedex_alpha=0.9,  # EMA weight (alpha) parameter for the FedEx algorithm
-    # )
-    #
-    # # Create a federated network
-    # fed_net = FederatedNetwork(
-    #     num_iid_client_instances=10,  # Number of IID clients in the federated network
-    #     # num_iid_client_instances=100,  # Suggested at FLTA
-    #     num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
-    #     server_tree_layout=[1],
-    #     # Number of servers at each level of the server tree of depth n = [n, n-1,..., 1]
-    #     # num_training_rounds=100,  # In literature, over 50 rounds are trained. FLUID trains 100 rounds
-    #     num_training_rounds=50,  # Number of training rounds (in literature, over 50 rounds are trained.)
-    #     dataset_name=constants.DatasetNames.F_MNIST,  # Name of the dataset
-    #       noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
-    #     drift_specs=drift_specifications,  # Drift specifications
-    #     simulation_parameters=simulation_parameters,  # Parameters specifying the simulation scenarios
-    #     client_select_fraction=1,  # Fraction of clients to be selected for each round
-    #     drift_recovery_parameters=drift_recovery_parameters, # Drift recovery algorithm related parameters
-    # )
-    #
-    # # Running the simulation
-    # fed_net.run_simulation(
-    #     file_save_path='plots/swap/F_MNIST/saved_plots_fedavg/',
-    #     log_save_path='logs/swap/F_MNIST/saved_logs_fedavg/')
-    # print(f"Simulation completed: dataset=Fashion-MNIST, method=FedAvg.")
-    #
-    #
+    # Define drift recovery algorithm related parameters
+    drift_recovery_parameters = dict(
+        recovery_method=constants.RecoveryAlgorithm.FEDAVG,  # Aggregation method used during the drift period
+        base_aggregation_method=constants.RecoveryAlgorithm.FEDAVG,  # Aggregation algorithm used outside the drift period
+        fedau_alpha=0.9, # EMA weight (alpha) parameter for the FedAU algorithm
+        fedrc_cluster_count=3, # Number of clusters (K) for the FedRC algorithm
+        # Number of clusters (K) for the Oracle (multi-global-model-based) algorithm
+        #   - drift_specifications['drift_group_proportions'][0] -> number of drift affected client groups
+        #   - '+1' -> for the non-drift affected client group
+        cluster_count=len(drift_specifications['drift_group_proportions'][0]) + 1,
+    fedex_alpha=0.9,  # EMA weight (alpha) parameter for the FedEx algorithm
+    )
+
+    # Create a federated network
+    fed_net = FederatedNetwork(
+        num_iid_client_instances=100,  # Number of IID clients in the federated network
+        # num_iid_client_instances=100,  # Suggested at FLTA
+        num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
+        server_tree_layout=[1],
+        # Number of servers at each level of the server tree of depth n = [n, n-1,..., 1]
+        # num_training_rounds=100,  # In literature, over 50 rounds are trained. FLUID trains 100 rounds
+        num_training_rounds=50,  # Number of training rounds (in literature, over 50 rounds are trained.)
+        dataset_name=constants.DatasetNames.F_MNIST,  # Name of the dataset
+          noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+        drift_specs=drift_specifications,  # Drift specifications
+        simulation_parameters=simulation_parameters,  # Parameters specifying the simulation scenarios
+        client_select_fraction=1,  # Fraction of clients to be selected for each round
+        drift_recovery_parameters=drift_recovery_parameters, # Drift recovery algorithm related parameters
+    )
+
+    # Running the simulation
+    fed_net.run_simulation(
+        file_save_path='plots/swap/F_MNIST/saved_plots_fedavg/',
+        log_save_path='logs/swap/F_MNIST/saved_logs_fedavg/')
+    print(f"Simulation completed: dataset=Fashion-MNIST, method=FedAvg.")
+
+
     # #00000000000000000 FedEx 00000000000000000000
     # Define drift recovery algorithm related parameters
     drift_recovery_parameters = dict(
@@ -583,7 +588,7 @@ def main():
 
     # Create a federated network
     fed_net = FederatedNetwork(
-        num_iid_client_instances=10,  # Number of IID clients in the federated network
+        num_iid_client_instances=100,  # Number of IID clients in the federated network
         # num_iid_client_instances=100,  # Suggested at FLTA
         num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
         server_tree_layout=[1],
@@ -598,11 +603,11 @@ def main():
         drift_recovery_parameters=drift_recovery_parameters, # Drift recovery algorithm related parameters
     )
 
-    # # Running the simulation
-    # fed_net.run_simulation(
-    #     file_save_path='plots/swap/F_MNIST/saved_plots_fedex/',
-    #     log_save_path='logs/swap/F_MNIST/saved_logs_fedex/')
-    # print(f"Simulation completed: dataset=Fashion-MNIST, method=FedEx.")
+    # Running the simulation
+    fed_net.run_simulation(
+        file_save_path='plots/swap/F_MNIST/saved_plots_fedex/',
+        log_save_path='logs/swap/F_MNIST/saved_logs_fedex/')
+    print(f"Simulation completed: dataset=Fashion-MNIST, method=FedEx.")
 
     # #00000000000000000 Ditto 00000000000000000000
     # Uncomment this block, and keep the other run_simulation calls disabled, to run Ditto on Fashion-MNIST.
@@ -634,80 +639,125 @@ def main():
     #     log_save_path='logs/swap/F_MNIST/saved_logs_ditto/')
     # print(f"Simulation completed: dataset=Fashion-MNIST, method=Ditto.")
 
+    #000000000000000000 FedBABU 00000000000000000000
     # FedBABU handle for Fashion-MNIST; keep construction and execution disabled by default.
-    # fedbabu_fed_net = FederatedNetwork(
-    #     num_iid_client_instances=10,
-    #     num_noniid_client_instances=0,
-    #     server_tree_layout=[1],
-    #     num_training_rounds=50,
-    #     dataset_name=constants.DatasetNames.F_MNIST,
-    #     noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
-    #     drift_specs=drift_specifications,
-    #     simulation_parameters=simulation_parameters,
-    #     client_select_fraction=1,
-    #     drift_recovery_parameters=fedbabu_recovery_parameters,
-    # )
-    # fedbabu_fed_net.run_simulation(
-    #     file_save_path='plots/swap/F_MNIST/saved_plots_fedbabu/',
-    #     log_save_path='logs/swap/F_MNIST/saved_logs_fedbabu/')
+    fedbabu_fed_net = FederatedNetwork(
+        num_iid_client_instances=100,
+        num_noniid_client_instances=0,
+        server_tree_layout=[1],
+        num_training_rounds=50,
+        dataset_name=constants.DatasetNames.F_MNIST,
+        noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+        drift_specs=drift_specifications,
+        simulation_parameters=simulation_parameters,
+        client_select_fraction=1,
+        drift_recovery_parameters=fedbabu_recovery_parameters,
+    )
+    fedbabu_fed_net.run_simulation(
+        file_save_path='plots/swap/F_MNIST/saved_plots_fedbabu/',
+        log_save_path='logs/swap/F_MNIST/saved_logs_fedbabu/')
+    print(f"Simulation completed: dataset=Fashion-MNIST, method=FedBABU.")
 
-    # #00000000000000000 FairFedDrift 00000000000000000000
-    # fairfeddrift_fed_net = FederatedNetwork(
-    #     num_iid_client_instances=10,
-    #     num_noniid_client_instances=0,
-    #     server_tree_layout=[1],
-    #     num_training_rounds=50,
-    #     dataset_name=constants.DatasetNames.F_MNIST,
-    #     noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
-    #     drift_specs=drift_specifications,
-    #     simulation_parameters=simulation_parameters,
-    #     client_select_fraction=1,
-    #     drift_recovery_parameters=fairfeddrift_recovery_parameters,
-    # )
-    # fairfeddrift_fed_net.run_simulation(
-    #     file_save_path='plots/swap/F_MNIST/saved_plots_fairfeddrift/',
-    #     log_save_path='logs/swap/F_MNIST/saved_logs_fairfeddrift/')
-    # print(f"Simulation completed: dataset=Fashion-MNIST, method=FairFedDrift.")
+    #00000000000000000 FairFedDrift 00000000000000000000
+    fairfeddrift_fed_net = FederatedNetwork(
+        num_iid_client_instances=100,
+        num_noniid_client_instances=0,
+        server_tree_layout=[1],
+        num_training_rounds=50,
+        dataset_name=constants.DatasetNames.F_MNIST,
+        noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+        drift_specs=drift_specifications,
+        simulation_parameters=simulation_parameters,
+        client_select_fraction=1,
+        drift_recovery_parameters=fairfeddrift_recovery_parameters,
+    )
+    fairfeddrift_fed_net.run_simulation(
+        file_save_path='plots/swap/F_MNIST/saved_plots_fairfeddrift/',
+        log_save_path='logs/swap/F_MNIST/saved_logs_fairfeddrift/')
+    print(f"Simulation completed: dataset=Fashion-MNIST, method=FairFedDrift.")
 
-    # # # # #00000000000000000 Oracle 00000000000000000000
-    # # Define drift recovery algorithm related parameters
-    # drift_recovery_parameters = dict(
-    #     recovery_method=constants.RecoveryAlgorithm.ORACLE,  # Aggregation method used during the drift period
-    #     base_aggregation_method=constants.RecoveryAlgorithm.ORACLE,  # Aggregation algorithm used outside the drift period
-    #     fedau_alpha=0.9, # EMA weight (alpha) parameter for the FedAU algorithm
-    #     fedrc_cluster_count=3, # Number of clusters (K) for the FedRC algorithm
-    #     # Number of clusters (K) for the Oracle (multi-global-model-based) algorithm
-    #     #   - drift_specifications['drift_group_proportions'][0] -> number of drift affected client groups
-    #     #   - '+1' -> for the non-drift affected client group
-    #     cluster_count=len(drift_specifications['drift_group_proportions'][0]) + 1,
-    # fedex_alpha=0.9,  # EMA weight (alpha) parameter for the FedEx algorithm
-    # )
-    #
-    # # Create a federated network
-    # fed_net = FederatedNetwork(
-    #     num_iid_client_instances=10,  # Number of IID clients in the federated network
-    #     # num_iid_client_instances=100,  # Suggested at FLTA
-    #     num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
-    #     server_tree_layout=[1],
-    #     # Number of servers at each level of the server tree of depth n = [n, n-1,..., 1]
-    #     # num_training_rounds=100,  # In literature, over 50 rounds are trained. FLUID trains 100 rounds
-    #     num_training_rounds=50,  # Number of training rounds (in literature, over 50 rounds are trained.)
-    #     dataset_name=constants.DatasetNames.F_MNIST,  # Name of the dataset
-    #     noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
-    #     drift_specs=drift_specifications,  # Drift specifications
-    #     simulation_parameters=simulation_parameters,  # Parameters specifying the simulation scenarios
-    #     client_select_fraction=1,  # Fraction of clients to be selected for each round
-    #     drift_recovery_parameters=drift_recovery_parameters, # Drift recovery algorithm related parameters
-    # )
-    #
-    # # Running the simulation
-    # fed_net.run_simulation(
-    #     file_save_path='plots/swap/F_MNIST/saved_plots_oracle/',
-    #     log_save_path='logs/swap/F_MNIST/saved_logs_oracle/')
-    # print(f"Simulation completed: dataset=Fashion-MNIST, method=Oracle.")
+    # # # #00000000000000000 Oracle 00000000000000000000
+    # Define drift recovery algorithm related parameters
+    drift_recovery_parameters = dict(
+        recovery_method=constants.RecoveryAlgorithm.ORACLE,  # Aggregation method used during the drift period
+        base_aggregation_method=constants.RecoveryAlgorithm.ORACLE,  # Aggregation algorithm used outside the drift period
+        fedau_alpha=0.9, # EMA weight (alpha) parameter for the FedAU algorithm
+        fedrc_cluster_count=3, # Number of clusters (K) for the FedRC algorithm
+        # Number of clusters (K) for the Oracle (multi-global-model-based) algorithm
+        #   - drift_specifications['drift_group_proportions'][0] -> number of drift affected client groups
+        #   - '+1' -> for the non-drift affected client group
+        cluster_count=len(drift_specifications['drift_group_proportions'][0]) + 1,
+    fedex_alpha=0.9,  # EMA weight (alpha) parameter for the FedEx algorithm
+    )
+    
+    # Create a federated network
+    fed_net = FederatedNetwork(
+        num_iid_client_instances=100,  # Number of IID clients in the federated network
+        # num_iid_client_instances=100,  # Suggested at FLTA
+        num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
+        server_tree_layout=[1],
+        # Number of servers at each level of the server tree of depth n = [n, n-1,..., 1]
+        # num_training_rounds=100,  # In literature, over 50 rounds are trained. FLUID trains 100 rounds
+        num_training_rounds=50,  # Number of training rounds (in literature, over 50 rounds are trained.)
+        dataset_name=constants.DatasetNames.F_MNIST,  # Name of the dataset
+        noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+        drift_specs=drift_specifications,  # Drift specifications
+        simulation_parameters=simulation_parameters,  # Parameters specifying the simulation scenarios
+        client_select_fraction=1,  # Fraction of clients to be selected for each round
+        drift_recovery_parameters=drift_recovery_parameters, # Drift recovery algorithm related parameters
+    )
+
+    # # Before enabling this Oracle run, initialize cumulative-concept routing once:
+    # from strategy.Oracle.support import prepare_oracle_cumulative_routing
+    # prepare_oracle_cumulative_routing(fed_net, num_classes=10)
+    # Running the simulation
+    fed_net.run_simulation(
+        file_save_path='plots/swap/F_MNIST/saved_plots_oracle/',
+        log_save_path='logs/swap/F_MNIST/saved_logs_oracle/')
+    print(f"Simulation completed: dataset=Fashion-MNIST, method=Oracle.")
 
     # # 00000000000000000000000000000000000000000000000000000000000000
     # # 0000000000000000000000000 CIFAR-10 000000000000000000000000000
+
+
+    # # #000000000000000 FEDAVG 0000000000000000000000
+    # Define drift recovery algorithm related parameters
+    drift_recovery_parameters = dict(
+        recovery_method=constants.RecoveryAlgorithm.FEDAVG,  # Aggregation method used during the drift period
+        base_aggregation_method=constants.RecoveryAlgorithm.FEDAVG,  # Aggregation algorithm used outside the drift period
+        fedau_alpha=0.9, # EMA weight (alpha) parameter for the FedAU algorithm
+        fedrc_cluster_count=3, # Number of clusters (K) for the FedRC algorithm
+        # Number of clusters (K) for the Oracle (multi-global-model-based) algorithm
+        #   - drift_specifications['drift_group_proportions'][0] -> number of drift affected client groups
+        #   - '+1' -> for the non-drift affected client group
+        cluster_count=len(drift_specifications['drift_group_proportions'][0]) + 1,
+        fedex_alpha=0.9,  # EMA weight (alpha) parameter for the FedEx algorithm
+    )
+
+    # Create a federated network
+    fed_net = FederatedNetwork(
+        num_iid_client_instances=100,  # Number of IID clients in the federated network
+        # num_iid_client_instances=100,  # Suggested at FLTA
+        num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
+        server_tree_layout=[1],
+        # Number of servers at each level of the server tree of depth n = [n, n-1,..., 1]
+        # num_training_rounds=100,  # In literature, over 50 rounds are trained. FLUID trains 100 rounds
+        num_training_rounds=400,  # Number of training rounds (in literature, over 50 rounds are trained.)
+        dataset_name=constants.DatasetNames.CIFAR_10,  # Name of the dataset
+        noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+        drift_specs=drift_specifications,  # Drift specifications
+        simulation_parameters=simulation_parameters,  # Parameters specifying the simulation scenarios
+        client_select_fraction=1,  # Fraction of clients to be selected for each round
+        drift_recovery_parameters=drift_recovery_parameters, # Drift recovery algorithm related parameters
+    )
+
+    # # Running the simulation
+    fed_net.run_simulation(
+        file_save_path='plots/swap/CIFAR-10/saved_plots_fedavg/',
+        log_save_path='logs/swap/CIFAR-10/saved_logs_fedavg/')
+    print(f"Simulation completed: dataset=CIFAR-10, method=FedAvg.")
+
+    #00000000000000000 FedEx 00000000000000000000
     # fedex_alpha_list = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
     fedex_alpha_list = [0.9]
     for idx, _fedex_alpha in enumerate(fedex_alpha_list):
@@ -726,7 +776,7 @@ def main():
 
         # Create a federated network
         fed_net = FederatedNetwork(
-            num_iid_client_instances=10,  # Number of IID clients in the federated network
+            num_iid_client_instances=100,  # Number of IID clients in the federated network
             # num_iid_client_instances=100,  # Suggested at FLTA
             num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
             server_tree_layout=[1],
@@ -742,10 +792,10 @@ def main():
         )
 
         # # Running the simulation
-        # fed_net.run_simulation(
-        #     file_save_path='plots/swap/CIFAR-10/saved_plots_fedex/',
-        #     log_save_path='logs/swap/CIFAR-10/saved_logs_fedex/')
-        # print(f"Simulation completed: dataset=CIFAR-10, method=FedEx.")
+        fed_net.run_simulation(
+            file_save_path='plots/swap/CIFAR-10/saved_plots_fedex/',
+            log_save_path='logs/swap/CIFAR-10/saved_logs_fedex/')
+        print(f"Simulation completed: dataset=CIFAR-10, method=FedEx.")
 
         # # Running the simulation
         # fed_net.run_simulation(
@@ -783,42 +833,45 @@ def main():
     #     log_save_path='logs/swap/CIFAR-10/saved_logs_ditto/')
     # print(f"Simulation completed: dataset=CIFAR-10, method=Ditto.")
 
+
+    #000000000000 FedBABU 00000000000000000000
     # FedBABU handle for CIFAR-10; keep construction and execution disabled by default.
-    # fedbabu_fed_net = FederatedNetwork(
-    #     num_iid_client_instances=10,
-    #     num_noniid_client_instances=0,
-    #     server_tree_layout=[1],
-    #     num_training_rounds=400,
-    #     dataset_name=constants.DatasetNames.CIFAR_10,
-    #     noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
-    #     drift_specs=drift_specifications,
-    #     simulation_parameters=simulation_parameters,
-    #     client_select_fraction=1,
-    #     drift_recovery_parameters=fedbabu_recovery_parameters,
-    # )
-    # fedbabu_fed_net.run_simulation(
-    #     file_save_path='plots/swap/CIFAR-10/saved_plots_fedbabu/',
-    #     log_save_path='logs/swap/CIFAR-10/saved_logs_fedbabu/')
+    fedbabu_fed_net = FederatedNetwork(
+        num_iid_client_instances=100,
+        num_noniid_client_instances=0,
+        server_tree_layout=[1],
+        num_training_rounds=400,
+        dataset_name=constants.DatasetNames.CIFAR_10,
+        noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+        drift_specs=drift_specifications,
+        simulation_parameters=simulation_parameters,
+        client_select_fraction=1,
+        drift_recovery_parameters=fedbabu_recovery_parameters,
+    )
+    fedbabu_fed_net.run_simulation(
+        file_save_path='plots/swap/CIFAR-10/saved_plots_fedbabu/',
+        log_save_path='logs/swap/CIFAR-10/saved_logs_fedbabu/')
+    print(f"Simulation completed: dataset=CIFAR-10, method=FedBABU.")
 
     # #00000000000000000 FairFedDrift 00000000000000000000
-    # fairfeddrift_fed_net = FederatedNetwork(
-    #     num_iid_client_instances=10,
-    #     num_noniid_client_instances=0,
-    #     server_tree_layout=[1],
-    #     num_training_rounds=400,
-    #     dataset_name=constants.DatasetNames.CIFAR_10,
-    #     noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
-    #     drift_specs=drift_specifications,
-    #     simulation_parameters=simulation_parameters,
-    #     client_select_fraction=1,
-    #     drift_recovery_parameters=fairfeddrift_recovery_parameters,
-    # )
-    # fairfeddrift_fed_net.run_simulation(
-    #     file_save_path='plots/swap/CIFAR-10/saved_plots_fairfeddrift/',
-    #     log_save_path='logs/swap/CIFAR-10/saved_logs_fairfeddrift/')
-    # print(f"Simulation completed: dataset=CIFAR-10, method=FairFedDrift.")
+    fairfeddrift_fed_net = FederatedNetwork(
+        num_iid_client_instances=100,
+        num_noniid_client_instances=0,
+        server_tree_layout=[1],
+        num_training_rounds=400,
+        dataset_name=constants.DatasetNames.CIFAR_10,
+        noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+        drift_specs=drift_specifications,
+        simulation_parameters=simulation_parameters,
+        client_select_fraction=1,
+        drift_recovery_parameters=fairfeddrift_recovery_parameters,
+    )
+    fairfeddrift_fed_net.run_simulation(
+        file_save_path='plots/swap/CIFAR-10/saved_plots_fairfeddrift/',
+        log_save_path='logs/swap/CIFAR-10/saved_logs_fairfeddrift/')
+    print(f"Simulation completed: dataset=CIFAR-10, method=FairFedDrift.")
 
-    # 0000000000000000000000000000000000000
+    # 0000000000000000 ORACLE 000000000000000000000
     # Define drift recovery algorithm related parameters
     drift_recovery_parameters = dict(
         recovery_method=constants.RecoveryAlgorithm.ORACLE,  # Aggregation method used during the drift period
@@ -834,7 +887,7 @@ def main():
 
     # Create a federated network
     fed_net = FederatedNetwork(
-        num_iid_client_instances=10,  # Number of IID clients in the federated network
+        num_iid_client_instances=100,  # Number of IID clients in the federated network
         # num_iid_client_instances=100,  # Suggested at FLTA
         num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
         server_tree_layout=[1],
@@ -849,48 +902,14 @@ def main():
         drift_recovery_parameters=drift_recovery_parameters, # Drift recovery algorithm related parameters
     )
 
-    # # Running the simulation
-    # fed_net.run_simulation(
-    #     file_save_path='plots/swap/CIFAR-10/saved_plots_oracle/',
-    #     log_save_path='logs/swap/CIFAR-10/saved_logs_oracle/')
-    # print(f"Simulation completed: dataset=CIFAR-10, method=Oracle.")
-
-    # # #0000000000000000000000000000000000000
-    # Define drift recovery algorithm related parameters
-    drift_recovery_parameters = dict(
-        recovery_method=constants.RecoveryAlgorithm.FEDAVG,  # Aggregation method used during the drift period
-        base_aggregation_method=constants.RecoveryAlgorithm.FEDAVG,  # Aggregation algorithm used outside the drift period
-        fedau_alpha=0.9, # EMA weight (alpha) parameter for the FedAU algorithm
-        fedrc_cluster_count=3, # Number of clusters (K) for the FedRC algorithm
-        # Number of clusters (K) for the Oracle (multi-global-model-based) algorithm
-        #   - drift_specifications['drift_group_proportions'][0] -> number of drift affected client groups
-        #   - '+1' -> for the non-drift affected client group
-        cluster_count=len(drift_specifications['drift_group_proportions'][0]) + 1,
-    fedex_alpha=0.9,  # EMA weight (alpha) parameter for the FedEx algorithm
-    )
-
-    # Create a federated network
-    fed_net = FederatedNetwork(
-        num_iid_client_instances=10,  # Number of IID clients in the federated network
-        # num_iid_client_instances=100,  # Suggested at FLTA
-        num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
-        server_tree_layout=[1],
-        # Number of servers at each level of the server tree of depth n = [n, n-1,..., 1]
-        # num_training_rounds=100,  # In literature, over 50 rounds are trained. FLUID trains 100 rounds
-        num_training_rounds=400,  # Number of training rounds (in literature, over 50 rounds are trained.)
-        dataset_name=constants.DatasetNames.CIFAR_10,  # Name of the dataset
-        noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
-        drift_specs=drift_specifications,  # Drift specifications
-        simulation_parameters=simulation_parameters,  # Parameters specifying the simulation scenarios
-        client_select_fraction=1,  # Fraction of clients to be selected for each round
-        drift_recovery_parameters=drift_recovery_parameters, # Drift recovery algorithm related parameters
-    )
-
-    # # Running the simulation
-    # fed_net.run_simulation(
-    #     file_save_path='plots/swap/CIFAR-10/saved_plots_fedavg/',
-    #     log_save_path='logs/swap/CIFAR-10/saved_logs_fedavg/')
-    # print(f"Simulation completed: dataset=CIFAR-10, method=FedAvg.")
+    # # # Before enabling this Oracle run, initialize cumulative-concept routing once:
+    # from strategy.Oracle.support import prepare_oracle_cumulative_routing
+    # prepare_oracle_cumulative_routing(fed_net, num_classes=10)
+    # Running the simulation
+    fed_net.run_simulation(
+        file_save_path='plots/swap/CIFAR-10/saved_plots_oracle/',
+        log_save_path='logs/swap/CIFAR-10/saved_logs_oracle/')
+    print(f"Simulation completed: dataset=CIFAR-10, method=Oracle.")
 
 
     # # 00000000000000000000000000000000000000000000000000000000000000
@@ -1066,6 +1085,9 @@ def main():
         drift_recovery_parameters=drift_recovery_parameters, # Drift recovery algorithm related parameters
     )
 
+    # # Before enabling this Oracle run, initialize cumulative-concept routing once:
+    # from strategy.Oracle.support import prepare_oracle_cumulative_routing
+    # prepare_oracle_cumulative_routing(fed_net, num_classes=100)
     # # Running the simulation
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/CIFAR-100/saved_plots_oracle/',
@@ -1126,7 +1148,7 @@ def main():
         simulation_parameters=simulation_parameters,  # Parameters specifying the simulation scenarios
         client_select_fraction=1,  # Fraction of clients to be selected for each round
         drift_recovery_parameters=drift_recovery_parameters,  # Drift recovery algorithm related parameters
-        num_local_epochs=400,   # only for Tiny ImageNet-200
+        num_local_epochs=constants.TrainingHyperparameters.LOCAL_EPOCHS,
     )
 
     # Define the drift specifications
@@ -1317,6 +1339,9 @@ def main():
         drift_recovery_parameters=drift_recovery_parameters, # Drift recovery algorithm related parameters
     )
 
+    # # Before enabling this Oracle run, initialize cumulative-concept routing once:
+    # from strategy.Oracle.support import prepare_oracle_cumulative_routing
+    # prepare_oracle_cumulative_routing(fed_net, num_classes=200)
     # # Running the simulation
     # fed_net.run_simulation(
     #     file_save_path='plots/swap/Tiny/saved_plots_oracle/',
@@ -1362,5 +1387,51 @@ def main():
 
 
 
+def run_oracle_mnist_validation():
+    """
+    Run only a small matched real-MNIST legacy/cumulative Oracle comparison.
+    :return: Comparison summary with routing and input matching checks.
+    """
+    from datetime import datetime
+    import torch
+    from tests.run_real_mnist_oracle_validation import run_comparison
+
+    configure_device('cpu')
+    torch.set_num_threads(2)
+    config = dict(
+        num_iid_client_instances=10, num_noniid_client_instances=0, server_tree_layout=[1],
+        num_training_rounds=50, dataset_name=constants.DatasetNames.MNIST,
+        noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+        client_select_fraction=1, minibatch_size=32, num_local_epochs=3,
+        drift_specs=dict(
+            clients_fraction=0.8, drift_group_proportions=[[0.1, 0.9], [0.8, 0.2]],
+            is_synchronous=False, is_random=False,
+            async_drift_specs=dict(num_drift_groups=2, drift_groups=None, drift_split_round=0.8,
+                                  is_read_scenarios=False, scenario_num=1),
+            drift_mode=constants.DriftMode.LABEL_SWAP_INCREMENTAL_STEPS,
+            drift_step_rounds=[0.4, 0.65, 1.0], max_rotation=0,
+            class_pairs_to_swap=[[(1, 2), (3, 4)], [(5, 7)]],
+            drift_pattern_id_map={1: [(1, 2), (3, 4)], 2: [(5, 7)]},
+            drift_patterns_over_time=[[1, 2], [1, 2]], label_swap_percentage_steps=[1, 1],
+            current_drift_step=-1),
+        simulation_parameters=dict(
+            random_seed=42, is_server_adaptability=False, is_plot_client_data_distributions=False,
+            client_ids_to_plot_data_distributions=[], servers_have_test_data=False,
+            client_evaluation_stage='global_after_download', drifted_class_metrics_enabled=True,
+            server_metric_weighting='uniform', model_distance_logging_enabled=True, model_distance_interval=1),
+        drift_recovery_parameters=dict(
+            recovery_method=constants.RecoveryAlgorithm.ORACLE,
+            base_aggregation_method=constants.RecoveryAlgorithm.ORACLE,
+            fedau_alpha=0.9, fedex_alpha=0.9, fedrc_cluster_count=3, cluster_count=3))
+    output_root = os.path.join('plots', '.cpu_validation',
+                               'oracle_mnist_' + datetime.now().strftime('%Y%m%d_%H%M%S'))
+    return run_comparison(config, sample_counts=(6000, 2000), output_root=output_root)
+
+
 if __name__ == "__main__":
-    main()
+    if sys.argv[1:] == ['--oracle-mnist-validation']:
+        run_oracle_mnist_validation()
+    elif sys.argv[1:]:
+        raise SystemExit('Supported optional argument: --oracle-mnist-validation')
+    else:
+        main()

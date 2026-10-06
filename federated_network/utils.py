@@ -779,11 +779,16 @@ def update_progress(_round, num_training_rounds, verbose=True) -> None:
 
 def link_clients_to_servers_by_drift_id(clients: List[Client], server_hierarchy: List[Any]) -> None:
     """
-    Clustering clients to servers based on their drift IDs.
+    Route Oracle clients by committed concepts when enabled, otherwise by drift IDs.
     :param clients: List of client instances
     :param server_hierarchy: List of servers in the hierarchy
     :return: None
     """
+    if any(getattr(server, 'oracle_concept_signature', None) is not None for server in server_hierarchy):
+        from strategy.Oracle.utils import link_clients_to_oracle_concepts
+        link_clients_to_oracle_concepts(clients, server_hierarchy)
+        return
+
     for server in server_hierarchy:
         server.client_ids = []  # reset the server's client IDs
 
