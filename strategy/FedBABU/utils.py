@@ -24,7 +24,7 @@ FEDBABU_HEAD_MODULE_BY_MODEL_TYPE = {
 
 FEDBABU_DEFAULTS = {
     'fedbabu_head_finetune_epochs': 5,
-    'fedbabu_head_finetune_learning_rate': 0.01,
+    'fedbabu_head_finetune_learning_rate': constants.TrainingHyperparameters.CLIENT_LEARNING_RATE,
     'fedbabu_head_finetune_momentum': 0.5,
     'fedbabu_head_finetune_weight_decay': 0.0,
 }

@@ -565,10 +565,8 @@ def change_server_aggregation_strategy(server_hierarchy: List[Any], drift_recove
             server.strategy = strategy.FedEx.aggregator_fn()
 
     elif drift_recovery_method == constants.RecoveryAlgorithm.ORACLE:
-        for idx, server in enumerate(server_hierarchy[-1]):  # applied only to leaf servers
-            # assign drift_pattern ID for each server, so the clients with same drift pattern are connected to it.
-            server.drift_id = drift.unique_drift_ids[idx]
-            server.strategy = strategy.Oracle.aggregator_fn()
+        strategy.Oracle.configure_oracle_servers(
+            server_hierarchy[-1], drift.unique_drift_ids, strategy.Oracle.aggregator_fn)
 
     elif drift_recovery_method == constants.RecoveryAlgorithm.DITTO:
         for server in server_hierarchy[-1]:
