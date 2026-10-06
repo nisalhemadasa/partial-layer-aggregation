@@ -364,7 +364,7 @@ def main():
 
     # Create a federated network
     fed_net = FederatedNetwork(
-        num_iid_client_instances=10,  # Number of IID clients in the federated network
+        num_iid_client_instances=100,  # Number of IID clients in the federated network
         # num_iid_client_instances=100,  # Suggested at FLTA
         num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
         server_tree_layout=[1],
@@ -402,7 +402,7 @@ def main():
 
     # Create a federated network
     fed_net = FederatedNetwork(
-        num_iid_client_instances=10,  # Number of IID clients in the federated network
+        num_iid_client_instances=100,  # Number of IID clients in the federated network
         # num_iid_client_instances=100,  # Suggested at FLTA
         num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
         server_tree_layout=[1],
@@ -456,7 +456,7 @@ def main():
     # #00000000000000000 FedBABU 00000000000000000000
     # Uncomment this constructor and its run call to run FedBABU on MNIST.
     fedbabu_fed_net = FederatedNetwork(
-        num_iid_client_instances=10,
+        num_iid_client_instances=100,
         num_noniid_client_instances=0,
         server_tree_layout=[1],
         num_training_rounds=50,
@@ -475,7 +475,7 @@ def main():
     # #00000000000000000 FairFedDrift 00000000000000000000
     # Keep both the constructor and run call commented until this handle is selected.
     fairfeddrift_fed_net = FederatedNetwork(
-        num_iid_client_instances=10,
+        num_iid_client_instances=100,
         num_noniid_client_instances=0,
         server_tree_layout=[1],
         num_training_rounds=50,
@@ -508,7 +508,7 @@ def main():
 
     # Create a federated network
     fed_net = FederatedNetwork(
-        num_iid_client_instances=10,  # Number of IID clients in the federated network
+        num_iid_client_instances=100,  # Number of IID clients in the federated network
         # num_iid_client_instances=100,  # Suggested at FLTA
         num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
         server_tree_layout=[1],
@@ -550,7 +550,7 @@ def main():
 
     # Create a federated network
     fed_net = FederatedNetwork(
-        num_iid_client_instances=10,  # Number of IID clients in the federated network
+        num_iid_client_instances=100,  # Number of IID clients in the federated network
         # num_iid_client_instances=100,  # Suggested at FLTA
         num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
         server_tree_layout=[1],
@@ -588,7 +588,7 @@ def main():
 
     # Create a federated network
     fed_net = FederatedNetwork(
-        num_iid_client_instances=10,  # Number of IID clients in the federated network
+        num_iid_client_instances=100,  # Number of IID clients in the federated network
         # num_iid_client_instances=100,  # Suggested at FLTA
         num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
         server_tree_layout=[1],
@@ -642,7 +642,7 @@ def main():
     #000000000000000000 FedBABU 00000000000000000000
     # FedBABU handle for Fashion-MNIST; keep construction and execution disabled by default.
     fedbabu_fed_net = FederatedNetwork(
-        num_iid_client_instances=10,
+        num_iid_client_instances=100,
         num_noniid_client_instances=0,
         server_tree_layout=[1],
         num_training_rounds=50,
@@ -660,7 +660,7 @@ def main():
 
     #00000000000000000 FairFedDrift 00000000000000000000
     fairfeddrift_fed_net = FederatedNetwork(
-        num_iid_client_instances=10,
+        num_iid_client_instances=100,
         num_noniid_client_instances=0,
         server_tree_layout=[1],
         num_training_rounds=50,
@@ -692,7 +692,7 @@ def main():
     
     # Create a federated network
     fed_net = FederatedNetwork(
-        num_iid_client_instances=10,  # Number of IID clients in the federated network
+        num_iid_client_instances=100,  # Number of IID clients in the federated network
         # num_iid_client_instances=100,  # Suggested at FLTA
         num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
         server_tree_layout=[1],
@@ -736,7 +736,7 @@ def main():
 
     # Create a federated network
     fed_net = FederatedNetwork(
-        num_iid_client_instances=10,  # Number of IID clients in the federated network
+        num_iid_client_instances=100,  # Number of IID clients in the federated network
         # num_iid_client_instances=100,  # Suggested at FLTA
         num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
         server_tree_layout=[1],
@@ -776,7 +776,7 @@ def main():
 
         # Create a federated network
         fed_net = FederatedNetwork(
-            num_iid_client_instances=10,  # Number of IID clients in the federated network
+            num_iid_client_instances=100,  # Number of IID clients in the federated network
             # num_iid_client_instances=100,  # Suggested at FLTA
             num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
             server_tree_layout=[1],
@@ -837,7 +837,7 @@ def main():
     #000000000000 FedBABU 00000000000000000000
     # FedBABU handle for CIFAR-10; keep construction and execution disabled by default.
     fedbabu_fed_net = FederatedNetwork(
-        num_iid_client_instances=10,
+        num_iid_client_instances=100,
         num_noniid_client_instances=0,
         server_tree_layout=[1],
         num_training_rounds=400,
@@ -855,7 +855,7 @@ def main():
 
     # #00000000000000000 FairFedDrift 00000000000000000000
     fairfeddrift_fed_net = FederatedNetwork(
-        num_iid_client_instances=10,
+        num_iid_client_instances=100,
         num_noniid_client_instances=0,
         server_tree_layout=[1],
         num_training_rounds=400,
@@ -887,7 +887,7 @@ def main():
 
     # Create a federated network
     fed_net = FederatedNetwork(
-        num_iid_client_instances=10,  # Number of IID clients in the federated network
+        num_iid_client_instances=100,  # Number of IID clients in the federated network
         # num_iid_client_instances=100,  # Suggested at FLTA
         num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
         server_tree_layout=[1],
