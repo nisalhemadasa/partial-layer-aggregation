@@ -10,6 +10,8 @@ from device_utils import configure_device
 from federated_network.network import FederatedNetwork
 from random_utils import configure_random_seed
 
+import copy
+import json
 import os
 import sys
 
@@ -17,10 +19,116 @@ import sys
 # (e.g., NaN, Inf, or out-of-bounds values) during loss computation in the training loop.
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
+run_L_ablation = False
+
+
+def _run_l_ablation(experiment_seed: int) -> None:
+    """Run the isolated CIFAR-10 FedEx shared-layer ablation for L=1..4.
+
+    :param experiment_seed: Shared random seed used to match the L runs
+    :return: None
+    """
+    async_drift_specs = dict(
+        num_drift_groups=2,
+        drift_groups=None,
+        drift_split_round=0.8,
+        is_read_scenarios=False,
+        scenario_num=1,
+    )
+
+    drift_specifications = dict(
+        clients_fraction=0.8,
+        drift_group_proportions=[[0.1, 0.9], [0.8, 0.2]],
+        is_synchronous=False,
+        is_random=True,
+        async_drift_specs=async_drift_specs,
+        drift_mode=constants.DriftMode.LABEL_SWAP_INCREMENTAL_STEPS,
+        drift_step_rounds=[0.4, 0.65, 1.0],
+        max_rotation=45,
+        class_pairs_to_swap=[[(1, 2), (3, 4)], [(5, 7)]],
+        drift_pattern_id_map={1: [(1, 2), (3, 4)], 2: [(5, 7)]},
+        drift_patterns_over_time=[[1, 2], [1, 2]],
+        label_swap_percentage_steps=[1, 1],
+        current_drift_step=-1,
+    )
+
+    simulation_parameters = dict(
+        random_seed=experiment_seed,
+        is_server_adaptability=False,
+        is_plot_client_data_distributions=False,
+        client_ids_to_plot_data_distributions=[0, 1],
+        servers_have_test_data=False,
+        client_evaluation_stage='local_after_training',
+        drifted_class_metrics_enabled=False,
+        server_metric_weighting='uniform',
+    )
+
+    log_root = 'logs/swap/CIFAR-10/saved_logs_fedex/l_ablation'
+    plot_root = 'plots/swap/CIFAR-10/saved_plots_fedex/l_ablation'
+
+    for shared_layer_count in (1, 2, 3, 4):
+        configure_random_seed(experiment_seed)
+        drift_specs_for_run = copy.deepcopy(drift_specifications)
+        simulation_parameters_for_run = copy.deepcopy(simulation_parameters)
+        recovery_parameters = dict(
+            recovery_method=constants.RecoveryAlgorithm.FEDEX,
+            base_aggregation_method=constants.RecoveryAlgorithm.FEDEX,
+            fedau_alpha=0.9,
+            fedrc_cluster_count=3,
+            cluster_count=len(drift_specifications['drift_group_proportions'][0]) + 1,
+            fedex_alpha=0.9,
+            fedex_shared_layer_count=shared_layer_count,
+        )
+
+        log_dir = os.path.join(log_root, f'l{shared_layer_count}')
+        plot_dir = os.path.join(plot_root, f'l{shared_layer_count}')
+        os.makedirs(log_dir, exist_ok=True)
+        os.makedirs(plot_dir, exist_ok=True)
+
+        run_configuration = dict(
+            dataset=constants.DatasetNames.CIFAR_10,
+            method=constants.RecoveryAlgorithm.FEDEX,
+            L=shared_layer_count,
+            shared_layers=("conv1", "conv2", "fc1", "fc2")[:shared_layer_count],
+            random_seed=experiment_seed,
+            drift_specifications=drift_specs_for_run,
+            num_iid_client_instances=100,
+            num_noniid_client_instances=0,
+            num_training_rounds=400,
+            client_select_fraction=1,
+            fedex_alpha=0.9,
+            minibatch_size=128,
+            num_local_epochs=constants.TrainingHyperparameters.LOCAL_EPOCHS,
+        )
+        with open(os.path.join(log_dir, 'run_config.json'), 'w', encoding='utf-8') as config_file:
+            json.dump(run_configuration, config_file, indent=2, default=str)
+
+        fed_net = FederatedNetwork(
+            num_iid_client_instances=100,
+            num_noniid_client_instances=0,
+            server_tree_layout=[1],
+            num_training_rounds=400,
+            dataset_name=constants.DatasetNames.CIFAR_10,
+            noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+            drift_specs=drift_specs_for_run,
+            simulation_parameters=simulation_parameters_for_run,
+            client_select_fraction=1,
+            drift_recovery_parameters=recovery_parameters,
+            minibatch_size=128,
+            num_local_epochs=constants.TrainingHyperparameters.LOCAL_EPOCHS,
+        )
+        fed_net.run_simulation(file_save_path=plot_dir, log_save_path=log_dir)
+        print(f"Simulation completed: dataset=CIFAR-10, method=FedEx, L={shared_layer_count}.")
+
+
 def main():
     configure_device('cuda')  # Experiments require CUDA; unavailable CUDA raises instead of falling back to CPU.
     experiment_seed = 42  # Single seed handle shared by every method in a comparison.
     configure_random_seed(experiment_seed)
+
+    if run_L_ablation:
+        _run_l_ablation(experiment_seed)
+        return
 
     async_drift_specs = dict(
         num_drift_groups=2,  # Number of groups of clients that are affected by the drift asynchronously

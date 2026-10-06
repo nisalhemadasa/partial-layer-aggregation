@@ -21,17 +21,40 @@ from models.CNNCIFAR100.model import ResNet18CIFAR100, ShallowResNetCIFAR100
 from device_utils import get_device
 
 
-def split_to_extractor_and_classifier(_model: nn.Module, _model_params: OrderedDict, model_type: str) -> tuple[
+def split_to_extractor_and_classifier(_model: nn.Module, _model_params: OrderedDict, model_type: str,
+                                     shared_layer_count: int = None) -> tuple[
     OrderedDict, OrderedDict]:
     """
     Split the model/model parameters into feature extractor and classifier parts. The feature extractor includes all layers except the
     final fully connected layer (fc2), while the classifier includes only the final fully connected layer.
     :param _model: The model to split
     :param _model_params: The model parameters to split
+    :param model_type: Model type used to select the default split behavior
+    :param shared_layer_count: Optional count of leading learned CIFAR-10 layers to return as shared parameters
     :return: A tuple containing two OrderedDicts: (parameters of the feature extractor, parameters of the classifier)
     """
     if _model is not None:
         _model_params = _model.state_dict()
+
+    if shared_layer_count is not None:
+        if model_type != constants.ModelTypes.CNN_CIFAR_10:
+            raise ValueError("shared_layer_count is supported only for the CIFAR-10 CNN model.")
+        if isinstance(shared_layer_count, bool) or not isinstance(shared_layer_count, int) or not 1 <= shared_layer_count <= 4:
+            raise ValueError("shared_layer_count must be an integer from 1 through 4.")
+
+        layer_prefixes = ("conv1.", "conv2.", "fc1.", "fc2.")
+        selected_prefixes = layer_prefixes[:shared_layer_count]
+        extractor_params = OrderedDict(
+            (key, value) for key, value in _model_params.items()
+            if key.startswith(selected_prefixes)
+        )
+        classifier_params = OrderedDict(
+            (key, value) for key, value in _model_params.items()
+            if not key.startswith(selected_prefixes)
+        )
+        if not extractor_params:
+            raise ValueError("No CIFAR-10 model parameters matched the selected shared layers.")
+        return extractor_params, classifier_params
 
     # get the extractor parameters (all except fc2 and fc1 layer)
     if model_type is not constants.ModelTypes.CONVNET_TINY_IMAGENET:
