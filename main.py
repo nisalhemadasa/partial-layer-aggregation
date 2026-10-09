@@ -19,7 +19,7 @@ import sys
 # (e.g., NaN, Inf, or out-of-bounds values) during loss computation in the training loop.
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
-run_L_ablation = False
+run_L_ablation = True
 
 
 def _run_l_ablation(experiment_seed: int) -> None:
@@ -92,7 +92,7 @@ def _run_l_ablation(experiment_seed: int) -> None:
             shared_layers=("conv1", "conv2", "fc1", "fc2")[:shared_layer_count],
             random_seed=experiment_seed,
             drift_specifications=drift_specs_for_run,
-            num_iid_client_instances=100,
+            num_iid_client_instances=10,
             num_noniid_client_instances=0,
             num_training_rounds=400,
             client_select_fraction=1,
@@ -104,7 +104,7 @@ def _run_l_ablation(experiment_seed: int) -> None:
             json.dump(run_configuration, config_file, indent=2, default=str)
 
         fed_net = FederatedNetwork(
-            num_iid_client_instances=100,
+            num_iid_client_instances=10,
             num_noniid_client_instances=0,
             server_tree_layout=[1],
             num_training_rounds=400,
@@ -117,7 +117,7 @@ def _run_l_ablation(experiment_seed: int) -> None:
             minibatch_size=128,
             num_local_epochs=constants.TrainingHyperparameters.LOCAL_EPOCHS,
         )
-        fed_net.run_simulation(file_save_path=plot_dir, log_save_path=log_dir)
+        fed_net.run_simulation(file_save_path=plot_dir + os.sep, log_save_path=log_dir + os.sep)
         print(f"Simulation completed: dataset=CIFAR-10, method=FedEx, L={shared_layer_count}.")
 
 
