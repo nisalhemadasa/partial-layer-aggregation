@@ -1,5 +1,13 @@
 # Development progress
 
+## 2026-10-09
+
+- Added the disabled `run_rotation_ablation` handle and `_run_rotation_ablation()` entry point in `main.py`, wired as an isolated early-return branch. Runner intentionally raises a clear pending-integration error until rotation drift support is implemented; source inspection completed, runtime validation not run.
+- Added `Drift.rotation_class_id_map` and passed it through `drift_fn()` with CIFAR-10 operation defaults `{1: [1, 2, 3, 4], 2: [5, 7]}`. Existing label-swap mapping is unchanged. AST syntax parsing and `git diff --check` passed; runtime behavior is not yet wired or verified.
+- Added `Drift.rotate_images_by_class_gradually()` and routed `ROTATION_GRADUAL` through it. It rebuilds train/test datasets from cached originals per operation ID, rotates only mapped labels at the current gradual angle, and shares each operation's transformed base dataset among its clients. AST parsing and `git diff --check` passed; no runtime tests run, and incremental rotation modes remain unchanged.
+- Completed `_run_rotation_ablation()` in `main.py`: five isolated CIFAR-10 Scenario B methods, 10 IID clients, 400 rounds, per-method output/config directories, and FedEx L=2. The rotation branch selects CPU before constructing networks to satisfy FairFedDrift's setup constraints; ordinary runs retain CUDA configuration. Added `tests/test_rotation_drift.py` for class filtering, non-compounding, legacy dispatch, runner settings, and a two-round synthetic CIFAR federation.
+- Rotation verification: all four new tests passed, including the two-round synthetic federation, using the available Python 3.7/Torch 1.13 runtime with a temporary import compatibility shim. The normal test command cannot import this Python 3.10+ checkout in that interpreter. Evaluation regressions passed under the shim; two FairFedDrift drift regression checks could not pass because that legacy test calls `drift_fn()` without its required seed and uses newer `Mock.call_args.args` APIs. `git diff --check` and Python AST parsing passed.
+
 ## 2026-10-06
 
 - Created `L_VAR_PLAN.md` for an isolated CIFAR-10 FedEx Scenario B L ablation with L-specific shared-layer prefixes, a gated `run_L_ablation` handle, and separate per-L output directories. Readback completed; implementation and experiments remain pending.

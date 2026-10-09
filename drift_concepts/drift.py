@@ -30,7 +30,7 @@ class Drift:
     def __init__(self, drifted_clients_fraction, drift_group_proportions, is_synchronous, is_random, async_drift_specs,
                  drift_mode, drift_start_round, drift_end_round, drift_step_rounds, num_client_instances, max_rotation,
                  class_pairs_to_swap, drift_pattern_id_map, drift_patterns_over_time, label_swap_percentage_steps,
-                 current_drift_step, random_seed):
+                 current_drift_step, random_seed, rotation_class_id_map=None):
         # Number of clients to be applied with drifted data
         self.num_drifted_clients = int(drifted_clients_fraction * num_client_instances)
 
@@ -76,6 +76,11 @@ class Drift:
 
         # Maximum rotation angle for the drift created by rotations
         self.max_rotation = max_rotation
+
+        # Class lists rotated for each asynchronous drift operation ID.
+        self.rotation_class_id_map = rotation_class_id_map or {}
+        self.rotation_source_train_dataset = None
+        self.rotation_source_test_dataset = None
 
         # Classes to be swapped in the label-swapping drift method
         self.class_pairs_to_swap = class_pairs_to_swap
@@ -198,6 +203,63 @@ class Drift:
             for idx in self.drifted_client_indices:
                 clients[idx].local_trainset.dataset = first_drifted_client.local_trainset.dataset
                 clients[idx].testset.dataset = first_drifted_client.testset.dataset
+
+        return clients
+
+    def rotate_images_by_class_gradually(self, clients: List[Client]) -> List[Client]:
+        """Rotate configured classes for each asynchronous operation without compounding rounds.
+        :param clients: Client instances grouped by their current drift operation IDs.
+        :return: Clients whose affected train and test images are rotated.
+        """
+        if not self.rotation_class_id_map:
+            return clients
+
+        if self.rotation_source_train_dataset is None:
+            self.rotation_source_train_dataset = copy.deepcopy(clients[0].local_trainset.dataset)
+            self.rotation_source_test_dataset = copy.deepcopy(clients[0].testset.dataset)
+
+        progress = (self.current_round + 1 - self.drift_start_round) / max(
+            1, self.drift_end_round - self.drift_start_round)
+        rotation_angle = min(1.0, max(0.0, progress)) * self.max_rotation
+
+        def rotate_selected_classes(source_dataset, class_ids):
+            """Build a fresh transformed dataset from its unrotated source."""
+            transformed_dataset = copy.deepcopy(source_dataset)
+            original_data = source_dataset.data
+            transformed_data = copy.deepcopy(original_data)
+            targets = source_dataset.targets
+            target_values = targets.detach().cpu().numpy() if isinstance(targets, torch.Tensor) else np.asarray(targets)
+            selected_indices = np.flatnonzero(np.isin(target_values, class_ids))
+
+            for sample_index in selected_indices:
+                original_image = original_data[sample_index]
+                image_array = (original_image.detach().cpu().numpy() if isinstance(original_image, torch.Tensor)
+                               else np.asarray(original_image))
+                axes = (1, 2) if image_array.ndim == 3 and image_array.shape[0] in (1, 3) else (0, 1)
+                rotated_image = rotate(image_array, rotation_angle, axes=axes, reshape=False)
+                if isinstance(original_image, torch.Tensor):
+                    transformed_data[sample_index] = torch.as_tensor(
+                        rotated_image, dtype=original_image.dtype, device=original_image.device)
+                else:
+                    transformed_data[sample_index] = rotated_image.astype(image_array.dtype, copy=False)
+
+            transformed_dataset.data = transformed_data
+            return transformed_dataset
+
+        operation_clients = {}
+        for client in clients:
+            if client.drift_id in self.rotation_class_id_map:
+                operation_clients.setdefault(client.drift_id, []).append(client)
+
+        for operation_id, affected_clients in operation_clients.items():
+            class_ids = self.rotation_class_id_map.get(operation_id, ())
+            if not class_ids:
+                continue
+            train_dataset = rotate_selected_classes(self.rotation_source_train_dataset, class_ids)
+            test_dataset = rotate_selected_classes(self.rotation_source_test_dataset, class_ids)
+            for client in affected_clients:
+                client.local_trainset.dataset = train_dataset
+                client.testset.dataset = test_dataset
 
         return clients
 
@@ -411,6 +473,8 @@ def drift_fn(num_client_instances: int, num_training_rounds: int, drift_specs: D
                  num_client_instances=num_client_instances,
                  max_rotation=drift_specs['max_rotation'],
                  class_pairs_to_swap=drift_specs['class_pairs_to_swap'],
+                 rotation_class_id_map=drift_specs.get(
+                     'rotation_class_id_map', {1: [1, 2, 3, 4], 2: [5, 7]}),
                  drift_pattern_id_map=drift_specs['drift_pattern_id_map'],
                  drift_patterns_over_time=drift_specs['drift_patterns_over_time'],
                  label_swap_percentage_steps=drift_specs['label_swap_percentage_steps'],
@@ -461,7 +525,7 @@ def apply_drift(clients: List[Client], drift: Drift) -> List[Client]:
 
     elif drift.drift_mode == constants.DriftMode.ROTATION_GRADUAL:
         # Gradual (angle) drift happens at every round
-        return drift.rotate_images_gradually(clients)
+        return drift.rotate_images_by_class_gradually(clients)
 
     elif drift.drift_mode == constants.DriftMode.ROTATION_STEP_INCREMENTAL:
         # Incremental (angle & samples) drift happens at the defined drift steps
