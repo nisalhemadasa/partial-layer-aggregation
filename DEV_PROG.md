@@ -260,3 +260,13 @@ Keep one brief dated entry per development step: change, validation, and any rem
 - 2026-10-06: Completed four FedEx L-ablation regression tests and four one-round synthetic-data simulation smoke runs (L=1..4); Python syntax and diff checks passed. Started the real CIFAR-10 100-client/400-round run, then stopped it at the user's request during L=1 evaluation; it exited with KeyboardInterrupt and may have left partial L=1 artifacts. No full real-data run or accuracy-profile comparison is claimed. The implementation is ready for the user's end-to-end run; inspect/clear partial L=1 outputs before rerunning if needed.
 - 2026-10-09: Updated the ablation notebook to prefer the newer nested l_ablation/l1-l4 logs and validated notebook syntax. Plot regeneration was attempted but external figure-directory writing was rejected by automatic approval; outputs remain unverified for the new logs.
 - 2026-10-09: Regenerated CIFAR-10 L-ablation plots from the newer nested l1-l4 logs. Saved raw plots, legend, and _nv no-band plots in the requested ablation folder and six-round-smoothed counterparts under its smooth subfolder. Validation: execution completed; accuracy/loss, legend, and _nv PNG/PDF/PGF files were confirmed in both locations.
+
+- 2026-10-11: Drafted ROTATION_L_ABLATION_PLAN.md for an independent FedEx L=1..4 sweep using the existing CIFAR-10 Scenario B rotation configuration; implementation and runtime validation are pending.
+
+- 2026-10-11: Added the independent _run_rotation_l_ablation() FedEx L=1..4 runner in main.py with the CIFAR-10 Scenario B, 10-client rotation configuration and separate rot_l_ablation/l1-l4 output paths. Runner is implemented; main() dispatch and focused/runtime validation remain pending.
+
+- 2026-10-11: Connected run_rotation_l_ablation to main() with an isolated CPU-configured early-return path. Syntax validation passed; focused runner configuration checks and runtime smoke validation remain pending.
+
+- 2026-10-11: Added focused rotation L-ablation runner/dispatch tests for L=1..4, CIFAR-10 Scenario B/10-client rotation settings, and distinct rot_l_ablation outputs. AST parsing and git diff --check passed. Runtime tests were attempted but could not execute: Python 3.7 rejects newer union annotations, Python 3.11 lacks SciPy, and Python 3.10 test discovery stalled without output and was stopped; simulation smoke behavior remains unverified.
+
+- 2026-10-11: Focused validation completed for rotation drift and the new rotation L ablation: all 6 tests passed, including L=1..4 runner/output configuration and the existing two-round synthetic CIFAR-shaped federation. The full 400-round ablation was not run.
