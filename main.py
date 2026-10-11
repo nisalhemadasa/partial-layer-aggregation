@@ -22,8 +22,20 @@ os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 run_L_ablation = False
 run_rotation_ablation = False
 run_rotation_l_ablation = False
+run_fedex_l1_label_swap_matrix = False
+fedex_l1_label_swap_seed = 42
 
+_FEDEX_L1_LABEL_SWAP_DATASETS = (
+    (constants.DatasetNames.MNIST, 'MNIST'),
+    (constants.DatasetNames.F_MNIST, 'F_MNIST'),
+    (constants.DatasetNames.CIFAR_10, 'CIFAR-10'),
+)
 
+_FEDEX_L1_LABEL_SWAP_SCENARIOS = (
+    ('scenario_A', 1, [[0.5, 0.5], [0.2, 0.8]], [[1, 1], [1, 2]]),
+    ('scenario_B', 2, [[0.1, 0.9], [0.8, 0.2]], [[1, 2], [1, 2]]),
+    ('scenario_C', 3, [[0.5, 0.5], [0.3, 0.7], [0.8, 0.2]], [[1, 2], [1, 2], [2, 1]]),
+)
 def _run_l_ablation(experiment_seed: int) -> None:
     """Run the isolated CIFAR-10 FedEx shared-layer ablation for L=1..4.
 
@@ -333,6 +345,81 @@ def _run_rotation_l_ablation(experiment_seed: int) -> None:
         print(f"Simulation completed: dataset=CIFAR-10, method=FedEx, rotation L={shared_layer_count}.")
 
 
+def _run_fedex_l1_label_swap_matrix(experiment_seed: int) -> None:
+    """Run independent FedEx L=1 simulations for each dataset and label-swap scenario.
+
+    :param experiment_seed: Seed shared by all dataset/scenario runs
+    :return: None
+    """
+    class_pairs_by_operation = {1: [(1, 2), (3, 4)], 2: [(5, 7)]}
+    for dataset_name, dataset_folder in _FEDEX_L1_LABEL_SWAP_DATASETS:
+        for scenario_name, scenario_num, proportions, patterns in _FEDEX_L1_LABEL_SWAP_SCENARIOS:
+            configure_random_seed(experiment_seed)
+            drift_specifications = dict(
+                clients_fraction=0.8,
+                drift_group_proportions=copy.deepcopy(proportions),
+                is_synchronous=False,
+                is_random=True,
+                async_drift_specs=dict(
+                    num_drift_groups=2,
+                    drift_groups=None,
+                    drift_split_round=0.8,
+                    is_read_scenarios=False,
+                    scenario_num=scenario_num,
+                ),
+                drift_mode=constants.DriftMode.LABEL_SWAP_INCREMENTAL_STEPS,
+                drift_step_rounds=[0.4, 0.65, 1.0],
+                max_rotation=45,
+                class_pairs_to_swap=[class_pairs_by_operation[1], class_pairs_by_operation[2]],
+                drift_pattern_id_map=copy.deepcopy(class_pairs_by_operation),
+                drift_patterns_over_time=copy.deepcopy(patterns),
+                label_swap_percentage_steps=[1, 1],
+                current_drift_step=-1,
+            )
+            simulation_parameters = dict(
+                random_seed=experiment_seed,
+                is_server_adaptability=False,
+                is_plot_client_data_distributions=False,
+                client_ids_to_plot_data_distributions=[],
+                servers_have_test_data=False,
+                client_evaluation_stage='local_after_training',
+                drifted_class_metrics_enabled=False,
+                server_metric_weighting='uniform',
+            )
+            recovery_parameters = dict(
+                recovery_method=constants.RecoveryAlgorithm.FEDEX,
+                base_aggregation_method=constants.RecoveryAlgorithm.FEDEX,
+                fedau_alpha=0.9,
+                fedrc_cluster_count=3,
+                cluster_count=len(proportions[0]) + 1,
+                fedex_alpha=0.9,
+                fedex_shared_layer_count=1,
+            )
+            log_dir = os.path.join(
+                'logs', 'fedex_label_swap_l1_all_datasets', dataset_folder, scenario_name) + os.sep
+            plot_dir = os.path.join(
+                'plots', 'fedex_label_swap_l1_all_datasets', dataset_folder, scenario_name) + os.sep
+            os.makedirs(log_dir, exist_ok=True)
+            os.makedirs(plot_dir, exist_ok=True)
+
+            fed_net = FederatedNetwork(
+                num_iid_client_instances=10,
+                num_noniid_client_instances=0,
+                server_tree_layout=[1],
+                num_training_rounds=400,
+                dataset_name=dataset_name,
+                noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+                drift_specs=drift_specifications,
+                simulation_parameters=simulation_parameters,
+                drift_recovery_parameters=recovery_parameters,
+                client_select_fraction=1,
+                minibatch_size=128,
+                num_local_epochs=constants.TrainingHyperparameters.LOCAL_EPOCHS,
+            )
+            fed_net.run_simulation(file_save_path=plot_dir, log_save_path=log_dir)
+            print(f"Simulation completed: dataset={dataset_folder}, scenario={scenario_name}, FedEx L=1.")
+
+
 def main():
     experiment_seed = 42  # Single seed handle shared by every method in a comparison.
     configure_random_seed(experiment_seed)
@@ -346,6 +433,12 @@ def main():
         configure_device('cpu')
         _run_rotation_l_ablation(experiment_seed)
         return
+
+    if run_fedex_l1_label_swap_matrix:
+        configure_device('cuda')
+        _run_fedex_l1_label_swap_matrix(fedex_l1_label_swap_seed)
+        return
+
 
     configure_device('cuda')  # Experiments require CUDA; unavailable CUDA raises instead of falling back to CPU.
     if run_L_ablation:

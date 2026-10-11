@@ -270,3 +270,23 @@ Keep one brief dated entry per development step: change, validation, and any rem
 - 2026-10-11: Added focused rotation L-ablation runner/dispatch tests for L=1..4, CIFAR-10 Scenario B/10-client rotation settings, and distinct rot_l_ablation outputs. AST parsing and git diff --check passed. Runtime tests were attempted but could not execute: Python 3.7 rejects newer union annotations, Python 3.11 lacks SciPy, and Python 3.10 test discovery stalled without output and was stopped; simulation smoke behavior remains unverified.
 
 - 2026-10-11: Focused validation completed for rotation drift and the new rotation L ablation: all 6 tests passed, including L=1..4 runner/output configuration and the existing two-round synthetic CIFAR-shaped federation. The full 400-round ablation was not run.
+
+- 2026-10-11: Narrowed the CIFAR-10 rotation L-ablation runner to FedEx L=1/conv1 only and updated its focused regression check; all 6 rotation tests passed, including the two-round synthetic federation. Added ROTATION_L1_ALL_DATASETS_PLAN.md for a separate all-image-dataset/scenario runner and isolated output tree; exact scenario CSV definitions are absent and need confirmation before implementation.
+
+- 2026-10-11: Restored the original CIFAR-10 rotation L-ablation sweep (L=1..4) and added a separate opt-in FedEx L=1 matrix for five image datasets across inline Scenarios A/B/C, with dedicated logs/plots roots. Rotation drift now exposes Tiny ImageNet cached transformed tensors as samples so its rotations reach training. All 9 focused rotation tests passed, including matrix configuration and small synthetic end-to-end/regression checks; full matrix simulations were not run. Scenario CSV directory is absent, so A/B/C schedules are sourced from main.py inline definitions.
+
+- 2026-10-12: Revised ROTATION_L1_ALL_DATASETS_PLAN.md per user direction: matrix is limited to MNIST, F_MNIST, and CIFAR-10, and uses standard simulation log artifacts without run_config.json. Existing code was not changed in this planning step.
+
+- 2026-10-12: Reverted the separate run_rotation_l1_all_datasets experiment block and its matrix tests at the user's request. Removed its dispatch and the Tiny ImageNet adapter added only for that block; preserved the existing CIFAR-10 rotation L-ablation. Updated ROTATION_L1_ALL_DATASETS_PLAN.md to remain a plan for the requested three-dataset scope.
+
+- 2026-10-12: Rewrote ROTATION_L1_ALL_DATASETS_PLAN.md as a plan-only proposal for an isolated FedEx L=1 rotation matrix over MNIST, F_MNIST, CIFAR-10, all verified scenarios, independent logs, and a selectable seed handle. No code or simulation was changed/run in this step.
+
+- 2026-10-12: Updated ROTATION_L1_ALL_DATASETS_PLAN.md to specify label-swap drift for Scenarios A/B/C and renamed the proposed independent log/plot roots to fedex_label_swap_l1_all_datasets. Plan-only; no code or simulations changed.
+
+- 2026-10-12: Renamed the plan artifact to LABEL_SWAP_L1_ALL_DATASETS_PLAN.md and aligned the selectable seed handle name with label-swap scope. Plan-only.
+
+- 2026-10-12: Implemented the independent FedEx L=1 label-swap matrix for MNIST, F_MNIST, and CIFAR-10 across inline Scenarios A/B/C. Added the selectable seed, isolated dispatch, and independent log/plot roots without run_config.json. All 9 focused rotation/label-swap checks passed, including label changes on train/test data and the small synthetic CIFAR federation smoke; full nine-run matrix not run. Scenario CSV directory is absent, so schedules follow inline main.py definitions.
+
+- 2026-10-12: Added a one-round synthetic CIFAR-shaped label-swap federation smoke test and scenario proportion/pattern assertions. Rotation/label-swap focused suite now passes all 10 tests; full nine-run matrix remains unrun.
+
+- 2026-10-12: Read back the completed label-swap matrix plan after updating it to reflect the actual seed variable and ten-test validation result.
