@@ -1,5 +1,14 @@
 # Development progress
 
+## 2026-10-14
+
+- Disabled the FedEx matrix, set CIFAR-10 FedEx to L=1 (`conv1` only), and commented every other `run_simulation()` call in `main.py`. Syntax and whitespace checks passed; simulation not run.
+
+## 2026-10-12
+
+- Configured the active FedEx label-swap run for Fashion-MNIST Scenario B with 100 IID clients, 100 rounds, and L=1. Extended the shared-prefix split to support the single-convolution MNIST/Fashion-MNIST CNN so L=1 aggregates `conv1`; Python syntax compilation passed, simulation execution remains unverified.
+- Restricted the active FedEx L=1 label-swap matrix to MNIST and Fashion-MNIST and changed scenario output paths to `<scenario>/<dataset>/saved_logs_fedex` and the corresponding `saved_plots_fedex` tree. Python syntax compilation passed; full simulations remain unrun.
+
 ## 2026-10-09
 
 - Added the disabled `run_rotation_ablation` handle and `_run_rotation_ablation()` entry point in `main.py`, wired as an isolated early-return branch. Runner intentionally raises a clear pending-integration error until rotation drift support is implemented; source inspection completed, runtime validation not run.
@@ -290,3 +299,7 @@ Keep one brief dated entry per development step: change, validation, and any rem
 - 2026-10-12: Added a one-round synthetic CIFAR-shaped label-swap federation smoke test and scenario proportion/pattern assertions. Rotation/label-swap focused suite now passes all 10 tests; full nine-run matrix remains unrun.
 
 - 2026-10-12: Read back the completed label-swap matrix plan after updating it to reflect the actual seed variable and ten-test validation result.
+## 2026-10-12
+
+- Fixed the FedEx L=1 label-swap matrix to pass `fedex_shared_layer_count=1` only for CIFAR-10; MNIST and Fashion-MNIST retain their default model split. `main.py` syntax compilation and diff checks passed; full matrix execution remains unverified.
+- 2026-10-14: Set the main CIFAR-10 FedEx run to `fedex_shared_layer_count=1`, using existing FedEx wiring to aggregate and distribute only `conv1`. Static syntax validation passed; simulation not run.
