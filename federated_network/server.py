@@ -429,7 +429,9 @@ def model_distribution_fedex(servers: List[Server], all_clients: List[Client]) -
         # Get the server to which the client is connected
         server = servers[client.parent_server_id]
         # get the extractor of the server model
-        server_extractor, _ = split_to_extractor_and_classifier(server.model, None, server.model.get_model_type())
+        server_extractor, _ = split_to_extractor_and_classifier(
+            server.model, None, server.model.get_model_type(),
+            shared_layer_count=getattr(server.strategy, 'shared_layer_count', None))
 
         if server.fedex_alpha:  # if FedEx is used with EMA
             set_parameters_ema(client.model, server_extractor, server.fedex_alpha, False)
@@ -562,7 +564,8 @@ def change_server_aggregation_strategy(server_hierarchy: List[Any], drift_recove
             # # change the strategy only in the servers where drifted clients are connected
             # drifted = set(drift.drifted_client_indices or [])  # makes sure it's at least an empty set and not None
             # if set(server.client_ids) & drifted:  # checks if there is any intersection
-            server.strategy = strategy.FedEx.aggregator_fn()
+            fedex_shared_layer_count = (drift_recovery_parameters or {}).get('fedex_shared_layer_count')
+            server.strategy = strategy.FedEx.aggregator_fn(fedex_shared_layer_count)
 
     elif drift_recovery_method == constants.RecoveryAlgorithm.ORACLE:
         strategy.Oracle.configure_oracle_servers(
@@ -614,7 +617,8 @@ def server_fn(server_id: int, dataset_name: str, server_abs_id: int, drift_recov
     elif drift_recovery_method == constants.RecoveryAlgorithm.ORACLE:
         aggregator_strategy = strategy.Oracle.aggregator_fn()
     elif drift_recovery_method == constants.RecoveryAlgorithm.FEDEX:  # TODO: remove after testing
-        aggregator_strategy = strategy.FedEx.aggregator_fn()  # TODO: remove after testing
+        fedex_shared_layer_count = (drift_recovery_parameters or {}).get('fedex_shared_layer_count')
+        aggregator_strategy = strategy.FedEx.aggregator_fn(fedex_shared_layer_count)  # TODO: remove after testing
     elif drift_recovery_method == constants.RecoveryAlgorithm.DITTO:
         aggregator_strategy = strategy.Ditto.aggregator_fn()
     elif drift_recovery_method == constants.RecoveryAlgorithm.FEDBABU:

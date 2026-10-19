@@ -10,6 +10,8 @@ from device_utils import configure_device
 from federated_network.network import FederatedNetwork
 from random_utils import configure_random_seed
 
+import copy
+import json
 import os
 import sys
 
@@ -17,10 +19,436 @@ import sys
 # (e.g., NaN, Inf, or out-of-bounds values) during loss computation in the training loop.
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
+# Run the CIFAR-10 FedEx shared-layer ablation for L=1..4. Here L is n-L in the paper,
+# where n is the model's total number of layers.
+run_L_ablation = False
+# Run the CIFAR-10 Scenario B rotation comparison for the selected methods.
+run_rotation_ablation = False
+# Run the CIFAR-10 FedEx rotation shared-layer ablation for L=1..4. Here L is n-L in the paper,
+# where n is the model's total number of layers.
+run_rotation_l_ablation = False
+# Run the FedEx L=1 label-swap matrix for the datasets/scenarios listed below.
+run_fedex_l1_label_swap_matrix = False
+# Random seed used by the FedEx L=1 label-swap matrix.
+fedex_l1_label_swap_seed = 42
+
+_FEDEX_L1_LABEL_SWAP_DATASETS = (
+    (constants.DatasetNames.F_MNIST, 'F_MNIST'),
+)
+
+_FEDEX_L1_LABEL_SWAP_SCENARIOS = (
+    ('scenario_B', 2, [[0.1, 0.9], [0.8, 0.2]], [[1, 2], [1, 2]]),
+)
+def _run_l_ablation(experiment_seed: int) -> None:
+    """Run the isolated CIFAR-10 FedEx shared-layer ablation for L=1..4.
+
+    :param experiment_seed: Shared random seed used to match the L runs
+    :return: None
+    """
+    async_drift_specs = dict(
+        num_drift_groups=2,
+        drift_groups=None,
+        drift_split_round=0.8,
+        is_read_scenarios=False,
+        scenario_num=1,
+    )
+
+    drift_specifications = dict(
+        clients_fraction=0.8,
+        drift_group_proportions=[[0.1, 0.9], [0.8, 0.2]],
+        is_synchronous=False,
+        is_random=True,
+        async_drift_specs=async_drift_specs,
+        drift_mode=constants.DriftMode.LABEL_SWAP_INCREMENTAL_STEPS,
+        drift_step_rounds=[0.4, 0.65, 1.0],
+        max_rotation=45,
+        class_pairs_to_swap=[[(1, 2), (3, 4)], [(5, 7)]],
+        drift_pattern_id_map={1: [(1, 2), (3, 4)], 2: [(5, 7)]},
+        drift_patterns_over_time=[[1, 2], [1, 2]],
+        label_swap_percentage_steps=[1, 1],
+        current_drift_step=-1,
+    )
+
+    simulation_parameters = dict(
+        random_seed=experiment_seed,
+        is_server_adaptability=False,
+        is_plot_client_data_distributions=False,
+        client_ids_to_plot_data_distributions=[0, 1],
+        servers_have_test_data=False,
+        client_evaluation_stage='local_after_training',
+        drifted_class_metrics_enabled=False,
+        server_metric_weighting='uniform',
+    )
+
+    log_root = 'logs/swap/CIFAR-10/saved_logs_fedex/l_ablation'
+    plot_root = 'plots/swap/CIFAR-10/saved_plots_fedex/l_ablation'
+
+    for shared_layer_count in (1, 2, 3, 4):
+        configure_random_seed(experiment_seed)
+        drift_specs_for_run = copy.deepcopy(drift_specifications)
+        simulation_parameters_for_run = copy.deepcopy(simulation_parameters)
+        recovery_parameters = dict(
+            recovery_method=constants.RecoveryAlgorithm.FEDEX,
+            base_aggregation_method=constants.RecoveryAlgorithm.FEDEX,
+            fedau_alpha=0.9,
+            fedrc_cluster_count=3,
+            cluster_count=len(drift_specifications['drift_group_proportions'][0]) + 1,
+            fedex_alpha=0.9,
+            fedex_shared_layer_count=shared_layer_count,
+        )
+
+        log_dir = os.path.join(log_root, f'l{shared_layer_count}')
+        plot_dir = os.path.join(plot_root, f'l{shared_layer_count}')
+        os.makedirs(log_dir, exist_ok=True)
+        os.makedirs(plot_dir, exist_ok=True)
+
+        run_configuration = dict(
+            dataset=constants.DatasetNames.CIFAR_10,
+            method=constants.RecoveryAlgorithm.FEDEX,
+            L=shared_layer_count,
+            shared_layers=("conv1", "conv2", "fc1", "fc2")[:shared_layer_count],
+            random_seed=experiment_seed,
+            drift_specifications=drift_specs_for_run,
+            num_iid_client_instances=100,
+            num_noniid_client_instances=0,
+            num_training_rounds=400,
+            client_select_fraction=1,
+            fedex_alpha=0.9,
+            minibatch_size=128,
+            num_local_epochs=constants.TrainingHyperparameters.LOCAL_EPOCHS,
+        )
+        with open(os.path.join(log_dir, 'run_config.json'), 'w', encoding='utf-8') as config_file:
+            json.dump(run_configuration, config_file, indent=2, default=str)
+
+        fed_net = FederatedNetwork(
+            num_iid_client_instances=100,
+            num_noniid_client_instances=0,
+            server_tree_layout=[1],
+            num_training_rounds=400,
+            dataset_name=constants.DatasetNames.CIFAR_10,
+            noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+            drift_specs=drift_specs_for_run,
+            simulation_parameters=simulation_parameters_for_run,
+            client_select_fraction=1,
+            drift_recovery_parameters=recovery_parameters,
+            minibatch_size=128,
+            num_local_epochs=constants.TrainingHyperparameters.LOCAL_EPOCHS,
+        )
+        fed_net.run_simulation(file_save_path=plot_dir, log_save_path=log_dir)
+        print(f"Simulation completed: dataset=CIFAR-10, method=FedEx, L={shared_layer_count}.")
+
+
+def _run_rotation_ablation(experiment_seed: int) -> None:
+    """Run isolated CIFAR-10 Scenario B comparisons for the selected methods.
+
+    :param experiment_seed: Shared random seed used to match the method runs
+    :return: None
+    """
+    async_drift_specs = dict(
+        num_drift_groups=2,
+        drift_groups=None,
+        drift_split_round=0.8,
+        is_read_scenarios=False,
+        scenario_num=2,
+    )
+    drift_specifications = dict(
+        clients_fraction=0.8,
+        drift_group_proportions=[[0.1, 0.9], [0.8, 0.2]],
+        is_synchronous=False,
+        is_random=True,
+        async_drift_specs=async_drift_specs,
+        drift_mode=constants.DriftMode.ROTATION_GRADUAL,
+        drift_step_rounds=[0.4, 0.65, 1.0],
+        max_rotation=45,
+        class_pairs_to_swap=[[(1, 2), (3, 4)], [(5, 7)]],
+        drift_pattern_id_map={1: [(1, 2), (3, 4)], 2: [(5, 7)]},
+        rotation_class_id_map={1: [1, 2, 3, 4], 2: [5, 7]},
+        drift_patterns_over_time=[[1, 2], [1, 2]],
+        label_swap_percentage_steps=[1, 1],
+        current_drift_step=-1,
+    )
+    simulation_parameters = dict(
+        random_seed=experiment_seed,
+        is_server_adaptability=False,
+        is_plot_client_data_distributions=False,
+        client_ids_to_plot_data_distributions=[],
+        servers_have_test_data=False,
+        client_evaluation_stage='local_after_training',
+        drifted_class_metrics_enabled=False,
+        server_metric_weighting='uniform',
+    )
+    common_recovery_parameters = dict(
+        fedau_alpha=0.9,
+        fedrc_cluster_count=3,
+        cluster_count=len(drift_specifications['drift_group_proportions'][0]) + 1,
+        fedex_alpha=0.9,
+    )
+    method_configurations = [
+        (constants.RecoveryAlgorithm.FEDAVG, {}),
+        (constants.RecoveryAlgorithm.FEDBABU, dict(
+            fedbabu_head_finetune_epochs=5,
+            fedbabu_head_finetune_learning_rate=constants.TrainingHyperparameters.CLIENT_LEARNING_RATE,
+            fedbabu_head_finetune_momentum=0.5,
+            fedbabu_head_finetune_weight_decay=0.0,
+        )),
+        (constants.RecoveryAlgorithm.FAIRFEDDRIFT, dict(
+            fairfeddrift_loss_threshold=0.1,
+            fairfeddrift_window=1,
+            fairfeddrift_rounds_per_timestep=1,
+            fairfeddrift_seed=experiment_seed,
+        )),
+        (constants.RecoveryAlgorithm.ORACLE, {}),
+        (constants.RecoveryAlgorithm.FEDEX, dict(fedex_shared_layer_count=2)),
+    ]
+
+    for method, method_parameters in method_configurations:
+        configure_random_seed(experiment_seed)
+        drift_specs_for_run = copy.deepcopy(drift_specifications)
+        simulation_parameters_for_run = copy.deepcopy(simulation_parameters)
+        recovery_parameters = dict(
+            common_recovery_parameters,
+            recovery_method=method,
+            base_aggregation_method=method,
+            **method_parameters,
+        )
+        log_dir = os.path.join('logs', 'rotation', 'CIFAR-10', f'saved_logs_{method}')
+        plot_dir = os.path.join('plots', 'rotation', 'CIFAR-10', f'saved_plots_{method}')
+        os.makedirs(log_dir, exist_ok=True)
+        os.makedirs(plot_dir, exist_ok=True)
+
+        run_configuration = dict(
+            dataset=constants.DatasetNames.CIFAR_10,
+            method=method,
+            random_seed=experiment_seed,
+            scenario='B',
+            drift_specifications=drift_specs_for_run,
+            recovery_parameters=recovery_parameters,
+            num_iid_client_instances=10,
+            num_noniid_client_instances=0,
+            num_training_rounds=400,
+            client_select_fraction=1,
+            fedex_shared_layer_count=method_parameters.get('fedex_shared_layer_count'),
+        )
+        with open(os.path.join(log_dir, 'run_config.json'), 'w', encoding='utf-8') as config_file:
+            json.dump(run_configuration, config_file, indent=2, default=str)
+
+        fed_net = FederatedNetwork(
+            num_iid_client_instances=10,
+            num_noniid_client_instances=0,
+            server_tree_layout=[1],
+            num_training_rounds=400,
+            dataset_name=constants.DatasetNames.CIFAR_10,
+            noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+            drift_specs=drift_specs_for_run,
+            simulation_parameters=simulation_parameters_for_run,
+            client_select_fraction=1,
+            drift_recovery_parameters=recovery_parameters,
+            minibatch_size=128,
+            num_local_epochs=constants.TrainingHyperparameters.LOCAL_EPOCHS,
+        )
+        fed_net.run_simulation(file_save_path=plot_dir, log_save_path=log_dir)
+        print(f"Simulation completed: dataset=CIFAR-10, method={method}.")
+
+
+def _run_rotation_l_ablation(experiment_seed: int) -> None:
+    """Run the isolated CIFAR-10 rotation FedEx shared-layer ablation for L=1..4.
+
+    :param experiment_seed: Shared random seed used to match the L runs
+    :return: None
+    """
+    async_drift_specs = dict(
+        num_drift_groups=2,
+        drift_groups=None,
+        drift_split_round=0.8,
+        is_read_scenarios=False,
+        scenario_num=2,
+    )
+    drift_specifications = dict(
+        clients_fraction=0.8,
+        drift_group_proportions=[[0.1, 0.9], [0.8, 0.2]],
+        is_synchronous=False,
+        is_random=True,
+        async_drift_specs=async_drift_specs,
+        drift_mode=constants.DriftMode.ROTATION_GRADUAL,
+        drift_step_rounds=[0.4, 0.65, 1.0],
+        max_rotation=45,
+        class_pairs_to_swap=[[(1, 2), (3, 4)], [(5, 7)]],
+        drift_pattern_id_map={1: [(1, 2), (3, 4)], 2: [(5, 7)]},
+        rotation_class_id_map={1: [1, 2, 3, 4], 2: [5, 7]},
+        drift_patterns_over_time=[[1, 2], [1, 2]],
+        label_swap_percentage_steps=[1, 1],
+        current_drift_step=-1,
+    )
+    simulation_parameters = dict(
+        random_seed=experiment_seed,
+        is_server_adaptability=False,
+        is_plot_client_data_distributions=False,
+        client_ids_to_plot_data_distributions=[],
+        servers_have_test_data=False,
+        client_evaluation_stage='local_after_training',
+        drifted_class_metrics_enabled=False,
+        server_metric_weighting='uniform',
+    )
+    common_recovery_parameters = dict(
+        recovery_method=constants.RecoveryAlgorithm.FEDEX,
+        base_aggregation_method=constants.RecoveryAlgorithm.FEDEX,
+        fedau_alpha=0.9,
+        fedrc_cluster_count=3,
+        cluster_count=len(drift_specifications['drift_group_proportions'][0]) + 1,
+        fedex_alpha=0.9,
+    )
+    log_root = 'logs/swap/CIFAR-10/saved_logs_fedex/rot_l_ablation'
+    plot_root = 'plots/swap/CIFAR-10/saved_plots_fedex/rot_l_ablation'
+
+    for shared_layer_count in (1, 2, 3, 4):
+        configure_random_seed(experiment_seed)
+        drift_specs_for_run = copy.deepcopy(drift_specifications)
+        simulation_parameters_for_run = copy.deepcopy(simulation_parameters)
+        recovery_parameters = dict(
+            common_recovery_parameters,
+            fedex_shared_layer_count=shared_layer_count,
+        )
+        log_dir = os.path.join(log_root, f'l{shared_layer_count}')
+        plot_dir = os.path.join(plot_root, f'l{shared_layer_count}')
+        os.makedirs(log_dir, exist_ok=True)
+        os.makedirs(plot_dir, exist_ok=True)
+
+        run_configuration = dict(
+            dataset=constants.DatasetNames.CIFAR_10,
+            method=constants.RecoveryAlgorithm.FEDEX,
+            L=shared_layer_count,
+            shared_layers=("conv1", "conv2", "fc1", "fc2")[:shared_layer_count],
+            random_seed=experiment_seed,
+            scenario='B',
+            drift_specifications=drift_specs_for_run,
+            recovery_parameters=recovery_parameters,
+            num_iid_client_instances=10,
+            num_noniid_client_instances=0,
+            num_training_rounds=400,
+            client_select_fraction=1,
+        )
+        with open(os.path.join(log_dir, 'run_config.json'), 'w', encoding='utf-8') as config_file:
+            json.dump(run_configuration, config_file, indent=2, default=str)
+
+        fed_net = FederatedNetwork(
+            num_iid_client_instances=10,
+            num_noniid_client_instances=0,
+            server_tree_layout=[1],
+            num_training_rounds=400,
+            dataset_name=constants.DatasetNames.CIFAR_10,
+            noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+            drift_specs=drift_specs_for_run,
+            simulation_parameters=simulation_parameters_for_run,
+            client_select_fraction=1,
+            drift_recovery_parameters=recovery_parameters,
+            minibatch_size=128,
+            num_local_epochs=constants.TrainingHyperparameters.LOCAL_EPOCHS,
+        )
+        fed_net.run_simulation(file_save_path=plot_dir, log_save_path=log_dir)
+        print(f"Simulation completed: dataset=CIFAR-10, method=FedEx, rotation L={shared_layer_count}.")
+
+
+def _run_fedex_l1_label_swap_matrix(experiment_seed: int) -> None:
+    """Run independent FedEx L=1 simulations for each dataset and label-swap scenario.
+
+    :param experiment_seed: Seed shared by all dataset/scenario runs
+    :return: None
+    """
+    class_pairs_by_operation = {1: [(1, 2), (3, 4)], 2: [(5, 7)]}
+    for dataset_name, dataset_folder in _FEDEX_L1_LABEL_SWAP_DATASETS:
+        for scenario_name, scenario_num, proportions, patterns in _FEDEX_L1_LABEL_SWAP_SCENARIOS:
+            configure_random_seed(experiment_seed)
+            drift_specifications = dict(
+                clients_fraction=0.8,
+                drift_group_proportions=copy.deepcopy(proportions),
+                is_synchronous=False,
+                is_random=True,
+                async_drift_specs=dict(
+                    num_drift_groups=2,
+                    drift_groups=None,
+                    drift_split_round=0.8,
+                    is_read_scenarios=False,
+                    scenario_num=scenario_num,
+                ),
+                drift_mode=constants.DriftMode.LABEL_SWAP_INCREMENTAL_STEPS,
+                drift_step_rounds=[0.4, 0.65, 1.0],
+                max_rotation=45,
+                class_pairs_to_swap=[class_pairs_by_operation[1], class_pairs_by_operation[2]],
+                drift_pattern_id_map=copy.deepcopy(class_pairs_by_operation),
+                drift_patterns_over_time=copy.deepcopy(patterns),
+                label_swap_percentage_steps=[1, 1],
+                current_drift_step=-1,
+            )
+            simulation_parameters = dict(
+                random_seed=experiment_seed,
+                is_server_adaptability=False,
+                is_plot_client_data_distributions=False,
+                client_ids_to_plot_data_distributions=[],
+                servers_have_test_data=False,
+                client_evaluation_stage='local_after_training',
+                drifted_class_metrics_enabled=False,
+                server_metric_weighting='uniform',
+            )
+            recovery_parameters = dict(
+                recovery_method=constants.RecoveryAlgorithm.FEDEX,
+                base_aggregation_method=constants.RecoveryAlgorithm.FEDEX,
+                fedau_alpha=0.9,
+                fedrc_cluster_count=3,
+                cluster_count=len(proportions[0]) + 1,
+                fedex_alpha=0.9,
+                fedex_shared_layer_count=1,
+            )
+            log_dir = os.path.join(
+                'logs', 'fedex_label_swap_l1_all_datasets', scenario_name[-1], dataset_folder,
+                'saved_logs_fedex') + os.sep
+            plot_dir = os.path.join(
+                'plots', 'fedex_label_swap_l1_all_datasets', scenario_name[-1], dataset_folder,
+                'saved_plots_fedex') + os.sep
+            os.makedirs(log_dir, exist_ok=True)
+            os.makedirs(plot_dir, exist_ok=True)
+
+            fed_net = FederatedNetwork(
+                num_iid_client_instances=100,
+                num_noniid_client_instances=0,
+                server_tree_layout=[1],
+                num_training_rounds=100,
+                dataset_name=dataset_name,
+                noniid_partitioning_strategy=constants.DatasetPartitionDistribution.DIRICHLET,
+                drift_specs=drift_specifications,
+                simulation_parameters=simulation_parameters,
+                drift_recovery_parameters=recovery_parameters,
+                client_select_fraction=1,
+                minibatch_size=128,
+                num_local_epochs=constants.TrainingHyperparameters.LOCAL_EPOCHS,
+            )
+            fed_net.run_simulation(file_save_path=plot_dir, log_save_path=log_dir)
+            print(f"Simulation completed: dataset={dataset_folder}, scenario={scenario_name}, FedEx L=1.")
+
+
 def main():
-    configure_device('cuda')  # Experiments require CUDA; unavailable CUDA raises instead of falling back to CPU.
     experiment_seed = 42  # Single seed handle shared by every method in a comparison.
     configure_random_seed(experiment_seed)
+
+    if run_rotation_ablation:
+        configure_device('cpu')
+        _run_rotation_ablation(experiment_seed)
+        return
+
+    if run_rotation_l_ablation:
+        configure_device('cpu')
+        _run_rotation_l_ablation(experiment_seed)
+        return
+
+    if run_fedex_l1_label_swap_matrix:
+        configure_device('cuda')
+        _run_fedex_l1_label_swap_matrix(fedex_l1_label_swap_seed)
+        return
+
+
+    configure_device('cuda')  # Experiments require CUDA; unavailable CUDA raises instead of falling back to CPU.
+    if run_L_ablation:
+        _run_l_ablation(experiment_seed)
+        return
 
     async_drift_specs = dict(
         num_drift_groups=2,  # Number of groups of clients that are affected by the drift asynchronously
@@ -364,7 +792,7 @@ def main():
 
     # Create a federated network
     fed_net = FederatedNetwork(
-        num_iid_client_instances=100,  # Number of IID clients in the federated network
+        num_iid_client_instances=10,  # Number of IID clients in the federated network
         # num_iid_client_instances=100,  # Suggested at FLTA
         num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
         server_tree_layout=[1],
@@ -379,11 +807,11 @@ def main():
         drift_recovery_parameters=drift_recovery_parameters, # Drift recovery algorithm related parameters
     )
 
-    # Running the simulation
-    fed_net.run_simulation(
-        file_save_path='plots/swap/MNIST/saved_plots_fedavg/',
-        log_save_path='logs/swap/MNIST/saved_logs_fedavg/')
-    print(f"Simulation completed: dataset=MNIST, method=FedAvg.")
+    # # Running the simulation
+    # fed_net.run_simulation(
+    #     file_save_path='plots/swap/MNIST/saved_plots_fedavg/',
+    #     log_save_path='logs/swap/MNIST/saved_logs_fedavg/')
+    # print(f"Simulation completed: dataset=MNIST, method=FedAvg.")
 
 
     # #00000000000000000 FedEx 00000000000000000000
@@ -417,11 +845,11 @@ def main():
         drift_recovery_parameters=drift_recovery_parameters, # Drift recovery algorithm related parameters
     )
 
-    # Running the simulation
-    fed_net.run_simulation(
-        file_save_path='plots/swap/MNIST/saved_plots_fedex/',
-        log_save_path='logs/swap/MNIST/saved_logs_fedex/')
-    print(f"Simulation completed: dataset=MNIST, method=FedEx.")
+    # # Running the simulation
+    # fed_net.run_simulation(
+    #     file_save_path='plots/swap/MNIST/saved_plots_fedex/',
+    #     log_save_path='logs/swap/MNIST/saved_logs_fedex/')
+    # print(f"Simulation completed: dataset=MNIST, method=FedEx.")
 
     # #00000000000000000 Ditto 00000000000000000000
     # Uncomment this block, and keep the other run_simulation calls disabled, to run Ditto on MNIST.
@@ -467,10 +895,10 @@ def main():
         client_select_fraction=1,
         drift_recovery_parameters=fedbabu_recovery_parameters,
     )
-    fedbabu_fed_net.run_simulation(
-        file_save_path='plots/swap/MNIST/saved_plots_fedbabu/',
-        log_save_path='logs/swap/MNIST/saved_logs_fedbabu/')
-    print(f"Simulation completed: dataset=MNIST, method=FedBABU.")
+    # fedbabu_fed_net.run_simulation(
+    #     file_save_path='plots/swap/MNIST/saved_plots_fedbabu/',
+    #     log_save_path='logs/swap/MNIST/saved_logs_fedbabu/')
+    # print(f"Simulation completed: dataset=MNIST, method=FedBABU.")
 
     # #00000000000000000 FairFedDrift 00000000000000000000
     # Keep both the constructor and run call commented until this handle is selected.
@@ -487,10 +915,10 @@ def main():
         drift_recovery_parameters=fairfeddrift_recovery_parameters,
     )
     
-    fairfeddrift_fed_net.run_simulation(
-        file_save_path='plots/swap/MNIST/saved_plots_fairfeddrift/',
-        log_save_path='logs/swap/MNIST/saved_logs_fairfeddrift/')
-    print(f"Simulation completed: dataset=MNIST, method=FairFedDrift.")
+    # fairfeddrift_fed_net.run_simulation(
+    #     file_save_path='plots/swap/MNIST/saved_plots_fairfeddrift/',
+    #     log_save_path='logs/swap/MNIST/saved_logs_fairfeddrift/')
+    # print(f"Simulation completed: dataset=MNIST, method=FairFedDrift.")
 
     # # # #00000000000000000 Oracle 00000000000000000000
     # Define drift recovery algorithm related parameters
@@ -527,10 +955,10 @@ def main():
     # # Before enabling this Oracle run, initialize cumulative-concept routing once:
     # from strategy.Oracle.support import prepare_oracle_cumulative_routing
     # prepare_oracle_cumulative_routing(fed_net, num_classes=10)
-    fed_net.run_simulation(
-        file_save_path='plots/swap/MNIST/saved_plots_oracle/',
-        log_save_path='logs/swap/MNIST/saved_logs_oracle/')
-    print(f"Simulation completed: dataset=MNIST, method=Oracle.")
+    # fed_net.run_simulation(
+    #     file_save_path='plots/swap/MNIST/saved_plots_oracle/',
+    #     log_save_path='logs/swap/MNIST/saved_logs_oracle/')
+    # print(f"Simulation completed: dataset=MNIST, method=Oracle.")
 
 
     # # # 00000000000000000000000000000000000000000000000000000000000000
@@ -565,11 +993,11 @@ def main():
         drift_recovery_parameters=drift_recovery_parameters, # Drift recovery algorithm related parameters
     )
 
-    # Running the simulation
-    fed_net.run_simulation(
-        file_save_path='plots/swap/F_MNIST/saved_plots_fedavg/',
-        log_save_path='logs/swap/F_MNIST/saved_logs_fedavg/')
-    print(f"Simulation completed: dataset=Fashion-MNIST, method=FedAvg.")
+    # # Running the simulation
+    # fed_net.run_simulation(
+    #     file_save_path='plots/swap/F_MNIST/saved_plots_fedavg/',
+    #     log_save_path='logs/swap/F_MNIST/saved_logs_fedavg/')
+    # print(f"Simulation completed: dataset=Fashion-MNIST, method=FedAvg.")
 
 
     # #00000000000000000 FedEx 00000000000000000000
@@ -603,11 +1031,11 @@ def main():
         drift_recovery_parameters=drift_recovery_parameters, # Drift recovery algorithm related parameters
     )
 
-    # Running the simulation
-    fed_net.run_simulation(
-        file_save_path='plots/swap/F_MNIST/saved_plots_fedex/',
-        log_save_path='logs/swap/F_MNIST/saved_logs_fedex/')
-    print(f"Simulation completed: dataset=Fashion-MNIST, method=FedEx.")
+    # # Running the simulation
+    # fed_net.run_simulation(
+    #     file_save_path='plots/swap/F_MNIST/saved_plots_fedex/',
+    #     log_save_path='logs/swap/F_MNIST/saved_logs_fedex/')
+    # print(f"Simulation completed: dataset=Fashion-MNIST, method=FedEx.")
 
     # #00000000000000000 Ditto 00000000000000000000
     # Uncomment this block, and keep the other run_simulation calls disabled, to run Ditto on Fashion-MNIST.
@@ -653,10 +1081,10 @@ def main():
         client_select_fraction=1,
         drift_recovery_parameters=fedbabu_recovery_parameters,
     )
-    fedbabu_fed_net.run_simulation(
-        file_save_path='plots/swap/F_MNIST/saved_plots_fedbabu/',
-        log_save_path='logs/swap/F_MNIST/saved_logs_fedbabu/')
-    print(f"Simulation completed: dataset=Fashion-MNIST, method=FedBABU.")
+    # fedbabu_fed_net.run_simulation(
+    #     file_save_path='plots/swap/F_MNIST/saved_plots_fedbabu/',
+    #     log_save_path='logs/swap/F_MNIST/saved_logs_fedbabu/')
+    # print(f"Simulation completed: dataset=Fashion-MNIST, method=FedBABU.")
 
     #00000000000000000 FairFedDrift 00000000000000000000
     fairfeddrift_fed_net = FederatedNetwork(
@@ -671,10 +1099,10 @@ def main():
         client_select_fraction=1,
         drift_recovery_parameters=fairfeddrift_recovery_parameters,
     )
-    fairfeddrift_fed_net.run_simulation(
-        file_save_path='plots/swap/F_MNIST/saved_plots_fairfeddrift/',
-        log_save_path='logs/swap/F_MNIST/saved_logs_fairfeddrift/')
-    print(f"Simulation completed: dataset=Fashion-MNIST, method=FairFedDrift.")
+    # fairfeddrift_fed_net.run_simulation(
+    #     file_save_path='plots/swap/F_MNIST/saved_plots_fairfeddrift/',
+    #     log_save_path='logs/swap/F_MNIST/saved_logs_fairfeddrift/')
+    # print(f"Simulation completed: dataset=Fashion-MNIST, method=FairFedDrift.")
 
     # # # #00000000000000000 Oracle 00000000000000000000
     # Define drift recovery algorithm related parameters
@@ -711,10 +1139,10 @@ def main():
     # from strategy.Oracle.support import prepare_oracle_cumulative_routing
     # prepare_oracle_cumulative_routing(fed_net, num_classes=10)
     # Running the simulation
-    fed_net.run_simulation(
-        file_save_path='plots/swap/F_MNIST/saved_plots_oracle/',
-        log_save_path='logs/swap/F_MNIST/saved_logs_oracle/')
-    print(f"Simulation completed: dataset=Fashion-MNIST, method=Oracle.")
+    # fed_net.run_simulation(
+    #     file_save_path='plots/swap/F_MNIST/saved_plots_oracle/',
+    #     log_save_path='logs/swap/F_MNIST/saved_logs_oracle/')
+    # print(f"Simulation completed: dataset=Fashion-MNIST, method=Oracle.")
 
     # # 00000000000000000000000000000000000000000000000000000000000000
     # # 0000000000000000000000000 CIFAR-10 000000000000000000000000000
@@ -751,11 +1179,11 @@ def main():
         drift_recovery_parameters=drift_recovery_parameters, # Drift recovery algorithm related parameters
     )
 
-    # # Running the simulation
-    fed_net.run_simulation(
-        file_save_path='plots/swap/CIFAR-10/saved_plots_fedavg/',
-        log_save_path='logs/swap/CIFAR-10/saved_logs_fedavg/')
-    print(f"Simulation completed: dataset=CIFAR-10, method=FedAvg.")
+    # # # Running the simulation
+    # fed_net.run_simulation(
+    #     file_save_path='plots/swap/CIFAR-10/saved_plots_fedavg/',
+    #     log_save_path='logs/swap/CIFAR-10/saved_logs_fedavg/')
+    # print(f"Simulation completed: dataset=CIFAR-10, method=FedAvg.")
 
     #00000000000000000 FedEx 00000000000000000000
     # fedex_alpha_list = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
@@ -776,7 +1204,7 @@ def main():
 
         # Create a federated network
         fed_net = FederatedNetwork(
-            num_iid_client_instances=100,  # Number of IID clients in the federated network
+            num_iid_client_instances=10,  # Number of IID clients in the federated network
             # num_iid_client_instances=100,  # Suggested at FLTA
             num_noniid_client_instances=0,  # Number of non-IID clients in the federated network
             server_tree_layout=[1],
@@ -848,10 +1276,10 @@ def main():
         client_select_fraction=1,
         drift_recovery_parameters=fedbabu_recovery_parameters,
     )
-    fedbabu_fed_net.run_simulation(
-        file_save_path='plots/swap/CIFAR-10/saved_plots_fedbabu/',
-        log_save_path='logs/swap/CIFAR-10/saved_logs_fedbabu/')
-    print(f"Simulation completed: dataset=CIFAR-10, method=FedBABU.")
+    # fedbabu_fed_net.run_simulation(
+    #     file_save_path='plots/swap/CIFAR-10/saved_plots_fedbabu/',
+    #     log_save_path='logs/swap/CIFAR-10/saved_logs_fedbabu/')
+    # print(f"Simulation completed: dataset=CIFAR-10, method=FedBABU.")
 
     # #00000000000000000 FairFedDrift 00000000000000000000
     fairfeddrift_fed_net = FederatedNetwork(
@@ -866,10 +1294,10 @@ def main():
         client_select_fraction=1,
         drift_recovery_parameters=fairfeddrift_recovery_parameters,
     )
-    fairfeddrift_fed_net.run_simulation(
-        file_save_path='plots/swap/CIFAR-10/saved_plots_fairfeddrift/',
-        log_save_path='logs/swap/CIFAR-10/saved_logs_fairfeddrift/')
-    print(f"Simulation completed: dataset=CIFAR-10, method=FairFedDrift.")
+    # fairfeddrift_fed_net.run_simulation(
+    #     file_save_path='plots/swap/CIFAR-10/saved_plots_fairfeddrift/',
+    #     log_save_path='logs/swap/CIFAR-10/saved_logs_fairfeddrift/')
+    # print(f"Simulation completed: dataset=CIFAR-10, method=FairFedDrift.")
 
     # 0000000000000000 ORACLE 000000000000000000000
     # Define drift recovery algorithm related parameters
@@ -906,10 +1334,10 @@ def main():
     # from strategy.Oracle.support import prepare_oracle_cumulative_routing
     # prepare_oracle_cumulative_routing(fed_net, num_classes=10)
     # Running the simulation
-    fed_net.run_simulation(
-        file_save_path='plots/swap/CIFAR-10/saved_plots_oracle/',
-        log_save_path='logs/swap/CIFAR-10/saved_logs_oracle/')
-    print(f"Simulation completed: dataset=CIFAR-10, method=Oracle.")
+    # fed_net.run_simulation(
+    #     file_save_path='plots/swap/CIFAR-10/saved_plots_oracle/',
+    #     log_save_path='logs/swap/CIFAR-10/saved_logs_oracle/')
+    # print(f"Simulation completed: dataset=CIFAR-10, method=Oracle.")
 
 
     # # 00000000000000000000000000000000000000000000000000000000000000

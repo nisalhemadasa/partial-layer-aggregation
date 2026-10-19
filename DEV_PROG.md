@@ -1,5 +1,39 @@
 # Development progress
 
+## 2026-10-14
+
+- Disabled the FedEx matrix, set CIFAR-10 FedEx to L=1 (`conv1` only), and commented every other `run_simulation()` call in `main.py`. Syntax and whitespace checks passed; simulation not run.
+
+## 2026-10-12
+
+- Configured the active FedEx label-swap run for Fashion-MNIST Scenario B with 100 IID clients, 100 rounds, and L=1. Extended the shared-prefix split to support the single-convolution MNIST/Fashion-MNIST CNN so L=1 aggregates `conv1`; Python syntax compilation passed, simulation execution remains unverified.
+- Restricted the active FedEx L=1 label-swap matrix to MNIST and Fashion-MNIST and changed scenario output paths to `<scenario>/<dataset>/saved_logs_fedex` and the corresponding `saved_plots_fedex` tree. Python syntax compilation passed; full simulations remain unrun.
+
+## 2026-10-09
+
+- Added the disabled `run_rotation_ablation` handle and `_run_rotation_ablation()` entry point in `main.py`, wired as an isolated early-return branch. Runner intentionally raises a clear pending-integration error until rotation drift support is implemented; source inspection completed, runtime validation not run.
+- Added `Drift.rotation_class_id_map` and passed it through `drift_fn()` with CIFAR-10 operation defaults `{1: [1, 2, 3, 4], 2: [5, 7]}`. Existing label-swap mapping is unchanged. AST syntax parsing and `git diff --check` passed; runtime behavior is not yet wired or verified.
+- Added `Drift.rotate_images_by_class_gradually()` and routed `ROTATION_GRADUAL` through it. It rebuilds train/test datasets from cached originals per operation ID, rotates only mapped labels at the current gradual angle, and shares each operation's transformed base dataset among its clients. AST parsing and `git diff --check` passed; no runtime tests run, and incremental rotation modes remain unchanged.
+- Completed `_run_rotation_ablation()` in `main.py`: five isolated CIFAR-10 Scenario B methods, 10 IID clients, 400 rounds, per-method output/config directories, and FedEx L=2. The rotation branch selects CPU before constructing networks to satisfy FairFedDrift's setup constraints; ordinary runs retain CUDA configuration. Added `tests/test_rotation_drift.py` for class filtering, non-compounding, legacy dispatch, runner settings, and a two-round synthetic CIFAR federation.
+- Rotation verification: all four new tests passed, including the two-round synthetic federation, using the available Python 3.7/Torch 1.13 runtime with a temporary import compatibility shim. The normal test command cannot import this Python 3.10+ checkout in that interpreter. Evaluation regressions passed under the shim; two FairFedDrift drift regression checks could not pass because that legacy test calls `drift_fn()` without its required seed and uses newer `Mock.call_args.args` APIs. `git diff --check` and Python AST parsing passed.
+
+## 2026-10-06
+
+- Created `L_VAR_PLAN.md` for an isolated CIFAR-10 FedEx Scenario B L ablation with L-specific shared-layer prefixes, a gated `run_L_ablation` handle, and separate per-L output directories. Readback completed; implementation and experiments remain pending.
+- Refined `L_VAR_PLAN.md` to match the requested dedicated FedEx-style block and per-L loop. The plan preserves all existing experiment blocks and selects the ablation path only when its flag is enabled; readback completed, implementation remains pending.
+- Expanded `L_VAR_PLAN.md` into file/function-level steps for FedEx prefix aggregation/distribution, strategy configuration, and the `main.py` runner. The full CIFAR-10 model remains unchanged, and both log and plot directories must be created before each run; readback completed, implementation and smoke/full runs remain pending.
+- Corrected `L_VAR_PLAN.md` after inspection of FedEx's aggregation, model distribution, and commented split alternatives: L now controls which leading layers are shared, while later layers remain client-local. Readback completed; implementation and experiment results remain pending.
+- Clarified the L=1..4 acceptance criteria and run metadata in `L_VAR_PLAN.md` to describe shared layer prefixes, not truncated models or classifier readouts; marked `network.py` as an audit/pass-through path with no expected round-loop edits. Readback completed; implementation remains pending.
+- Added optional `shared_layer_count` support to `models/utils.py::split_to_extractor_and_classifier()` for CIFAR-10 prefixes `conv1` through `fc2`; omitted settings preserve the existing split. Source readback completed; tests and integration remain pending.
+- Passed `fedex_shared_layer_count` through `FedEx.aggregator_fn()`, initial/switch-time server strategy creation, aggregation, and `model_distribution_fedex()`. Diff review completed; tests and simulation remain pending.
+- Attempted focused L=1..4 aggregation/distribution verification; runtime checks could not import PyTorch in either available Python interpreter. Syntax compilation passed for `models/utils.py`, `strategy/FedEx/fedex.py`, and `federated_network/server.py`; behavioral verification remains pending.
+- Added `run_L_ablation` and `_run_l_ablation()` in `main.py`. The true path runs four fresh CIFAR-10 FedEx Scenario B networks with L-specific recovery settings, seeds, logs, plots, and run metadata, then returns before ordinary experiments; the false path falls through unchanged. Syntax compilation and `git diff --check` passed; execution remains unverified without PyTorch.
+- Added `tests/test_fedex_l_ablation.py` for exact shared-prefix aggregation/distribution, client-local layer preservation, default FedEx compatibility, and server configuration propagation. Source syntax check passed; test execution remains pending because PyTorch is not installed in the available interpreters.
+- Statically checked `main.py` entry-point isolation and the L loop: the flag defaults false, true returns before normal experiments, and both per-L directories are created before `run_simulation()`. Actual output writing and the regression test remain unverified without PyTorch.
+- Attempted `python3 -m unittest discover -s tests -p test_fedex_l_ablation.py`; loading stopped at `ModuleNotFoundError: No module named 'torch'`. Inspected `set_parameters()`/`set_parameters_ema()` and confirmed they accept partial state dictionaries when strict mode is false, as used by the FedEx paths; runtime verification remains blocked.
+- Ran `venv/bin/python -m unittest discover -s tests -p test_fedex_l_ablation.py` with PyTorch 2.5.0+cu124; all four FedEx L-ablation regression checks passed.
+- Ran one-round/two-client CPU end-to-end smoke simulations for L=1, 2, 3, and 4 through the real `FederatedNetwork.run_simulation()` loop, using a small synthetic CIFAR-shaped dataset and temporary `/tmp` outputs. All four completed; this validates execution only, not real CIFAR-10 accuracy. Full 100-client/400-round CIFAR-10 runs remain pending.
+
 ## 2026-09-22
 
 - Created `FairFedDrift_integration_plan.txt` with small implementation/check steps after reading AGENTS.md, current strategy hooks and upstream revision `51dec5e`. Source and document readback checks completed; integration and runtime validation remain pending.
@@ -231,3 +265,145 @@ Keep one brief dated entry per development step: change, validation, and any rem
 - 2026-10-01: Ran a matched 50-round CUDA Fashion-MNIST comparison of FedAvg, FedEx, FairFedDrift, and Oracle at learning rate 0.005/3 local epochs (seed 42; 100 Dirichlet non-IID clients; full participation; global-after-download evaluation). Partition and starting-model checks passed. Saved round logs, summary JSON, and REPORT.md under ignored plots/.cpu_validation/fashionmnist_strategy_comparison_20261001T091531Z/. FairFedDrift stayed at one cluster; pre-drift accuracy remained near 10%. Same-round local/global accuracy gaps differed by method; one-seed absolute results need training/tuning diagnosis.
 
 - 2026-10-01: Extended the matched comparison runner with a FedBABU supplemental mode. FedBABU completed at the same partitions, initial server, and client bodies; its intentionally shared initial classifier head differs from independent client heads in other methods. Shared-model accuracy averaged 33.3% during drift; dedicated final personalized accuracy was 32.1%. Read-back identified 10% local-data sampling (about 60 examples, one minibatch per client/epoch) as a likely low-baseline contributor. Updated comparison summary/REPORT.md; multi-seed confirmation and training-configuration follow-up remain pending.
+
+- 2026-10-06: Completed four FedEx L-ablation regression tests and four one-round synthetic-data simulation smoke runs (L=1..4); Python syntax and diff checks passed. Started the real CIFAR-10 100-client/400-round run, then stopped it at the user's request during L=1 evaluation; it exited with KeyboardInterrupt and may have left partial L=1 artifacts. No full real-data run or accuracy-profile comparison is claimed. The implementation is ready for the user's end-to-end run; inspect/clear partial L=1 outputs before rerunning if needed.
+- 2026-10-09: Updated the ablation notebook to prefer the newer nested l_ablation/l1-l4 logs and validated notebook syntax. Plot regeneration was attempted but external figure-directory writing was rejected by automatic approval; outputs remain unverified for the new logs.
+- 2026-10-09: Regenerated CIFAR-10 L-ablation plots from the newer nested l1-l4 logs. Saved raw plots, legend, and _nv no-band plots in the requested ablation folder and six-round-smoothed counterparts under its smooth subfolder. Validation: execution completed; accuracy/loss, legend, and _nv PNG/PDF/PGF files were confirmed in both locations.
+
+- 2026-10-11: Drafted ROTATION_L_ABLATION_PLAN.md for an independent FedEx L=1..4 sweep using the existing CIFAR-10 Scenario B rotation configuration; implementation and runtime validation are pending.
+
+- 2026-10-11: Added the independent _run_rotation_l_ablation() FedEx L=1..4 runner in main.py with the CIFAR-10 Scenario B, 10-client rotation configuration and separate rot_l_ablation/l1-l4 output paths. Runner is implemented; main() dispatch and focused/runtime validation remain pending.
+
+- 2026-10-11: Connected run_rotation_l_ablation to main() with an isolated CPU-configured early-return path. Syntax validation passed; focused runner configuration checks and runtime smoke validation remain pending.
+
+- 2026-10-11: Added focused rotation L-ablation runner/dispatch tests for L=1..4, CIFAR-10 Scenario B/10-client rotation settings, and distinct rot_l_ablation outputs. AST parsing and git diff --check passed. Runtime tests were attempted but could not execute: Python 3.7 rejects newer union annotations, Python 3.11 lacks SciPy, and Python 3.10 test discovery stalled without output and was stopped; simulation smoke behavior remains unverified.
+
+- 2026-10-11: Focused validation completed for rotation drift and the new rotation L ablation: all 6 tests passed, including L=1..4 runner/output configuration and the existing two-round synthetic CIFAR-shaped federation. The full 400-round ablation was not run.
+
+- 2026-10-11: Narrowed the CIFAR-10 rotation L-ablation runner to FedEx L=1/conv1 only and updated its focused regression check; all 6 rotation tests passed, including the two-round synthetic federation. Added ROTATION_L1_ALL_DATASETS_PLAN.md for a separate all-image-dataset/scenario runner and isolated output tree; exact scenario CSV definitions are absent and need confirmation before implementation.
+
+- 2026-10-11: Restored the original CIFAR-10 rotation L-ablation sweep (L=1..4) and added a separate opt-in FedEx L=1 matrix for five image datasets across inline Scenarios A/B/C, with dedicated logs/plots roots. Rotation drift now exposes Tiny ImageNet cached transformed tensors as samples so its rotations reach training. All 9 focused rotation tests passed, including matrix configuration and small synthetic end-to-end/regression checks; full matrix simulations were not run. Scenario CSV directory is absent, so A/B/C schedules are sourced from main.py inline definitions.
+
+- 2026-10-12: Revised ROTATION_L1_ALL_DATASETS_PLAN.md per user direction: matrix is limited to MNIST, F_MNIST, and CIFAR-10, and uses standard simulation log artifacts without run_config.json. Existing code was not changed in this planning step.
+
+- 2026-10-12: Reverted the separate run_rotation_l1_all_datasets experiment block and its matrix tests at the user's request. Removed its dispatch and the Tiny ImageNet adapter added only for that block; preserved the existing CIFAR-10 rotation L-ablation. Updated ROTATION_L1_ALL_DATASETS_PLAN.md to remain a plan for the requested three-dataset scope.
+
+- 2026-10-12: Rewrote ROTATION_L1_ALL_DATASETS_PLAN.md as a plan-only proposal for an isolated FedEx L=1 rotation matrix over MNIST, F_MNIST, CIFAR-10, all verified scenarios, independent logs, and a selectable seed handle. No code or simulation was changed/run in this step.
+
+- 2026-10-12: Updated ROTATION_L1_ALL_DATASETS_PLAN.md to specify label-swap drift for Scenarios A/B/C and renamed the proposed independent log/plot roots to fedex_label_swap_l1_all_datasets. Plan-only; no code or simulations changed.
+
+- 2026-10-12: Renamed the plan artifact to LABEL_SWAP_L1_ALL_DATASETS_PLAN.md and aligned the selectable seed handle name with label-swap scope. Plan-only.
+
+- 2026-10-12: Implemented the independent FedEx L=1 label-swap matrix for MNIST, F_MNIST, and CIFAR-10 across inline Scenarios A/B/C. Added the selectable seed, isolated dispatch, and independent log/plot roots without run_config.json. All 9 focused rotation/label-swap checks passed, including label changes on train/test data and the small synthetic CIFAR federation smoke; full nine-run matrix not run. Scenario CSV directory is absent, so schedules follow inline main.py definitions.
+
+- 2026-10-12: Added a one-round synthetic CIFAR-shaped label-swap federation smoke test and scenario proportion/pattern assertions. Rotation/label-swap focused suite now passes all 10 tests; full nine-run matrix remains unrun.
+
+- 2026-10-12: Read back the completed label-swap matrix plan after updating it to reflect the actual seed variable and ten-test validation result.
+
+- 2026-10-12: Updated CIFAR-10 L-ablation legend configuration to display n-L labels and the corresponding shared-layer list (L3/conv1, L2/conv1+conv2, L1/conv1+conv2+fc1, L0/all four). Generated separate _nL_legend PNG/PDF/PGF files in raw and smooth output folders; notebook JSON and Python syntax passed.
+- 2026-10-12: Added and generated short reverse-mapped CIFAR-10 ablation legends containing only L3/L2/L1/L0 labels, in raw and smoothed folders, alongside layer-descriptive n-L legends. JSON/Python syntax and PNG/PDF/PGF outputs verified.
+- 2026-10-12: Moved 84 loose rotation L-ablation log files into their matching l1-l4 directories and removed each folder prefix from filenames. Validation: each run folder now has 22 files including run_config.json and required client/drift/evaluation/distance logs; no loose files remain.
+- 2026-10-12: Moved 95 loose CIFAR_rot/CIFAR-10 log files into the matching saved_logs_fedavg, saved_logs_oracle, saved_logs_fedex, saved_logs_fairfeddrift, and saved_logs_fedbabu folders, stripping folder prefixes from filenames. Validation: all five folders contain client_log.pkl and drift_specs_log.pkl; no loose files remain.
+- 2026-10-12: Added an independent CIFAR-10 Scenario B rotation plotting block using logs/swap/seed42/B/CIFAR_rot/CIFAR-10, all five methods, raw and nine-round-smoothed configs, and output paths under figures/new/seed42/B/CIFAR-10_rotation. Notebook JSON/Python syntax validated. Plot generation was not completed because this session filesystem approval policy prohibits writes outside the repository.
+# 2026-10-12: Generated raw and 9-round smoothed CIFAR-10 rotation plots from the seed42 Scenario B rotation logs; verified PNG, PDF, and PGF outputs in the requested figure directories. No remaining limitation.
+# 2026-10-12: Repointed the CIFAR-10 L-ablation notebook to the seed42 Scenario B rotation L1-L4 logs and generated raw plus 6-round-smoothed figures, legends, and no-variance variants. Verified 21 PNG/PDF/PGF outputs in each requested directory.
+# 2026-10-12: Added independent seed42 A/B/C batch plotting blocks to the MNIST, F_MNIST, and CIFAR-10 notebooks; generated raw figures for all nine dataset/scenario pairs and six-round-smoothed CIFAR-10 figures. Notebook JSON and execution validated; each scenario has 72 raw exports and 24 smooth exports (PNG/PDF/PGF).
+# 2026-10-12: Corrected MNIST/F_MNIST seed42 A/B/C batch blocks to load matching 50-round FedEx L2 runs, enforce a 0–50 x-axis, and omit legends; regenerated all plots. Verified source log lengths and inspected regenerated figures visually.
+# 2026-10-12: Matched MNIST/F_MNIST plots to CIFAR-10 axis spacing with 5% x margins and removed min/max standard-deviation bands; regenerated A/B/C plots. Notebook JSON and visual output checks passed.
+# 2026-10-12: Disabled standard-deviation shading for CIFAR-10 raw and six-round-smoothed batch plots; regenerated Scenario A/B/C outputs in l3 and l3/smooth. Notebook JSON validated and raw/smooth figures visually checked.
+# 2026-10-12: Added independent Scenario B MNIST/F_MNIST accuracy plot blocks with a y-label toggle and _wo_ax_label suffix; generated drift_1 and drift_2 variants in PNG/PDF/PGF. Notebook JSON/syntax and rendered output verified.
+# 2026-10-13: Added independent Scenario A drift_1 plotting blocks with T1 double arrows, matching the reference dimensions and label placement; suppresses titles and saves raw figures plus smoothed CIFAR-10 variants. Generated and visually checked PNG/PDF/PGF outputs.
+# 2026-10-13: Changed only the CIFAR-10 Scenario A drift_1 output prefix to include the scenario token, including the smooth directory block; did not regenerate plots. Notebook JSON and syntax validated.
+# 2026-10-13: Added scenario-aware A filenames for MNIST/F_MNIST T1 exports and revised Scenario B accuracy blocks to generate labeled drift 1/2 plus requested no-y-label variants with no heading; notebook JSON validation pending and plot exports not yet run.
+# 2026-10-13: Generated Scenario B MNIST and F_MNIST accuracy plots: drift 1/2 with y-labels, plus MNIST drift 2 and F_MNIST drift 1/2 without y-labels; titles omitted. PNG/PDF/PGF outputs verified under figures/new/seed42/l3/B. Both notebook JSON and code-cell syntax validated.
+# 2026-10-13: Updated CIFAR-10 plot functions to suppress drift headings and support T1 arrows for Scenario A drift 1, including focused/raw/smoothed paths; notebook syntax validated, regeneration pending.
+# 2026-10-13: Applied title-free cluster plotting and Scenario A drift-1 T1 arrows to MNIST/F_MNIST batch plots as well, so all datasets share the annotation behavior; notebook syntax validated, MNIST/F_MNIST regeneration pending.
+# 2026-10-13: Regenerated title-free CIFAR-10 Scenario A/B/C raw and six-round-smoothed plots; added T1 arrows to Scenario A drift-1 standard and focus plot code. Refreshed MNIST/F_MNIST Scenario A/B/C plots with title removal and T1 arrows on Scenario A drift 1. PNG/PDF/PGF files verified; all three notebooks passed JSON and code syntax checks.
+# 2026-10-13: Added Scenario B T2/T3 and Scenario C T4/T5/T6 arrow annotations at the reference y-position to every cluster plot, including CIFAR-10 raw/smooth; plot regeneration pending.
+# 2026-10-13: Regenerated Scenario B/C annotated drift plots for MNIST, F_MNIST, and CIFAR-10; T2/T3 span adjacent B drift boundaries and T4/T5/T6 span adjacent C boundaries. CIFAR-10 raw and six-round-smoothed exports refreshed. PNG/PDF/PGF outputs checked; all three notebooks pass JSON and syntax validation.
+# 2026-10-13: Updated CIFAR-10 batch code to save separate Scenario B/C drift-1 accuracy figures with scenario tokens in raw and smooth output names; notebook JSON/syntax checked and plots intentionally not regenerated.
+# 2026-10-13: Added separate CIFAR-10 Scenario B/C drift-1 accuracy export calls using scenario-aware names in raw and smooth output blocks; validated notebook JSON and syntax; no plots regenerated.
+# 2026-10-13: Refined CIFAR-10 Scenario B/C drift-1 naming in the shared exporter so its normal and smoothed accuracy/loss files include the scenario token without writing duplicate-name variants; syntax checked, no plots run.
+# 2026-10-13: Applied the Scenario A T1 arrow to drift 1, drift 2, and no-drift CIFAR-10 cluster figures, retained scenario-token drift-1 names for A/B/C, and regenerated raw plus six-round-smoothed CIFAR-10 plots. Checked rendered Scenario A drift-2/no-drift examples and validated notebook syntax.
+# 2026-10-13: Disabled the T1 arrow for Drift 2 cluster plots while retaining it for Scenario A Drift 1/no-drift; notebook JSON and cell syntax validate. Output regeneration is pending write access to the external figures directory.
+# 2026-10-13: Regenerated Scenario A CIFAR-10 cluster plots after suppressing T1 on Drift 2; raw and six-round-smoothed PNG/PDF/PGF outputs refreshed and the Drift 2 accuracy render was visually checked.
+# 2026-10-13: Matched MNIST and CIFAR-10 batch plots to the weak-local-training references: Scenario A T1 on Drift 1/no-drift only, B T2/T3, C T4/T5/T6; MNIST B/C Drift 1 filenames now include scenario tokens. Regenerated A/B/C MNIST and CIFAR-10 plots (including CIFAR-10 smooth), visually checked representative arrows, and validated notebook JSON/code syntax.
+# 2026-10-13: Verified B-period annotations are passed to each MNIST/F_MNIST cluster plot; regenerated Scenario B for both datasets so Drift 1, Drift 2, and no-drift outputs contain T2/T3. Visually checked representative F_MNIST images and validated both notebooks.
+# 2026-10-13: Added T2/T3 annotations to the Scenario B no-y-label plot blocks for MNIST and F_MNIST; regenerated their standard and wo_ax_label Drift 1/2 accuracy figures in PNG/PDF/PGF and visually verified the wo_ax_label outputs.
+# 2026-10-13: Added an independent F_MNIST Scenario B 100-client plotting block using dynamic client-count verification, existing cluster plot helpers, no variance shading, and T2/T3 interval arrows; notebook syntax validation follows.
+# 2026-10-13: Completed the F_MNIST Scenario B 100-client block using the confirmed 100-client logs; six drift/metric plots were saved as PNG/PDF/PGF with T2/T3 arrows. Notebook JSON/code syntax and output files were checked.
+# 2026-10-13: Added a separate export cell for the six-round-smoothed CIFAR-10 L-ablation accuracy plot with variance shading and the y-axis label omitted; saves with _wo_ax_label under the smooth output directory.
+# 2026-10-13: Generated the smoothed CIFAR-10 L-ablation no-variance accuracy figure without a y-axis label, with T2/T3 arrows, as PNG/PDF/PGF in the requested smooth directory; notebook JSON/code syntax and outputs checked.
+# 2026-10-13: Added and ran a separate CIFAR-10 rotation export for unlabeled y-axes; raw combined and clusterwise accuracy/loss plots were saved with _wo_ax_label in PNG/PDF/PGF under the requested Scenario B rotation folder. Confirmed the notebook code parses; local execution skipped the unrelated plot_utils import due to an installed torchvision mismatch.
+# 2026-10-13: Added and ran no-y-axis-label exports for the nine-round-smoothed CIFAR-10 rotation figures; combined and clusterwise accuracy/loss plots were saved as PNG/PDF/PGF in the rotation smooth folder. Notebook syntax and output files checked.
+# 2026-10-13: Corrected CIFAR-10 rotation no-y-label naming so _wo_ax_label is appended after the full existing metric filename for baseline and smooth exports. Regenerated only the smoothed exports in the smooth directory and removed their obsolete misnamed counterparts; notebook JSON/code validation follows.
+# 2026-10-13: Added independent raw and nine-round-smoothed CIFAR-10 rotation exports with standard-deviation bands disabled, preserving average curves and no-y-axis-label styling; outputs use the _nov suffix appended after the existing name and were generated in baseline and smooth folders.
+# 2026-10-13: Tightened the L-ablation legend export canvas and padding, and added a standalone compact L-only legend block targeting the requested CIFAR-10_l_ablation directory. Regenerated PNG/PDF/PGF and verified notebook code syntax.
+# 2026-10-13: Added a separate two-row export block for the 100-client drift legend and generated drift_legend_two_row as PNG/PDF/PGF in the requested directory; notebook cell syntax validated.
+# 2026-10-13: Added and generated a two-row standalone legend_only variant for 100-client plots, with four columns per row and the existing method/drift styling; PNG/PDF/PGF outputs saved beside the original legend.
+# 2026-10-13: Added Scenario B T2/T3 double-arrow annotations to CIFAR-10 rotation combined and clusterwise plot helpers and passed the intervals through standard, no-y-label, and average-only exports. Regenerated baseline and nine-round-smoothed PNG/PDF/PGF variants; visually checked the smooth no-y-label average-only figure and validated notebook syntax.
+# 2026-10-13: Added labeled average-only CIFAR-10 rotation export cells for raw and nine-round-smoothed plots; both retain T2/T3 arrows, omit variance bands, and append _nov after the metric. Generated PNG/PDF/PGF outputs in baseline and smooth folders.
+# 2026-10-13: Updated the two-row 100-client legend to use the CIFAR-10 rotation method colors at full line opacity and removed the No drift entry; regenerated PNG/PDF/PGF in the established output folder.
+# 2026-10-13: Made CIFAR-10 L-ablation colors deterministic using the canonical blue/orange/green/red palette, and added a smooth-only rotation L-ablation regeneration block. Regenerated smoothed plots, no-variance variants, and legends in the requested smooth folder.
+# 2026-10-13: Added and ran a separate six-round-smoothed Drift 2 L-ablation block for rotation and label-swap logs, using canonical L1-L4 colors, scenario B drift identity ordering, T2/T3 annotations, and matching plot style. Accuracy/loss PNG/PDF/PGF outputs saved to the requested directories.
+# 2026-10-13: Added and ran independent six-round-smoothed Drift 1 L-ablation exports for rotation and label-swap logs, with average curves only (no standard-deviation bands), canonical L1-L4 colors, and Scenario B T2/T3 annotations. Accuracy/loss PNG/PDF/PGF outputs saved in the requested drift1 directories; notebook syntax and outputs checked.
+# 2026-10-13: Increased the six-round-smoothed Drift 1 L-ablation curve widths by 20% (pre-drift 1.8 to 2.16; Drift 1 cluster 1.6 to 1.92) in the dedicated notebook export cell and regenerated rotation and label-swap accuracy/loss plots as PNG/PDF/PGF. Both output directories completed successfully; notebook syntax and git diff validation checked.
+# 2026-10-13: Increased Drift 1 ablation curve widths to 2.7, renamed accuracy exports to the requested rotation/swap names, and added the rotation accuracy no-y-axis-label export. Regenerated PNG/PDF/PGF; notebook syntax and outputs checked.
+# 2026-10-13: Added an independent CIFAR-10 rotation export block for only the requested smoothed Drift 1 and Drift 2 accuracy figures, with 2.7 pt pre/post curves, no deviation bands, and the existing label settings. Generated both as PNG/PDF/PGF under the smooth/final folder; notebook JSON/code and output names checked.
+# 2026-10-13: Regenerated fairness_aeq.tex, post_drift_dip_conv.tex, and post_drift_R.tex from seed42 and seed52 logs for MNIST/CIFAR-10, using FedEx L=2 logs as PaLA, per-seed metric calculations, and sample standard deviation (n=2). Verified all expected rows/columns, LaTeX structure with local style-command stubs, and git diff checks; F_MNIST remains omitted per table convention.
+# 2026-10-13: Rebuilt the three fairness tables for seed42 only by executing the metric/loading helpers from the fairness notebooks and selecting saved_logs_fedex as PaLA. The resulting TeX tables use single-run values without an undefined standard deviation; verified notebook JSON, row/cell counts, and per-metric bolding. Generic FedEx schedule mismatch remains a comparability limitation for MNIST and Scenario C.
+# 2026-10-14: Updated and ran only the CIFAR-10 L-ablation Drift 2 notebook block: 2.7 pt curves, no deviation bands or y-axis labels, canonical rotation/swap names with _wo_ax_label. Regenerated PNG/PDF/PGF under the requested smooth drift2 folders, removed superseded filenames, and visually checked representative outputs; notebook JSON/code and table formatting checks passed.
+
+- 2026-10-14: Added a standalone notebook cell to regenerate only the rotation L-ablation `nL_legend` with a tight content-bound crop in PNG, PDF, and PGF. Notebook JSON validation passed; image export pending external-folder access and run.
+
+- 2026-10-15: Changed the CIFAR-10 rotation legend label for the FedEx log source to PaLA and added a standalone smoothed-legend export cell. Notebook JSON and appended cell syntax validated; regeneration pending.
+
+- 2026-10-16: Generated CIFAR-10 AEQ, post-drift Dip/Conv, and R tables from compatible seeds 51 and 52; reused notebook AEQ/grouping functions and the post-metric definitions recorded in prior table captions. LaTeX structure and seed scope validated.
+
+- 2026-10-16: Rebuilt post_drift_dip_conv.tex and post_drift_R.tex for MNIST/F_MNIST (seeds 42, 51, 52) and CIFAR-10 (seeds 51, 52). Used schedule-compatible FedEx L2 logs for MNIST/F_MNIST and the refreshed generic FedEx logs for CIFAR-10; calculated per-seed metrics to four decimals, displayed mean ± sample std to two decimals, and marked best values. R windows start at the post-onset four-round group-accuracy trough. LaTeX compiled successfully and the two-page render was visually checked; generic FedEx MNIST/F_MNIST remains schedule-mismatched and was excluded.
+
+- 2026-10-16: Added a separate R5/R10 export cell to the CIFAR-10 fairness notebook; it reuses notebook log-loading and drift-group ordering helpers across MNIST, F_MNIST, and CIFAR-10. Executed the cell code on the compatible seed sets and generated post_drift_R_5_10.tex. Verified 42 table rows, notebook JSON, LaTeX compilation, and rendered layout; existing R2/R10 output is unchanged.
+
+- 2026-10-16: Refreshed post_drift_dip_conv.tex and post_drift_R_5_10.tex by executing separate export cells in the CIFAR-10 fairness notebook; both cells reread current logs using the notebook loaders and drift grouping. Verified 42 rows, 14 cells per row, notebook JSON, and combined LaTeX compilation. Used matching PaLA schedules per dataset (FedEx L2 for MNIST/F_MNIST; generic FedEx for CIFAR-10).
+
+- 2026-10-16: Added and executed a separate R15 table-export cell in the CIFAR-10 fairness notebook using fresh logs and the existing trough-based recovery formula. Generated post_drift_R_15.tex across MNIST/F_MNIST seeds 42,51,52 and CIFAR-10 seeds 51,52. Rows lacking a complete 15-round horizon across methods are marked --. Notebook JSON and LaTeX compile checks passed.
+
+- 2026-10-16: Added an independent CIFAR-10 notebook block for seed51/seed52 scenario A/B/C plots, with raw and six-round-smoothed outputs and interval annotations. Notebook JSON and block syntax validated; plot execution pending output-directory permission.
+
+- 2026-10-16: Corrected the new batch block to annotate only Scenario A's first drift interval as T1; validation found Scenario A includes a terminal boundary. Syntax revalidated; plot export rerun pending.
+
+- 2026-10-16: Generated CIFAR-10 raw and six-round-smoothed plots for seed51/seed52 Scenarios A/B/C from the independent notebook block. Each scenario/version has eight plots in PNG, PDF, and PGF; notebook JSON and git diff checks pass.
+
+- 2026-10-16: Added and ran an independent CIFAR-10 R19 table block using compatible seeds 42/51/52 across scenarios A/B/C; generated post_drift_R_19.tex. Exact method schedules and 400-round/10-client shapes match; notebook/table structure validation passed.
+
+- 2026-10-16: Added and ran a custom-window post-drift R table block in the CIFAR-10 fairness notebook; regenerated post_drift_R.tex for MNIST, F_MNIST, and CIFAR-10 across A/B/C. Compatible seeds 42/51/52 were used; MNIST/F_MNIST C windows exceed the 50-round horizon and are shown as --. Notebook and TeX structure validated.
+
+- 2026-10-16: Updated and ran the independent custom-window R table block with CIFAR-10 C=(30,19,30) and MNIST/F_MNIST C=(5,2,5), saving post_drift_R_30.tex. Caption and table structure verified; notebook JSON and code compile.
+
+- 2026-10-16: Updated and executed the independent R table block with CIFAR-10 windows 25/25 and 25/19/25, retaining MNIST/F_MNIST 5/5 and 5/2/5; generated post_drift_R_25.tex. Notebook cell and TeX output validated.
+
+- 2026-10-16: Rechecked notebook R-window indexing: trough is the minimum group-mean accuracy over zero-based indices onset-1 through onset+2, then R_w compares t with t+w. Reran the requested CIFAR-10 25/25/25-19-25 and MNIST/F_MNIST 5/5/5-2-5 tables to post_drift_R_25.tex; outputs validated.
+
+- 2026-10-16: Added independent three-seed averaging and plot-export cells to MNIST, F_MNIST, and CIFAR-10 plotting notebooks. Cells validate matching drift metadata/log dimensions; averaging and external figure exports remain to be run.
+
+- 2026-10-16: Averaged client loss/accuracy per round/client across seeds 42/51/52 and saved plotting logs under seed_avg. Generated all MNIST, F_MNIST, and CIFAR-10 A/B/C figures under figures/new/average; CIFAR-10 includes six-round-smoothed sets. Log values, plot counts, formats, notebook JSON, and added-cell syntax validated.
+
+- 2026-10-16: Corrected the R-table window implementation to use exactly w accuracy samples (t..t+w-1), retaining endpoint change divided by w. Regenerated post_drift_R_30.tex from the notebook with CIFAR-10 25/25 and 25/19/25; MNIST/F_MNIST 5/5 and 5/2/5. Verified the sample R5 sequence and TeX structure.
+
+- 2026-10-16: Updated the custom post-drift R table block to define W as exactly W accuracy samples from the trough and set CIFAR-10 windows to A=(30,30), B=(30,30), C=(30,19,30). Executed the notebook calculation block against seeds 42, 51, and 52 and regenerated post_drift_R_30.tex; notebook JSON parsing and diff checks passed.
+
+## 2026-10-12
+
+- Fixed the FedEx L=1 label-swap matrix to pass `fedex_shared_layer_count=1` only for CIFAR-10; MNIST and Fashion-MNIST retain their default model split. `main.py` syntax compilation and diff checks passed; full matrix execution remains unverified.
+- 2026-10-14: Set the main CIFAR-10 FedEx run to `fedex_shared_layer_count=1`, using existing FedEx wiring to aggregate and distribute only `conv1`. Static syntax validation passed; simulation not run.
+
+- 2026-10-19: Added brief descriptions to the main experiment switches and clarified that the FedEx L=1 label-swap seed applies to its dataset/scenario matrix. No simulation validation was run (comment-only change).
+
+- 2026-10-19: Clarified that the code ablation L is the paper's n-L local-layer count and documented the CIFAR-10 L=1/code to L=3/paper example. Documentation-only; simulation not run.
+
+- 2026-10-19: Added requirements.txt for imported runtime packages and replaced the README dependency snippet with virtual-environment, platform-specific PyTorch, and optional system-package installation guidance. Documentation/dependency metadata update; installation not run.
+
+- 2026-10-19: Audited README against current main dispatch, active default constructor, device selection, dataset loading, and strategy registry; corrected outdated auto-device claim and documented actual switches/default path. README read back; no code execution or simulation run.
+
+- 2026-10-19: Refined README default-run details after tracing all active constructors and simulation calls: legacy block builds multiple networks and the FedEx CIFAR-10 alpha sweep remains active. Removed duplicate device guidance. README read back; no simulation run.
+
