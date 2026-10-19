@@ -30,19 +30,23 @@ def split_to_extractor_and_classifier(_model: nn.Module, _model_params: OrderedD
     :param _model: The model to split
     :param _model_params: The model parameters to split
     :param model_type: Model type used to select the default split behavior
-    :param shared_layer_count: Optional count of leading learned CIFAR-10 layers to return as shared parameters
+    :param shared_layer_count: Optional count of leading learned layers to return as shared parameters
     :return: A tuple containing two OrderedDicts: (parameters of the feature extractor, parameters of the classifier)
     """
     if _model is not None:
         _model_params = _model.state_dict()
 
     if shared_layer_count is not None:
-        if model_type != constants.ModelTypes.CNN_CIFAR_10:
-            raise ValueError("shared_layer_count is supported only for the CIFAR-10 CNN model.")
-        if isinstance(shared_layer_count, bool) or not isinstance(shared_layer_count, int) or not 1 <= shared_layer_count <= 4:
-            raise ValueError("shared_layer_count must be an integer from 1 through 4.")
+        if model_type == constants.ModelTypes.CNN_CIFAR_10:
+            layer_prefixes = ("conv1.", "conv2.", "fc1.", "fc2.")
+        elif model_type == constants.ModelTypes.CNN_MODEL:
+            layer_prefixes = ("conv1.", "fc1.", "fc2.")
+        else:
+            raise ValueError("shared_layer_count is supported only for the MNIST/Fashion-MNIST and CIFAR-10 CNN models.")
+        if (isinstance(shared_layer_count, bool) or not isinstance(shared_layer_count, int) or
+                not 1 <= shared_layer_count <= len(layer_prefixes)):
+            raise ValueError(f"shared_layer_count must be an integer from 1 through {len(layer_prefixes)}.")
 
-        layer_prefixes = ("conv1.", "conv2.", "fc1.", "fc2.")
         selected_prefixes = layer_prefixes[:shared_layer_count]
         extractor_params = OrderedDict(
             (key, value) for key, value in _model_params.items()

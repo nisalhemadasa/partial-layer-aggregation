@@ -1,5 +1,14 @@
 # Development progress
 
+## 2026-10-14
+
+- Disabled the FedEx matrix, set CIFAR-10 FedEx to L=1 (`conv1` only), and commented every other `run_simulation()` call in `main.py`. Syntax and whitespace checks passed; simulation not run.
+
+## 2026-10-12
+
+- Configured the active FedEx label-swap run for Fashion-MNIST Scenario B with 100 IID clients, 100 rounds, and L=1. Extended the shared-prefix split to support the single-convolution MNIST/Fashion-MNIST CNN so L=1 aggregates `conv1`; Python syntax compilation passed, simulation execution remains unverified.
+- Restricted the active FedEx L=1 label-swap matrix to MNIST and Fashion-MNIST and changed scenario output paths to `<scenario>/<dataset>/saved_logs_fedex` and the corresponding `saved_plots_fedex` tree. Python syntax compilation passed; full simulations remain unrun.
+
 ## 2026-10-09
 
 - Added the disabled `run_rotation_ablation` handle and `_run_rotation_ablation()` entry point in `main.py`, wired as an isolated early-return branch. Runner intentionally raises a clear pending-integration error until rotation drift support is implemented; source inspection completed, runtime validation not run.
@@ -290,6 +299,7 @@ Keep one brief dated entry per development step: change, validation, and any rem
 - 2026-10-12: Added a one-round synthetic CIFAR-shaped label-swap federation smoke test and scenario proportion/pattern assertions. Rotation/label-swap focused suite now passes all 10 tests; full nine-run matrix remains unrun.
 
 - 2026-10-12: Read back the completed label-swap matrix plan after updating it to reflect the actual seed variable and ten-test validation result.
+
 - 2026-10-12: Updated CIFAR-10 L-ablation legend configuration to display n-L labels and the corresponding shared-layer list (L3/conv1, L2/conv1+conv2, L1/conv1+conv2+fc1, L0/all four). Generated separate _nL_legend PNG/PDF/PGF files in raw and smooth output folders; notebook JSON and Python syntax passed.
 - 2026-10-12: Added and generated short reverse-mapped CIFAR-10 ablation legends containing only L3/L2/L1/L0 labels, in raw and smoothed folders, alongside layer-descriptive n-L legends. JSON/Python syntax and PNG/PDF/PGF outputs verified.
 - 2026-10-12: Moved 84 loose rotation L-ablation log files into their matching l1-l4 directories and removed each folder prefix from filenames. Validation: each run folder now has 22 files including run_config.json and required client/drift/evaluation/distance logs; no loose files remain.
@@ -381,3 +391,19 @@ Keep one brief dated entry per development step: change, validation, and any rem
 - 2026-10-16: Corrected the R-table window implementation to use exactly w accuracy samples (t..t+w-1), retaining endpoint change divided by w. Regenerated post_drift_R_30.tex from the notebook with CIFAR-10 25/25 and 25/19/25; MNIST/F_MNIST 5/5 and 5/2/5. Verified the sample R5 sequence and TeX structure.
 
 - 2026-10-16: Updated the custom post-drift R table block to define W as exactly W accuracy samples from the trough and set CIFAR-10 windows to A=(30,30), B=(30,30), C=(30,19,30). Executed the notebook calculation block against seeds 42, 51, and 52 and regenerated post_drift_R_30.tex; notebook JSON parsing and diff checks passed.
+
+## 2026-10-12
+
+- Fixed the FedEx L=1 label-swap matrix to pass `fedex_shared_layer_count=1` only for CIFAR-10; MNIST and Fashion-MNIST retain their default model split. `main.py` syntax compilation and diff checks passed; full matrix execution remains unverified.
+- 2026-10-14: Set the main CIFAR-10 FedEx run to `fedex_shared_layer_count=1`, using existing FedEx wiring to aggregate and distribute only `conv1`. Static syntax validation passed; simulation not run.
+
+- 2026-10-19: Added brief descriptions to the main experiment switches and clarified that the FedEx L=1 label-swap seed applies to its dataset/scenario matrix. No simulation validation was run (comment-only change).
+
+- 2026-10-19: Clarified that the code ablation L is the paper's n-L local-layer count and documented the CIFAR-10 L=1/code to L=3/paper example. Documentation-only; simulation not run.
+
+- 2026-10-19: Added requirements.txt for imported runtime packages and replaced the README dependency snippet with virtual-environment, platform-specific PyTorch, and optional system-package installation guidance. Documentation/dependency metadata update; installation not run.
+
+- 2026-10-19: Audited README against current main dispatch, active default constructor, device selection, dataset loading, and strategy registry; corrected outdated auto-device claim and documented actual switches/default path. README read back; no code execution or simulation run.
+
+- 2026-10-19: Refined README default-run details after tracing all active constructors and simulation calls: legacy block builds multiple networks and the FedEx CIFAR-10 alpha sweep remains active. Removed duplicate device guidance. README read back; no simulation run.
+
