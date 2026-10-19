@@ -19,10 +19,17 @@ import sys
 # (e.g., NaN, Inf, or out-of-bounds values) during loss computation in the training loop.
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
+# Run the CIFAR-10 FedEx shared-layer ablation for L=1..4. Here L is n-L in the paper,
+# where n is the model's total number of layers.
 run_L_ablation = False
+# Run the CIFAR-10 Scenario B rotation comparison for the selected methods.
 run_rotation_ablation = False
+# Run the CIFAR-10 FedEx rotation shared-layer ablation for L=1..4. Here L is n-L in the paper,
+# where n is the model's total number of layers.
 run_rotation_l_ablation = False
+# Run the FedEx L=1 label-swap matrix for the datasets/scenarios listed below.
 run_fedex_l1_label_swap_matrix = False
+# Random seed used by the FedEx L=1 label-swap matrix.
 fedex_l1_label_swap_seed = 42
 
 _FEDEX_L1_LABEL_SWAP_DATASETS = (

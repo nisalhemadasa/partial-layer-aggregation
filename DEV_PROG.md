@@ -303,3 +303,13 @@ Keep one brief dated entry per development step: change, validation, and any rem
 
 - Fixed the FedEx L=1 label-swap matrix to pass `fedex_shared_layer_count=1` only for CIFAR-10; MNIST and Fashion-MNIST retain their default model split. `main.py` syntax compilation and diff checks passed; full matrix execution remains unverified.
 - 2026-10-14: Set the main CIFAR-10 FedEx run to `fedex_shared_layer_count=1`, using existing FedEx wiring to aggregate and distribute only `conv1`. Static syntax validation passed; simulation not run.
+
+- 2026-10-19: Added brief descriptions to the main experiment switches and clarified that the FedEx L=1 label-swap seed applies to its dataset/scenario matrix. No simulation validation was run (comment-only change).
+
+- 2026-10-19: Clarified that the code ablation L is the paper's n-L local-layer count and documented the CIFAR-10 L=1/code to L=3/paper example. Documentation-only; simulation not run.
+
+- 2026-10-19: Added requirements.txt for imported runtime packages and replaced the README dependency snippet with virtual-environment, platform-specific PyTorch, and optional system-package installation guidance. Documentation/dependency metadata update; installation not run.
+
+- 2026-10-19: Audited README against current main dispatch, active default constructor, device selection, dataset loading, and strategy registry; corrected outdated auto-device claim and documented actual switches/default path. README read back; no code execution or simulation run.
+
+- 2026-10-19: Refined README default-run details after tracing all active constructors and simulation calls: legacy block builds multiple networks and the FedEx CIFAR-10 alpha sweep remains active. Removed duplicate device guidance. README read back; no simulation run.
